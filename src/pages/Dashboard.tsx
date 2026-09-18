@@ -1,0 +1,108 @@
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { SKILLS, getStudents, getAnnouncements, CONTACT, getReferralUrl } from "../data/store";
+import LiveFeed from "../components/LiveFeed";
+import LeaderboardList from "../components/LeaderboardList";
+import { Pill, Card } from "../components/ui";
+import Icon from "../components/Icon";
+
+const actions = [
+  { icon: "book" as const, label: "Program", title: "Continue Learning", desc: "Pick up your skill track where you left off.", to: "/academy" },
+  { icon: "check" as const, label: "Attendance", title: "Mark Attendance", desc: "Submit class, assignment or hangout proof.", to: "/academy" },
+  { icon: "user" as const, label: "Profile", title: "View My Profile", desc: "Portfolio, activity, badges & referrals.", to: "/academy" },
+  { icon: "briefcase" as const, label: "Opportunities", title: "Browse Opportunities", desc: "Real client work from KR8 Agency.", to: "/agency" },
+  { icon: "bot" as const, label: "Mentor", title: "Chat on KR8 AI", desc: "Unlimited access to your creative mentor.", to: "/ai" },
+];
+
+export default function Dashboard() {
+  const { student } = useAuth();
+  if (!student) return null;
+  const skill = SKILLS.find((s) => s.key === student.skill);
+  const ranked = [...getStudents()].sort((a, b) => b.points - a.points);
+  const rank = ranked.findIndex((s) => s.id === student.id) + 1;
+  const first = student.name.split(" ")[0];
+
+  return (
+    <div className="section-bg min-h-screen">
+      <div className="mx-auto max-w-7xl px-5 py-12">
+        {/* Greeting */}
+        <div className="rise-in">
+          <Pill>{student.type === "tribe" ? "Tribe Member" : skill?.name ?? "Student"} · {student.id}</Pill>
+          <h1 className="font-display mt-4 text-5xl text-white sm:text-6xl">
+            Welcome back, <span className="text-gradient">{first}</span> 👋
+          </h1>
+          {student.admin && <Link to="/admin" className="mt-4 block max-w-xl rounded-2xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-sm leading-relaxed text-pink-100 hover:border-pink-300">Congratulations — you are recognized as a {student.admin.title ?? student.admin.role}. Click here to open your password-protected admin access. Your assigned rights are managed from the Admin Permissions system.</Link>}
+        </div>
+
+        {/* Stats bar */}
+        <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-5">
+          {[
+            { n: student.attendanceAccepted, l: "Attendance Accepted" },
+            { n: student.submissions, l: "Assignments Submitted" },
+            { n: `#${rank}`, l: "Leaderboard Rank" },
+            { n: student.points, l: "Points" },
+            { n: student.referrals, l: "Referrals" },
+          ].map((s) => (
+            <Card key={s.l} className="!p-5 text-center">
+              <div className="font-display text-3xl text-gradient">{s.n}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-wider text-[#8a7ba8]">{s.l}</div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Action cards */}
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {actions.map((a) => (
+            <Link key={a.title} to={a.to} className="group rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-pink-400/50">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white"><Icon name={a.icon} size={22} /></div>
+              <p className="text-[11px] uppercase tracking-wider text-pink-400">{a.label}</p>
+              <h3 className="mt-1 text-lg font-bold text-white">{a.title}</h3>
+              <p className="mt-2 text-sm text-[#b8aecf]">{a.desc}</p>
+              <p className="mt-4 text-sm font-semibold text-pink-400 group-hover:translate-x-1">Go →</p>
+            </Link>
+          ))}
+          {/* Referral card */}
+          <Card>
+            <p className="text-[11px] uppercase tracking-wider text-pink-400">Referral</p>
+            <h3 className="mt-1 text-lg font-bold text-white">My Referral Link</h3>
+            <a href={getReferralUrl(student.id)} className="mt-2 block break-all rounded-lg bg-black/30 p-2 text-xs text-pink-300 underline underline-offset-2">
+              {getReferralUrl(student.id)}
+            </a>
+            {student.graduated && (
+              <Link to="/academy" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-pink-400"><Icon name="certificate" size={15} /> View My Certificate →</Link>
+            )}
+          </Card>
+        </div>
+
+        {/* Feed + Leaderboard + Announcements */}
+        <div className="mt-12 grid gap-10 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <h2 className="font-display text-2xl uppercase text-white">Live in the community</h2>
+            <div className="mt-6"><LiveFeed /></div>
+          </div>
+          <div>
+            <h2 className="font-display text-2xl uppercase text-white">Your rank</h2>
+            <div className="mt-6"><LeaderboardList limit={6} /></div>
+          </div>
+        </div>
+
+        <div className="mt-12">
+          <h2 className="font-display text-2xl uppercase text-white">Announcements</h2>
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            {getAnnouncements().map((a) => (
+              <Card key={a.id}>
+                <p className="text-xs uppercase tracking-wider text-[#8a7ba8]">{a.date}</p>
+                <h3 className="mt-1 text-lg font-bold text-white">{a.title}</h3>
+                <p className="mt-2 text-sm text-[#b8aecf]">{a.type === "text" ? a.body : a.caption}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-10 text-center text-xs text-[#8a7ba8]">
+          Need help? Reach the team on WhatsApp: {CONTACT.phone}
+        </p>
+      </div>
+    </div>
+  );
+}
