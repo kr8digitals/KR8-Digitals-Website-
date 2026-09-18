@@ -20,7 +20,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      if (!localStorage.getItem("kr8_registration_wipe_v3")) localStorage.removeItem("kr8_current");
       const s = localStorage.getItem("kr8_current");
       const lastActive = Number(localStorage.getItem(SESSION_KEY) || 0);
       if (s && (!lastActive || Date.now() - lastActive <= INACTIVITY_LIMIT)) {
@@ -39,6 +38,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  // Real-time synchronization when accounts are updated
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const s = localStorage.getItem("kr8_current");
+        if (s) {
+          const stored = JSON.parse(s) as Account;
+          const fresh = findStudent(stored.id);
+          if (fresh) {
+            setStudent(fresh);
+            localStorage.setItem("kr8_current", JSON.stringify(fresh));
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("kr8:accounts-updated", handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener("kr8:accounts-updated", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, []);
 
   useEffect(() => {

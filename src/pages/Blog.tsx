@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { BLOG } from "../data/store";
+import { useMemo, useState, useEffect } from "react";
+import { getBlogPosts, type BLOG } from "../data/store";
 import { Pill } from "../components/ui";
 
 const cats = ["All", "Digital Skills", "AI", "Community", "Announcements", "Company News"];
@@ -7,14 +7,22 @@ const cats = ["All", "Digital Skills", "AI", "Community", "Announcements", "Comp
 export default function Blog() {
   const [cat, setCat] = useState("All");
   const [open, setOpen] = useState<string | null>(null);
+  const [allPosts, setAllPosts] = useState(getBlogPosts);
+
+  useEffect(() => {
+    const refresh = () => setAllPosts(getBlogPosts());
+    window.addEventListener("kr8:blog-updated", refresh);
+    return () => window.removeEventListener("kr8:blog-updated", refresh);
+  }, []);
+
   // Reshuffle non-pinned posts per visit; the pinned admin post always stays on top.
   const ordered = useMemo(() => {
-    const pinned = BLOG.filter((b) => b.pinned);
-    const rest = BLOG.filter((b) => !b.pinned).sort(() => Math.random() - 0.5);
+    const pinned = allPosts.filter((b) => b.pinned);
+    const rest = allPosts.filter((b) => !b.pinned);
     return [...pinned, ...rest];
-  }, []);
+  }, [allPosts]);
   const posts = cat === "All" ? ordered : ordered.filter((b) => b.category === cat);
-  const active = BLOG.find((b) => b.id === open);
+  const active = allPosts.find((b) => b.id === open);
 
   if (active) {
     return (

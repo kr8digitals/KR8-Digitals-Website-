@@ -11,6 +11,7 @@ import Marquee from "../components/Marquee";
 import TestimonialCarousel from "../components/TestimonialCarousel";
 import Icon from "../components/Icon";
 import CountryPhone from "../components/CountryPhone";
+import { downloadCertificatePdf } from "../utils/certificate";
 
 export default function Academy() {
   const { student } = useAuth();
@@ -343,10 +344,19 @@ function Profile({ student }: { student: Account }) {
   const [profile, setProfile] = useState(student);
   const [expanded, setExpanded] = useState(!!student.expandedVisibility);
   const [password, setPassword] = useState(profile.password ?? "");
+  const [copiedVerify, setCopiedVerify] = useState(false);
   const { signIn } = useAuth();
   const skill = SKILLS.find((s) => s.key === profile.skill);
   const ranked = getStudents().filter((account) => !account.isPlaceholder).sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === profile.id) + 1;
+
+  // Sync profile when student prop updates
+  useEffect(() => {
+    setProfile(student);
+    setExpanded(!!student.expandedVisibility);
+    setPassword(student.password ?? "");
+  }, [student]);
+
   const save = (patch: Partial<Account>) => {
     const next = updateAccount(profile.id, patch);
     if (next) { setProfile(next); signIn(next); }
@@ -357,6 +367,21 @@ function Profile({ student }: { student: Account }) {
     const reader = new FileReader();
     reader.onload = () => save({ [field]: String(reader.result) });
     reader.readAsDataURL(file);
+  };
+
+  const copyVerifyLink = () => {
+    const url = `${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}`;
+    navigator.clipboard.writeText(url);
+    setCopiedVerify(true);
+    setTimeout(() => setCopiedVerify(false), 2000);
+  };
+
+  const handleDownload = () => {
+    if (profile.certificateUrl) {
+      downloadCertificatePdf(profile.name, profile.certificateUrl);
+    } else {
+      downloadCertificate(profile, skill?.name ?? "KR8 Digitals");
+    }
   };
 
   return (
@@ -392,6 +417,28 @@ function Profile({ student }: { student: Account }) {
             <div className="text-center"><div className="font-display text-2xl text-gradient">{profile.referrals}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Referrals</div></div>
           </div>
         </div>
+
+        {/* Congratulatory Graduation Banner */}
+        {profile.graduated && (
+          <div className="mt-6 rounded-3xl border border-green-500/40 bg-gradient-to-r from-green-500/15 via-[#1a0030] to-pink-500/15 p-6 shadow-xl">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-pink text-white text-2xl">
+                🎓
+              </div>
+              <div className="flex-1">
+                <span className="rounded-full bg-green-500/20 px-3 py-1 text-xs font-bold text-green-300 uppercase tracking-wider">
+                  Official Certified Graduate
+                </span>
+                <h2 className="mt-1 font-display text-2xl text-white sm:text-3xl">
+                  Congratulations on your graduation, {profile.name}!
+                </h2>
+                <p className="mt-1 text-sm text-[#cabfe0]">
+                  You have successfully completed your training in <strong className="text-white">{skill?.name}</strong> and been officially awarded your <strong className="text-white">Certificate of {profile.certTier ?? "Completion"}</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 flex gap-1 overflow-x-auto border-b border-white/10 hide-scrollbar">
           {(["posts", "portfolio", "activity", "about"] as const).map((t) => (
@@ -436,13 +483,66 @@ function Profile({ student }: { student: Account }) {
 
           <div className="space-y-6">
             <Card>
-              <h3 className="flex items-center gap-2 font-bold text-white"><Icon name="certificate" size={18} /> Certificate</h3>
+              <h3 className="flex items-center gap-2 font-bold text-white"><Icon name="certificate" size={18} /> Official Certificate</h3>
               {profile.graduated ? (
-                <>
-                  <p className="mt-2 text-sm text-[#b8aecf]">Certificate of {profile.certTier} — {skill?.name}.</p>
-                  {profile.certRecognition && <p className="mt-1 text-xs text-pink-400">"{profile.certRecognition}"</p>}
-                  <div className="mt-4"><GradientButton onClick={() => downloadCertificate(profile, skill?.name ?? "KR8 Digitals") } className="w-full">Download Certificate →</GradientButton></div>
-                </>
+                <div className="mt-3 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Certificate of {profile.certTier ?? "Completion"}</p>
+                    <p className="text-xs text-[#8a7ba8]">{skill?.name} · KR8 Digitals</p>
+                    {profile.certRecognition && <p className="mt-1 text-xs text-pink-400">"{profile.certRecognition}"</p>}
+                  </div>
+
+                  {profile.certificateUrl && (
+                    <div className="group relative overflow-hidden rounded-2xl border border-white/15 bg-black/40">
+                      <img
+                        src={profile.certificateUrl}
+                        alt={`Certificate of ${profile.name}`}
+                        className="w-full object-contain"
+                      />
+                      <div className="p-2.5 bg-black/70 text-center border-t border-white/10">
+                        <span className="text-[11px] text-green-300 font-semibold flex items-center justify-center gap-1">
+                          <Icon name="check" size={12} /> Includes verifiable QR code
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  <GradientButton onClick={handleDownload} className="w-full flex items-center justify-center gap-2">
+                    <Icon name="certificate" size={15} /> Download Certificate (PDF) →
+                  </GradientButton>
+
+                  {/* Shareable Verification Link */}
+                  <div className="rounded-2xl border border-pink-400/30 bg-pink-500/5 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-white">Verification Link</p>
+                      <span className="text-[10px] text-pink-300">Direct proof</span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-[#b8aecf]">
+                      Share this link with employers, clients or on LinkedIn to confirm your certificate without needing to scan the QR code:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={`${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}`}
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-pink-300 focus:outline-none select-all"
+                      />
+                      <button
+                        onClick={copyVerifyLink}
+                        className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20 whitespace-nowrap"
+                      >
+                        {copiedVerify ? "Copied! ✓" : "Copy Link"}
+                      </button>
+                    </div>
+                    <a
+                      href={`/verify?id=${encodeURIComponent(profile.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-center text-xs text-pink-300 underline underline-offset-2 hover:text-white pt-1"
+                    >
+                      Open My Verify Page ↗
+                    </a>
+                  </div>
+                </div>
               ) : (
                 <p className="mt-2 text-sm text-[#8a7ba8]">You don't have a certificate yet — complete your training to earn one.</p>
               )}

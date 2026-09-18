@@ -357,6 +357,10 @@ export type Account = {
   graduated: boolean;
   certTier?: "Completion" | "Professionalism" | null;
   certRecognition?: string;
+  certificateUrl?: string;
+  certificateFileType?: "image" | "pdf";
+  verifyRemark?: string;
+  graduatedAt?: number;
   avatar: string;
   joined: number;
   expandedVisibility?: boolean;
@@ -452,55 +456,79 @@ function kr8id(name: string, skill: string, serial: number): string {
 // one-time fresh start; later registrations persist in this stable key.
 const ACCOUNT_STORAGE_KEY = "kr8_accounts_v3";
 const FEED_STORAGE_KEY = "kr8_feed_v3";
-const WIPE_MARKER = "kr8_registration_wipe_v3";
 const seed: Account[] = [];
 
-function wipeLegacyDataOnce() {
-  if (typeof window === "undefined" || localStorage.getItem(WIPE_MARKER)) return;
-  ["kr8_accounts", "kr8_accounts_v2", "kr8_accounts_v3", "kr8_feed", "kr8_feed_v2", "kr8_feed_v3", "kr8_current"].forEach((key) => localStorage.removeItem(key));
-  localStorage.setItem(WIPE_MARKER, "1");
+function migrateAccountsSafely() {
+  if (typeof window === "undefined") return;
+  // If v3 accounts are present, never wipe or overwrite!
+  const existingV3 = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+  if (existingV3 && existingV3 !== "[]") return;
+
+  // Attempt recovery from backup or earlier versions if v3 is currently empty
+  const backup = localStorage.getItem("kr8_accounts_backup");
+  if (backup && backup !== "[]") {
+    localStorage.setItem(ACCOUNT_STORAGE_KEY, backup);
+    return;
+  }
+  const v2 = localStorage.getItem("kr8_accounts_v2");
+  if (v2 && v2 !== "[]") {
+    localStorage.setItem(ACCOUNT_STORAGE_KEY, v2);
+  }
 }
 
 export function getAccounts(): Account[] {
-  wipeLegacyDataOnce();
+  migrateAccountsSafely();
   const stored = load<Account[]>(ACCOUNT_STORAGE_KEY, seed);
   let changed = false;
   const accounts = stored.map((account) => {
     const recognizedAdmin = account.admin ?? getRecognizedAdmin(account.phone, account.email);
     if (!account.admin && recognizedAdmin) changed = true;
     return {
-    ...account,
-    // Migrate IDs saved by the previous revision without changing their identity.
-    id: account.type === "student" ? account.id.replace(/-/g, "") : account.id,
-    isPlaceholder: account.isPlaceholder ?? true,
-    portfolio: account.portfolio ?? [],
-    following: account.following ?? [],
-    followers: account.followers ?? [],
-    messagePrivacy: account.messagePrivacy ?? "Anyone",
-    admin: recognizedAdmin,
+      ...account,
+      id: account.type === "student" ? account.id.replace(/-/g, "") : account.id,
+      isPlaceholder: account.isPlaceholder ?? false,
+      portfolio: account.portfolio ?? [],
+      following: account.following ?? [],
+      followers: account.followers ?? [],
+      messagePrivacy: account.messagePrivacy ?? "Anyone",
+      admin: recognizedAdmin,
     };
   });
   if (changed) save(ACCOUNT_STORAGE_KEY, accounts);
   return accounts;
 }
+
 export function saveAccounts(a: Account[]) {
   save(ACCOUNT_STORAGE_KEY, a);
+  try {
+    // Keep secondary backup in case another key is modified
+    localStorage.setItem("kr8_accounts_backup", JSON.stringify(a));
+  } catch {
+    /* ignore */
+  }
   if (typeof window !== "undefined") window.dispatchEvent(new Event("kr8:accounts-updated"));
 }
+
 export function updateAccount(id: string, patch: Partial<Account>): Account | undefined {
   const accounts = getAccounts();
-  const index = accounts.findIndex((account) => account.id === id);
+  const index = accounts.findIndex((account) => normalizeIdentity(account.id) === normalizeIdentity(id));
   if (index < 0) return undefined;
   accounts[index] = { ...accounts[index], ...patch };
   saveAccounts(accounts);
   return accounts[index];
 }
+
 export function getStudents(): Account[] {
   return getAccounts().filter((a) => a.type === "student");
 }
 
 export function nextSerial(skillKey: string): number {
-  return getStudents().filter((s) => s.skill === skillKey).length + 1;
+  const students = getStudents().filter((s) => s.skill === skillKey);
+  const maxSerial = students.reduce((max, s) => {
+    const num = s.serial || 0;
+    return num > max ? num : max;
+  }, 0);
+  return Math.max(maxSerial + 1, students.length + 1);
 }
 
 export function registerStudent(input: { name: string; email: string; phone: string; country: string; skill: string; dob: string; password: string }):
@@ -525,7 +553,7 @@ export function registerStudent(input: { name: string; email: string; phone: str
   const student: Account = {
     type: "student",
     id: kr8id(input.name, input.skill, serial),
-    name: input.name.trim(), email, phone, country: input.country, skill: input.skill,
+    name: input.name.trim(), email, phone, country: input.country || "NG", skill: input.skill,
     dob: input.dob, year: COHORT_YEAR, serial,
     vip: isVip(phone), points: 0, attendanceAccepted: 0, submissions: 0, referrals: 0,
     graduated: false, certTier: null, avatar: "", joined: Date.now(), expandedVisibility: false, password: input.password,
@@ -538,21 +566,66 @@ export function registerStudent(input: { name: string; email: string; phone: str
   return { ok: true, student };
 }
 
-export function adminRegisterStudent(input: { name: string; email: string; phone: string; country?: string; skill: string; password?: string }): Account | undefined {
+export function adminRegisterStudent(input: {
+  name: string;
+  email: string;
+  phone: string;
+  country?: string;
+  skill: string;
+  dob?: string;
+  password?: string;
+}): { ok: boolean; error?: string; student?: Account } {
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: "Full name is required." };
   const skill = SKILLS.find((item) => item.key === input.skill);
-  if (!skill) return undefined;
+  if (!skill) return { ok: false, error: "Please select a valid skill." };
   const accounts = getAccounts();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
-  if (accounts.some((account) => normalizeEmail(account.email) === email || normalizePhone(account.phone) === phone)) return undefined;
+  if (accounts.some((account) => normalizeEmail(account.email) === email)) {
+    return { ok: false, error: "This email is already registered." };
+  }
+  if (accounts.some((account) => normalizePhone(account.phone) === phone)) {
+    return { ok: false, error: "This phone number is already registered." };
+  }
+  const password = input.password?.trim() || "TempChangeMe2026";
+  if (password.length < 6) {
+    return { ok: false, error: "Password must be at least 6 characters." };
+  }
+  const serial = nextSerial(input.skill);
   const student: Account = {
-    type: "student", id: kr8id(input.name, input.skill, nextSerial(input.skill)), name: input.name.trim(),
-    email, phone, country: input.country ?? "NG", skill: input.skill, dob: "", year: COHORT_YEAR,
-    serial: nextSerial(input.skill), vip: isVip(input.phone), points: 0, attendanceAccepted: 0, submissions: 0, referrals: 0,
-    graduated: false, certTier: null, avatar: "", joined: Date.now(), expandedVisibility: false, password: input.password ?? "TempChangeMe",
-    isPlaceholder: false, portfolio: [], following: [], followers: [], messagePrivacy: "Anyone", admin: getRecognizedAdmin(phone, email),
+    type: "student",
+    id: kr8id(name, input.skill, serial),
+    name,
+    email,
+    phone,
+    country: input.country || "NG",
+    skill: input.skill,
+    dob: input.dob || "",
+    year: COHORT_YEAR,
+    serial,
+    vip: isVip(phone),
+    points: 0,
+    attendanceAccepted: 0,
+    submissions: 0,
+    referrals: 0,
+    graduated: false,
+    certTier: null,
+    avatar: "",
+    joined: Date.now(),
+    expandedVisibility: false,
+    password,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+    admin: getRecognizedAdmin(phone, email),
   };
-  accounts.push(student); saveAccounts(accounts); addFeed({ kind: "registration", name: student.name, skill: skill.name, avatar: "" }); return student;
+  accounts.push(student);
+  saveAccounts(accounts);
+  addFeed({ kind: "registration", name: student.name, skill: skill.name, avatar: "" });
+  return { ok: true, student };
 }
 
 export function registerTribe(input: { name: string; email: string; phone: string; country: string; password: string }):
@@ -589,11 +662,16 @@ export function recoverId(query: string): Account | undefined {
   return getAccounts().find((s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone);
 }
 
-export function authenticateAccount(id: string, password: string): { ok: boolean; account?: Account; error?: string } {
-  const account = findStudent(id);
-  if (!account) return { ok: false, error: "No account matches that KR8 ID." };
+export function authenticateAccount(idOrEmailOrPhone: string, password: string): { ok: boolean; account?: Account; error?: string } {
+  const query = idOrEmailOrPhone.trim();
+  if (!query) return { ok: false, error: "Please enter your KR8 ID, email, or phone." };
+  let account = findStudent(query);
+  if (!account) {
+    account = recoverId(query);
+  }
+  if (!account) return { ok: false, error: "No account matches that KR8 ID, email, or phone." };
   if (!account.password) return { ok: false, error: "This account needs a password reset before it can sign in." };
-  if (account.password !== password) return { ok: false, error: "The KR8 ID or password is incorrect." };
+  if (account.password !== password) return { ok: false, error: "The password entered is incorrect." };
   return { ok: true, account };
 }
 
@@ -647,7 +725,6 @@ export function feedAction(k: FeedItem["kind"]) {
   return feedActions[k];
 }
 export function getFeed(): FeedItem[] {
-  wipeLegacyDataOnce();
   return load<FeedItem[]>(FEED_STORAGE_KEY, []).sort((a, b) => b.ts - a.ts);
 }
 export function addFeed(item: Omit<FeedItem, "id" | "ts">) {
@@ -775,6 +852,21 @@ export const BLOG = [
   { id: "b3", title: "No Status Barriers: Why the Tribe Works", excerpt: "Community isn't a feature — it's the whole point. A look at how belonging drives results.", author: "Amara Okeke", date: "Jan 28, 2026", category: "Community", readTime: "5 min", img: IMG.heroGroup, source: "student" as const, pinned: false },
   { id: "b4", title: "From Free Class to First Client: A Graduate Story", excerpt: "How one video editing student landed paid work three weeks after graduation.", author: "Ngozi Ade", date: "Jan 20, 2026", category: "Company News", readTime: "7 min", img: IMG.collab, source: "student" as const, pinned: false },
 ];
+
+export function getBlogPosts() {
+  return load<typeof BLOG>("kr8_blog_posts_v2", BLOG);
+}
+
+export function saveBlogPosts(posts: typeof BLOG) {
+  save("kr8_blog_posts_v2", posts);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:blog-updated"));
+  }
+}
+
+export function saveVerifyRemark(studentId: string, remark: string) {
+  return updateAccount(studentId, { verifyRemark: remark });
+}
 
 export const TESTIMONIALS = [
   { id: "t1", name: "Amara Okeke", skill: "Graphic Design", caption: "I came in with zero design experience. Now I run my own studio.", img: IMG.woman1 },
