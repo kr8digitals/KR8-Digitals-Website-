@@ -138,7 +138,7 @@ function GuestAcademy() {
 }
 
 function InstructorPhoto({ src, name }: { src: string; name: string }) {
-  return <ImageWithFallback src={src} alt={name} className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-pink-400/30" fallbackClassName="h-10 w-10 shrink-0 rounded-full border border-pink-400/40" />;
+  return <ImageWithFallback src={src} alt={name} className="h-14 w-14 shrink-0 rounded-2xl object-cover object-top ring-2 ring-pink-400/40 shadow-md" fallbackClassName="h-14 w-14 shrink-0 rounded-2xl border border-pink-400/40" />;
 }
 
 function CurriculumModal({ skill, onClose, onRegister }: { skill: Skill; onClose: () => void; onRegister: () => void }) {

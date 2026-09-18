@@ -71,17 +71,58 @@ export default function About() {
       </section>
 
       {/* Co-founders */}
-      <section className="py-10">
+      <section className="py-16">
         <div className="mx-auto max-w-7xl px-5">
-          <SectionHead label="Two co-founders" title="Built with" highlight="purpose" center />
-          <div className="mx-auto mt-10 grid max-w-4xl gap-6 sm:grid-cols-2">
-            {founders.filter((c) => c.key === "stevenson" || c.key === "daniel").slice(0, 2).map((c, i) => (
-              <Card key={i} className="text-center">
-                <ImageWithFallback src={c.photo} alt={c.name} className="mx-auto h-24 w-24 rounded-full object-cover ring-2 ring-pink-400/30" fallbackClassName="mx-auto h-24 w-24 rounded-full border border-pink-400/40" />
-                <h3 className="mt-4 font-bold text-white">{c.name}</h3>
-                <p className="text-sm text-pink-400">{c.role}</p>
-                <p className="mt-3 text-left text-xs leading-relaxed text-[#b8aecf]">{c.bio}</p>
-              </Card>
+          <SectionHead label="Co-Founders & Core Leadership" title="Built with" highlight="purpose & vision" center />
+          <div className="mx-auto mt-12 grid max-w-5xl gap-8 md:grid-cols-2">
+            {founders.filter((c) => c.key === "stevenson" || c.key === "daniel").slice(0, 2).map((c) => (
+              <div
+                key={c.key}
+                className="group relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-6 transition-all duration-300 hover:border-pink-400/50 hover:shadow-2xl hover:shadow-pink-500/10"
+              >
+                {/* Prominent Portrait Image */}
+                <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/10 shadow-2xl">
+                  <ImageWithFallback
+                    src={c.photo}
+                    alt={c.name}
+                    className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                    fallbackClassName="h-full w-full flex items-center justify-center bg-gradient-to-br from-pink-500/20 to-purple-900/40 text-4xl font-display text-pink-300"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0d0015] via-[#0d0015]/20 to-transparent" />
+
+                  {/* Co-Founder Badge */}
+                  <div className="absolute top-4 left-4">
+                    <span className="rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg glow-pink-sm">
+                      Co-Founder
+                    </span>
+                  </div>
+
+                  {/* Name and Role overlay */}
+                  <div className="absolute bottom-4 left-4 right-4">
+                    <h3 className="font-display text-2xl font-bold text-white drop-shadow-md sm:text-3xl">
+                      {c.name}
+                    </h3>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300 drop-shadow-sm mt-1">
+                      {c.role}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bio & Details */}
+                <div className="mt-5 space-y-3">
+                  <p className="text-sm leading-relaxed text-[#cabfe0]">
+                    {c.bio}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-300 border border-pink-400/20">
+                      {c.key === "stevenson" ? "Graphic Design Track Lead" : "Video Editing & Motion Lead"}
+                    </span>
+                    <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-[#cabfe0]">
+                      {c.key === "stevenson" ? "Motionverse Studio" : "Creative Expression Studio"}
+                    </span>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>
