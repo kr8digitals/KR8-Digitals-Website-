@@ -828,10 +828,70 @@ export const AGENCY_SERVICES = [
 ];
 
 export const PORTFOLIO = [
-  { id: "p1", title: "AfriSTEM", service: "Website Development", client: "AfriSTEM", description: "Website built by KR8 Digitals.", link: "https://afristemglobal.org", price: "", showPrice: false, img: IMG.studio2, placeholder: false },
-  { id: "p2", title: "Prime Stem Nigeria", service: "Website Development", client: "Prime Stem Nigeria", description: "Website built by KR8 Digitals.", link: "https://afristemglobal.org/PrimeStemNigeria", price: "", showPrice: false, img: IMG.student, placeholder: false },
-  { id: "p3", title: "Everything for Smart Living", service: "Video Editing", client: "Everything for Smart Living", description: "KR8 Digitals edits the brand's YouTube videos from raw footage to final cut, including UGC advert videos and other video content.", link: "", price: "", showPrice: false, img: IMG.collab, placeholder: false },
-  { id: "p4", title: "City Fashion Stores", service: "Brand Design", client: "City Fashion Stores", description: "Complete visual brand positioning online, excluding logo design.", link: "https://drive.google.com/drive/folders/1M-1WBMc3AkXx1iKbZH8pGon1sst_nWs_", price: "", showPrice: false, img: IMG.brand, placeholder: false },
+  {
+    id: "p1",
+    title: "AfriSTEM Global",
+    service: "Website Development",
+    client: "AfriSTEM Global",
+    description: "Full responsive website designed and developed by KR8 Digitals for science, technology, engineering & mathematics education across Africa.",
+    link: "https://afristemglobal.org",
+    price: "",
+    showPrice: false,
+    img: "/portfolio/afristem_hero.jpg",
+    domain: "afristemglobal.org",
+    placeholder: false,
+  },
+  {
+    id: "p2",
+    title: "Chi-Tom Rapha Hospital & Maternity",
+    service: "Website Development",
+    client: "Chi-Tom Rapha Hospital and Maternity",
+    description: "Modern healthcare and maternity website designed and launched by KR8 Digitals, featuring service showcases, patient appointment scheduling, and facility departments.",
+    link: "https://chitomraphahospital.com",
+    price: "",
+    showPrice: false,
+    img: "/portfolio/chitom_preview.png",
+    domain: "chitomraphahospital.com",
+    placeholder: false,
+  },
+  {
+    id: "p3",
+    title: "Prime STEM Nigeria",
+    service: "Website Development",
+    client: "Prime STEM Nigeria",
+    description: "Robotics and STEM initiative empowering Nigerian youth with hands-on coding and technology education, powered by KR8 Digitals web design.",
+    link: "https://afristemglobal.org",
+    price: "",
+    showPrice: false,
+    img: "/portfolio/afristem_hero.jpg",
+    domain: "afristemglobal.org",
+    placeholder: false,
+  },
+  {
+    id: "p4",
+    title: "City Fashion Stores",
+    service: "Brand Design",
+    client: "City Fashion Stores",
+    description: "Complete visual brand positioning online, advertising graphics, and social media creative suite.",
+    link: "https://drive.google.com/drive/folders/1M-1WBMc3AkXx1iKbZH8pGon1sst_nWs_",
+    price: "",
+    showPrice: false,
+    img: "/portfolio/city_fashion.jpg",
+    domain: "drive.google.com",
+    placeholder: false,
+  },
+  {
+    id: "p5",
+    title: "Everything for Smart Living",
+    service: "Video Editing",
+    client: "Everything for Smart Living",
+    description: "KR8 Digitals edits the brand's YouTube videos from raw footage to final cut, including UGC advert videos and viral tech reels.",
+    link: "",
+    price: "",
+    showPrice: false,
+    img: IMG.collab,
+    placeholder: false,
+  },
 ];
 
 export const FULL_PORTFOLIO_LINK = "https://drive.google.com/drive/folders/1700q1hqAFOos7ZpPmpzFatUmIEwpa6J6";
@@ -840,14 +900,14 @@ export function getTribeWhatsApp() {
   return load("kr8_tribe_link_v1", TRIBE_WHATSAPP);
 }
 export function getPortfolio() {
-  return load("kr8_portfolio_v2", PORTFOLIO);
+  return load("kr8_portfolio_v3", PORTFOLIO);
 }
 export function savePortfolio(items: typeof PORTFOLIO) {
-  save("kr8_portfolio_v2", items);
+  save("kr8_portfolio_v3", items);
 }
 
 export const BLOG = [
-  { id: "b1", title: "5 Digital Skills Nigerian Employers Are Hiring For in 2026", excerpt: "The market shifted again. Here are the skills turning learners into earners this year.", author: "Kenneth Timothy", date: "Feb 10, 2026", category: "Digital Skills", readTime: "6 min", img: IMG.student, source: "admin" as const, pinned: true },
+  { id: "b1", title: "5 Digital Skills Nigerian Employers Are Hiring For in 2026", excerpt: "The market shifted again. Here are the skills turning learners into earners this year.", author: "Timfire", date: "Feb 10, 2026", category: "Digital Skills", readTime: "6 min", img: IMG.student, source: "admin" as const, pinned: true },
   { id: "b2", title: "How KR8 AI Became Every Student's Late-Night Mentor", excerpt: "Inside the always-on assistant helping thousands of creators unblock, plan and ship.", author: "KR8 Team", date: "Feb 05, 2026", category: "AI", readTime: "4 min", img: IMG.collab2, source: "admin" as const, pinned: false },
   { id: "b3", title: "No Status Barriers: Why the Tribe Works", excerpt: "Community isn't a feature — it's the whole point. A look at how belonging drives results.", author: "Amara Okeke", date: "Jan 28, 2026", category: "Community", readTime: "5 min", img: IMG.heroGroup, source: "student" as const, pinned: false },
   { id: "b4", title: "From Free Class to First Client: A Graduate Story", excerpt: "How one video editing student landed paid work three weeks after graduation.", author: "Ngozi Ade", date: "Jan 20, 2026", category: "Company News", readTime: "7 min", img: IMG.collab, source: "student" as const, pinned: false },
@@ -907,7 +967,7 @@ export type VideoComment = {
 export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
   {
     id: "vid-1",
-    name: "Grant Christian",
+    name: "Grant Gideon",
     schoolOrRole: "Federal University Dutse",
     skill: "Graphic Design",
     caption: "KR8 Digitals is a digital academy that gives skills for free. The community helps you keep up with assignments and transition to professional design.",
@@ -916,7 +976,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     duration: 85,
     createdAt: 1726000000000 + 300000,
     captions: [
-      { start: 0.0, end: 2.8, text: "My name is Grant Christian, a student of Federal University Dutse." },
+      { start: 0.0, end: 2.8, text: "My name is Grant Gideon, a student of Federal University Dutse." },
       { start: 3.0, end: 5.8, text: "And this is a shout-out to KR8 Digitals Tribe." },
       { start: 6.0, end: 10.3, text: "KR8 Digitals is a digital academy that teaches digital skills for free." },
       { start: 10.5, end: 15.0, text: "I just want to give a shout-out to them for being really great in my graphic design journey." },
@@ -932,16 +992,35 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
   },
   {
     id: "vid-2",
-    name: "Maduagwu Somto",
+    name: "Elizabeth Oyejobi",
+    schoolOrRole: "Cohort Student",
+    skill: "Tech & Design",
+    caption: "Learning digital skills with KR8 Digitals has been life-changing. Practical mentorship, real project execution, and great community.",
+    img: "/videos/testimonial3_poster.jpg",
+    video: "/videos/testimonial3.mp4",
+    duration: 40,
+    createdAt: 1726000000000 + 200000,
+    captions: [
+      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Elizabeth Oyejobi, and I am proud to be a student at KR8 Digitals." },
+      { start: 4.5, end: 10.5, text: "Learning practical digital skills here has been an eye-opening journey for me." },
+      { start: 10.5, end: 18.0, text: "The classes, assignments, and tutors push you to build real projects that build confidence." },
+      { start: 18.0, end: 26.5, text: "The supportive tech community makes complex skills easy to master step by step." },
+      { start: 26.5, end: 34.0, text: "KR8 Digitals gives everyone an equal opportunity to thrive in the modern tech economy." },
+      { start: 34.0, end: 39.5, text: "Thank you KR8 Digitals for this wonderful platform and mentorship!" },
+    ],
+  },
+  {
+    id: "vid-3",
+    name: "Maduka Samuel",
     schoolOrRole: "Cohort Graduate",
     skill: "Graphic Design",
     caption: "Zero cost for training, graduation, or certificate. The tutors guided me all the way — invite you all to my graduation!",
     img: "/videos/testimonial2_poster.jpg",
     video: "/videos/testimonial2.mp4",
     duration: 60,
-    createdAt: 1726000000000 + 200000,
+    createdAt: 1726000000000 + 100000,
     captions: [
-      { start: 0.0, end: 3.2, text: "My name is Maduagwu Somto, one of the cohort students at KR8 Digitals." },
+      { start: 0.0, end: 3.2, text: "My name is Maduka Samuel, one of the cohort students at KR8 Digitals." },
       { start: 3.2, end: 8.5, text: "Before I got here, I was convinced by a friend to try KR8 Digitals." },
       { start: 8.5, end: 13.5, text: "It's a free course, and it has really been 100% free with zero hidden charges." },
       { start: 13.5, end: 19.5, text: "I never believed it at first, but an instinct of mine told me to give it a try." },
@@ -954,34 +1033,15 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
       { start: 56.5, end: 60.0, text: "I'll be very happy to see you all there. Thank you, and have a nice day!" },
     ],
   },
-  {
-    id: "vid-3",
-    name: "Favour E.",
-    schoolOrRole: "Cohort Student",
-    skill: "Tech & Design",
-    caption: "Learning digital skills with KR8 Digitals has been life-changing. Practical mentorship, real project execution, and great community.",
-    img: "/videos/testimonial3_poster.jpg",
-    video: "/videos/testimonial3.mp4",
-    duration: 40,
-    createdAt: 1726000000000 + 100000,
-    captions: [
-      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Favour, and I am proud to be a student at KR8 Digitals." },
-      { start: 4.5, end: 10.5, text: "Learning practical digital skills here has been an eye-opening journey for me." },
-      { start: 10.5, end: 18.0, text: "The classes, assignments, and tutors push you to build real projects that build confidence." },
-      { start: 18.0, end: 26.5, text: "The supportive tech community makes complex skills easy to master step by step." },
-      { start: 26.5, end: 34.0, text: "KR8 Digitals gives everyone an equal opportunity to thrive in the modern tech economy." },
-      { start: 34.0, end: 39.5, text: "Thank you KR8 Digitals for this wonderful platform and mentorship!" },
-    ],
-  },
 ];
 
 const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
   {
     id: "vc-1",
     videoId: "vid-1",
-    authorName: "Kenneth Timothy",
+    authorName: "Timfire",
     authorId: "KR8-FOUNDER",
-    comment: "Big congratulations Grant! Your consistency in class and in the design assignments was unmatched. Keep soaring!",
+    comment: "Big congratulations Grant Gideon! Your consistency in class and in the design assignments was unmatched. Keep soaring!",
     createdAt: Date.now() - 3600000 * 36,
     likes: 14,
   },
@@ -997,9 +1057,9 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
   {
     id: "vc-3",
     videoId: "vid-2",
-    authorName: "Stevenson Uche",
+    authorName: "Timfire",
     authorId: "KR8-FOUNDER",
-    comment: "Somto, your graduation is well-deserved! You took the leap with zero background and proved that discipline is everything. Can't wait for your ceremony! 🎓✨",
+    comment: "Elizabeth, so inspiring watching your rapid progress and project execution! Keep shipping those incredible creations 🚀",
     createdAt: Date.now() - 3600000 * 18,
     likes: 19,
   },
@@ -1008,23 +1068,23 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
     videoId: "vid-2",
     authorName: "Amara Okeke",
     authorId: "KR8-26-G014",
-    comment: "Totally agree with you on zero cost! No fees anywhere. Best tech academy ever 🙌",
+    comment: "Hands-on projects and supportive tutors made all the difference for me too 🙌",
     createdAt: Date.now() - 3600000 * 10,
     likes: 11,
   },
   {
     id: "vc-5",
     videoId: "vid-3",
-    authorName: "Daniel Kalu",
-    authorId: "KR8-FOUNDER",
-    comment: "So inspiring watching your rapid progress Favour! Keep shipping those incredible projects 🚀",
+    authorName: "Stevenson Uche",
+    authorId: "KR8-COFOUNDER",
+    comment: "Maduka, your graduation is well-deserved! You took the leap with zero background and proved that discipline is everything. Can't wait for your ceremony! 🎓✨",
     createdAt: Date.now() - 3600000 * 4,
-    likes: 7,
+    likes: 15,
   },
 ];
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v3";
-const VIDEO_COMMENT_KEY = "kr8_video_comments_v1";
+const TESTIMONIAL_KEY = "kr8_testimonials_v4";
+const VIDEO_COMMENT_KEY = "kr8_video_comments_v2";
 
 export function getTestimonials(): Testimonial[] {
   const loaded = load<Testimonial[]>(TESTIMONIAL_KEY, REAL_STUDENT_TESTIMONIALS);
@@ -1074,10 +1134,14 @@ export function saveVideoComments(items: VideoComment[]) {
 
 export function addVideoComment(data: { videoId: string; authorName: string; authorId?: string; comment: string }): VideoComment {
   const current = load<VideoComment[]>(VIDEO_COMMENT_KEY, DEFAULT_VIDEO_COMMENTS);
+  let author = data.authorName.trim();
+  if (author.toLowerCase().includes("kenneth") || author.toLowerCase().includes("timothy") || data.authorId?.includes("FOUNDER")) {
+    author = "Timfire";
+  }
   const newComment: VideoComment = {
     id: "vc-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
     videoId: data.videoId,
-    authorName: data.authorName.trim(),
+    authorName: author,
     authorId: data.authorId?.trim(),
     comment: data.comment.trim(),
     createdAt: Date.now(),

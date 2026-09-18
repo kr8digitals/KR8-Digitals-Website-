@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { IMG } from "../data/images";
 import { CONTACT, getFounders, getTeam, PARTNERS } from "../data/store";
-import { Pill, GradientButton, GhostButton, SectionHead, Card, Check, GlowImage, ImageWithFallback } from "../components/ui";
+import { Pill, GradientButton, GhostButton, SectionHead, Card, Check, ImageWithFallback } from "../components/ui";
 import Icon from "../components/Icon";
 
 const pillars = [
@@ -49,8 +48,42 @@ export default function About() {
 
       {/* Founder */}
       <section className="py-16">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 lg:grid-cols-[0.9fr_1.1fr]">
-          <GlowImage src={founders[0]?.photo ?? IMG.founder} alt="Kenneth Timothy — Founder" className="aspect-[3/4] max-w-sm" />
+        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 lg:grid-cols-[0.95fr_1.05fr]">
+          {/* Executive Founder Portrait Card matching Co-Founders Layout */}
+          <div className="group relative mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-6 shadow-2xl transition-all duration-500 hover:border-pink-400/50 hover:shadow-2xl hover:shadow-pink-500/20">
+            {/* Ambient Backlight Glow */}
+            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-tr from-pink-500/25 via-purple-600/20 to-transparent opacity-50 blur-2xl transition-opacity group-hover:opacity-80" />
+
+            {/* Portrait Frame */}
+            <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-black/60 ring-1 ring-white/15 shadow-2xl">
+              <ImageWithFallback
+                src="/founder_timfire.jpg"
+                alt="Kenneth Timothy Iziogo (Timfire) — Founder & CEO"
+                className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                fallbackClassName="h-full w-full flex items-center justify-center bg-gradient-to-br from-pink-500/20 to-purple-900/40 text-4xl font-display text-pink-300"
+              />
+              {/* Seamless Bottom Vignette Gradient blending into page background */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0d0015] via-[#0d0015]/25 to-transparent pointer-events-none" />
+
+              {/* Founder Spotlight Badge */}
+              <div className="absolute top-4 left-4 z-10">
+                <span className="rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-xl glow-pink-sm">
+                  Founder & CEO
+                </span>
+              </div>
+
+              {/* Name & Studio tag overlay */}
+              <div className="absolute bottom-4 left-4 right-4 z-10">
+                <h3 className="font-display text-2xl font-bold text-white drop-shadow-md sm:text-3xl">
+                  Kenneth Timothy Iziogo
+                </h3>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-pink-300 drop-shadow-sm">
+                  Also known as Timfire · Lead Architect
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div>
             <Pill>Founder & Lead</Pill>
             <h2 className="font-display mt-4 text-4xl uppercase text-white sm:text-5xl">

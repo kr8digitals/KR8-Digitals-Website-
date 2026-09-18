@@ -216,8 +216,76 @@ function GuestHome() {
       <section className="section-bg py-16">
         <div className="mx-auto max-w-7xl px-5 text-center">
           <SectionHead label="Clients & collaborators" title="Who we've worked with" highlight="so far" center />
-          <div className="mx-auto mt-8 grid max-w-5xl gap-4 text-left sm:grid-cols-2">
-            {portfolio.map((client) => <div key={client.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"><p className="text-xs uppercase tracking-wider text-pink-400">{client.service}</p><h3 className="mt-1 font-bold text-white">{client.client}</h3><p className="mt-2 text-sm leading-relaxed text-[#b8aecf]">{client.description}</p></div>)}
+          <div className="mx-auto mt-8 grid max-w-5xl gap-5 text-left sm:grid-cols-2">
+            {portfolio.map((client) => (
+              <div
+                key={client.id}
+                className="group flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] transition-all hover:border-pink-500/40 hover:shadow-xl hover:shadow-pink-500/10"
+              >
+                <div>
+                  {client.link && client.service.includes("Website") && (
+                    <div className="flex items-center justify-between border-b border-white/10 bg-black/60 px-3.5 py-1.5 backdrop-blur-md">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-red-500/80" />
+                        <span className="h-2 w-2 rounded-full bg-yellow-500/80" />
+                        <span className="h-2 w-2 rounded-full bg-green-500/80" />
+                      </div>
+                      <span className="text-[10px] font-mono text-[#b8aecf]">
+                        {"domain" in client ? (client as unknown as { domain: string }).domain : "live website"}
+                      </span>
+                      <span className="text-[10px] font-bold text-pink-300">Live ↗</span>
+                    </div>
+                  )}
+
+                  {client.img && (
+                    <div className="aspect-[16/9] overflow-hidden bg-black/40">
+                      {client.link ? (
+                        <a href={client.link} target="_blank" rel="noreferrer" className="block h-full w-full group/link relative">
+                          <img
+                            src={client.img}
+                            alt={client.title}
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover/link:scale-105"
+                            loading="lazy"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/link:opacity-100 transition-opacity backdrop-blur-[1px]">
+                            <span className="flex items-center gap-1 rounded-full bg-gradient-pink px-3.5 py-1.5 text-xs font-bold text-white shadow-lg">
+                              Open Live Project ↗
+                            </span>
+                          </div>
+                        </a>
+                      ) : (
+                        <img
+                          src={client.img}
+                          alt={client.title}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="p-5">
+                    <p className="text-xs uppercase tracking-wider text-pink-400 font-semibold">{client.service}</p>
+                    <h3 className="mt-1 font-bold text-white text-base">{client.client}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-[#b8aecf]">{client.description}</p>
+                  </div>
+                </div>
+
+                {client.link && (
+                  <div className="px-5 pb-5">
+                    <a
+                      href={client.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-pink-500/40 bg-pink-500/10 px-3.5 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+                    >
+                      <span>{client.service.includes("Website") ? "Visit Live Website" : "View Project"}</span>
+                      <span className="text-[11px]">↗</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
           <div className="mt-8"><GhostButton href={FULL_PORTFOLIO_LINK}>View Our Full Portfolio →</GhostButton></div>
         </div>

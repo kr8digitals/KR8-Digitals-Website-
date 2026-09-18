@@ -68,14 +68,69 @@ export default function Agency() {
           </div>
           <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((p) => (
-              <div key={p.id} className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-                <div className="aspect-[4/3] overflow-hidden"><img src={p.img} alt={p.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" /></div>
-                <div className="p-5">
-                  <p className="text-[11px] uppercase tracking-wider text-pink-400">{p.service}</p>
-                  <h4 className="mt-1 font-bold text-white">{p.title}</h4>
-                  <p className="mt-1 text-xs text-[#8a7ba8]">Client: {p.client}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-[#b8aecf]">{p.description}</p>
-                  {p.link && <a href={p.link} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-semibold text-pink-300 underline underline-offset-2">Open project reference →</a>}
+              <div key={p.id} className="group flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] transition-all hover:border-pink-500/40 hover:shadow-xl hover:shadow-pink-500/10">
+                <div>
+                  {/* Browser Mockup Top-Bar for Live Websites */}
+                  {p.link && p.service.includes("Website") && (
+                    <div className="flex items-center justify-between border-b border-white/10 bg-black/60 px-3.5 py-2 backdrop-blur-md">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-red-500/80" />
+                        <span className="h-2 w-2 rounded-full bg-yellow-500/80" />
+                        <span className="h-2 w-2 rounded-full bg-green-500/80" />
+                      </div>
+                      <span className="text-[10px] font-mono text-[#b8aecf] truncate max-w-[180px]">
+                        {"domain" in p ? (p as unknown as { domain: string }).domain : "live website"}
+                      </span>
+                      <span className="text-[10px] font-bold text-pink-300">Live ↗</span>
+                    </div>
+                  )}
+
+                  {/* Clickable Image Container */}
+                  <div className="relative aspect-[4/3] overflow-hidden bg-black/40">
+                    {p.link ? (
+                      <a href={p.link} target="_blank" rel="noreferrer" className="block h-full w-full group/img">
+                        <img
+                          src={p.img}
+                          alt={p.title}
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-[2px]">
+                          <span className="flex items-center gap-1.5 rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-xl glow-pink-sm">
+                            Open Project ↗
+                          </span>
+                        </div>
+                      </a>
+                    ) : (
+                      <img
+                        src={p.img}
+                        alt={p.title}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        loading="lazy"
+                      />
+                    )}
+                  </div>
+
+                  <div className="p-5">
+                    <p className="text-[11px] uppercase tracking-wider text-pink-400 font-semibold">{p.service}</p>
+                    <h4 className="mt-1 font-bold text-white text-base">{p.title}</h4>
+                    <p className="mt-1 text-xs text-[#8a7ba8]">Client: {p.client}</p>
+                    <p className="mt-2 text-xs leading-relaxed text-[#b8aecf]">{p.description}</p>
+                  </div>
+                </div>
+
+                <div className="px-5 pb-5">
+                  {p.link && (
+                    <a
+                      href={p.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-pink-500/40 bg-pink-500/10 px-3.5 py-2 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+                    >
+                      <span>{p.service.includes("Website") ? "Visit Live Website" : "Open Project"}</span>
+                      <span className="text-[11px]">↗</span>
+                    </a>
+                  )}
                   {p.showPrice && <p className="mt-2 inline-block rounded-full bg-white/5 px-3 py-1 text-xs text-[#cabfe0]">{p.price}</p>}
                 </div>
               </div>
