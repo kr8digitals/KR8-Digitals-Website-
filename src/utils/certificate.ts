@@ -163,14 +163,14 @@ export async function overlayQrOnImage(
 export async function overlayQrOnPdf(
   pdfFile: File,
   qrDataUrl: string,
-  studentId: string,
+  _studentId: string,
   position: CertPosition = "bottom-right"
 ): Promise<{ pdfBytes: Uint8Array; previewUrl: string }> {
   const arrayBuffer = await readFileAsArrayBuffer(pdfFile);
   const pdfDoc = await PDFDocument.load(arrayBuffer);
   const pages = pdfDoc.getPages();
   const page = pages[0] || pdfDoc.addPage();
-  const { width, height } = page.getSize();
+  const { width, height: _height } = page.getSize();
 
   const qrBase64 = qrDataUrl.split(",")[1];
   const qrBytes = Uint8Array.from(atob(qrBase64), (c) => c.charCodeAt(0));
@@ -209,7 +209,7 @@ export async function overlayQrOnPdf(
   });
 
   const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const blob = new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
   const previewUrl = URL.createObjectURL(blob);
 
   return { pdfBytes, previewUrl };
@@ -287,7 +287,7 @@ export function downloadCertificatePdf(studentName: string, pdfBytes: Uint8Array
   if (pdfBytes instanceof Blob) {
     blob = pdfBytes;
   } else if (pdfBytes instanceof Uint8Array) {
-    blob = new Blob([pdfBytes], { type: "application/pdf" });
+    blob = new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
   } else if (typeof pdfBytes === "string" && pdfBytes.startsWith("data:")) {
     const base64 = pdfBytes.split(",")[1];
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));

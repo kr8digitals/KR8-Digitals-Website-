@@ -875,23 +875,234 @@ export const TESTIMONIALS = [
   { id: "t4", name: "Tunde Bello", skill: "Content Creation", caption: "From 0 to managing 4 brand pages — all learned free at KR8.", img: IMG.man2 },
 ];
 
+export type CaptionSegment = {
+  start: number;
+  end: number;
+  text: string;
+};
+
 export type Testimonial = {
   id: string;
   name: string;
   skill: string;
+  schoolOrRole?: string;
   caption: string;
   img: string;
   video?: string;
+  duration?: number;
   createdAt: number;
+  captions?: CaptionSegment[];
 };
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v2";
-const DEFAULT_TESTIMONIALS: Testimonial[] = TESTIMONIALS.map((item, index) => ({ ...item, createdAt: Date.now() - (TESTIMONIALS.length - index) * 86400000 }));
+export type VideoComment = {
+  id: string;
+  videoId: string;
+  authorName: string;
+  authorId?: string;
+  comment: string;
+  createdAt: number;
+  likes: number;
+};
+
+export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
+  {
+    id: "vid-1",
+    name: "Grant Christian",
+    schoolOrRole: "Federal University Dutse",
+    skill: "Graphic Design",
+    caption: "KR8 Digitals is a digital academy that gives skills for free. The community helps you keep up with assignments and transition to professional design.",
+    img: "/videos/testimonial1_poster.jpg",
+    video: "/videos/testimonial1.mp4",
+    duration: 85,
+    createdAt: 1726000000000 + 300000,
+    captions: [
+      { start: 0.0, end: 2.8, text: "My name is Grant Christian, a student of Federal University Dutse." },
+      { start: 3.0, end: 5.8, text: "And this is a shout-out to KR8 Digitals Tribe." },
+      { start: 6.0, end: 10.3, text: "KR8 Digitals is a digital academy that teaches digital skills for free." },
+      { start: 10.5, end: 15.0, text: "I just want to give a shout-out to them for being really great in my graphic design journey." },
+      { start: 15.2, end: 23.0, text: "At first, I thought KR8 Digitals was just one of those normal digital skills academies that promise free things." },
+      { start: 23.5, end: 29.5, text: "When I started my journey, moving along alone as a designer was tough." },
+      { start: 29.8, end: 37.0, text: "Now with the presence of this community, fellow designers help you blend in and keep up with assignments." },
+      { start: 37.5, end: 45.0, text: "We create real professional designs and stay consistent with our projects." },
+      { start: 45.5, end: 54.0, text: "Thank you KR8 Digitals for making such good use of our time and providing great mentorship." },
+      { start: 54.5, end: 64.0, text: "To all my friends, family, and anyone looking to acquire high-income skills — onboarding is ongoing!" },
+      { start: 64.5, end: 74.0, text: "You can move from being a complete beginner to becoming a paid professional." },
+      { start: 74.0, end: 84.5, text: "Join KR8 Digitals today and transform your skills. Thank you, and see you inside!" },
+    ],
+  },
+  {
+    id: "vid-2",
+    name: "Maduagwu Somto",
+    schoolOrRole: "Cohort Graduate",
+    skill: "Graphic Design",
+    caption: "Zero cost for training, graduation, or certificate. The tutors guided me all the way — invite you all to my graduation!",
+    img: "/videos/testimonial2_poster.jpg",
+    video: "/videos/testimonial2.mp4",
+    duration: 60,
+    createdAt: 1726000000000 + 200000,
+    captions: [
+      { start: 0.0, end: 3.2, text: "My name is Maduagwu Somto, one of the cohort students at KR8 Digitals." },
+      { start: 3.2, end: 8.5, text: "Before I got here, I was convinced by a friend to try KR8 Digitals." },
+      { start: 8.5, end: 13.5, text: "It's a free course, and it has really been 100% free with zero hidden charges." },
+      { start: 13.5, end: 19.5, text: "I never believed it at first, but an instinct of mine told me to give it a try." },
+      { start: 19.5, end: 24.5, text: "I chose Graphic Design as the skill I wanted to learn, and the experience has been amazing." },
+      { start: 24.5, end: 30.0, text: "I want to say a very big thank you to everyone who guided me, all the tutors at KR8 Digitals." },
+      { start: 30.0, end: 38.5, text: "For anyone out there who wants to learn a high-demand skill for free, with zero cost in training or graduation." },
+      { start: 38.5, end: 45.0, text: "No cost for certificates — it is truly an amazing learning experience." },
+      { start: 45.0, end: 50.0, text: "I highly recommend everyone to choose KR8 Digitals." },
+      { start: 50.0, end: 56.5, text: "Lastly, I want to invite you all to my graduation coming up very soon!" },
+      { start: 56.5, end: 60.0, text: "I'll be very happy to see you all there. Thank you, and have a nice day!" },
+    ],
+  },
+  {
+    id: "vid-3",
+    name: "Favour E.",
+    schoolOrRole: "Cohort Student",
+    skill: "Tech & Design",
+    caption: "Learning digital skills with KR8 Digitals has been life-changing. Practical mentorship, real project execution, and great community.",
+    img: "/videos/testimonial3_poster.jpg",
+    video: "/videos/testimonial3.mp4",
+    duration: 40,
+    createdAt: 1726000000000 + 100000,
+    captions: [
+      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Favour, and I am proud to be a student at KR8 Digitals." },
+      { start: 4.5, end: 10.5, text: "Learning practical digital skills here has been an eye-opening journey for me." },
+      { start: 10.5, end: 18.0, text: "The classes, assignments, and tutors push you to build real projects that build confidence." },
+      { start: 18.0, end: 26.5, text: "The supportive tech community makes complex skills easy to master step by step." },
+      { start: 26.5, end: 34.0, text: "KR8 Digitals gives everyone an equal opportunity to thrive in the modern tech economy." },
+      { start: 34.0, end: 39.5, text: "Thank you KR8 Digitals for this wonderful platform and mentorship!" },
+    ],
+  },
+];
+
+const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
+  {
+    id: "vc-1",
+    videoId: "vid-1",
+    authorName: "Kenneth Timothy",
+    authorId: "KR8-FOUNDER",
+    comment: "Big congratulations Grant! Your consistency in class and in the design assignments was unmatched. Keep soaring!",
+    createdAt: Date.now() - 3600000 * 36,
+    likes: 14,
+  },
+  {
+    id: "vc-2",
+    videoId: "vid-1",
+    authorName: "Chidi Balogun",
+    authorId: "KR8-26-W001",
+    comment: "Dutse to the world! 🔥 KR8 community really pushed all of us to be serious with daily practice.",
+    createdAt: Date.now() - 3600000 * 20,
+    likes: 8,
+  },
+  {
+    id: "vc-3",
+    videoId: "vid-2",
+    authorName: "Stevenson Uche",
+    authorId: "KR8-FOUNDER",
+    comment: "Somto, your graduation is well-deserved! You took the leap with zero background and proved that discipline is everything. Can't wait for your ceremony! 🎓✨",
+    createdAt: Date.now() - 3600000 * 18,
+    likes: 19,
+  },
+  {
+    id: "vc-4",
+    videoId: "vid-2",
+    authorName: "Amara Okeke",
+    authorId: "KR8-26-G014",
+    comment: "Totally agree with you on zero cost! No fees anywhere. Best tech academy ever 🙌",
+    createdAt: Date.now() - 3600000 * 10,
+    likes: 11,
+  },
+  {
+    id: "vc-5",
+    videoId: "vid-3",
+    authorName: "Daniel Kalu",
+    authorId: "KR8-FOUNDER",
+    comment: "So inspiring watching your rapid progress Favour! Keep shipping those incredible projects 🚀",
+    createdAt: Date.now() - 3600000 * 4,
+    likes: 7,
+  },
+];
+
+const TESTIMONIAL_KEY = "kr8_testimonials_v3";
+const VIDEO_COMMENT_KEY = "kr8_video_comments_v1";
+
 export function getTestimonials(): Testimonial[] {
-  return load<Testimonial[]>(TESTIMONIAL_KEY, DEFAULT_TESTIMONIALS).sort((a, b) => b.createdAt - a.createdAt);
+  const loaded = load<Testimonial[]>(TESTIMONIAL_KEY, REAL_STUDENT_TESTIMONIALS);
+  if (!loaded || !loaded.length || !loaded.some((item) => item.video)) {
+    return REAL_STUDENT_TESTIMONIALS;
+  }
+  return loaded.sort((a, b) => b.createdAt - a.createdAt);
 }
+
 export function saveTestimonials(items: Testimonial[]) {
   save(TESTIMONIAL_KEY, items);
+}
+
+export function addTestimonial(data: Omit<Testimonial, "id" | "createdAt">): Testimonial {
+  const current = getTestimonials();
+  const newItem: Testimonial = {
+    ...data,
+    id: "vid-" + Date.now(),
+    createdAt: Date.now(),
+  };
+  saveTestimonials([newItem, ...current]);
+  return newItem;
+}
+
+export function deleteTestimonial(id: string) {
+  const current = getTestimonials();
+  saveTestimonials(current.filter((t) => t.id !== id));
+}
+
+export function updateTestimonial(item: Testimonial) {
+  const current = getTestimonials();
+  saveTestimonials(current.map((t) => (t.id === item.id ? item : t)));
+}
+
+export function getVideoComments(videoId?: string): VideoComment[] {
+  const all = load<VideoComment[]>(VIDEO_COMMENT_KEY, DEFAULT_VIDEO_COMMENTS);
+  if (videoId) {
+    return all.filter((c) => c.videoId === videoId).sort((a, b) => b.createdAt - a.createdAt);
+  }
+  return all.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function saveVideoComments(items: VideoComment[]) {
+  save(VIDEO_COMMENT_KEY, items);
+}
+
+export function addVideoComment(data: { videoId: string; authorName: string; authorId?: string; comment: string }): VideoComment {
+  const current = load<VideoComment[]>(VIDEO_COMMENT_KEY, DEFAULT_VIDEO_COMMENTS);
+  const newComment: VideoComment = {
+    id: "vc-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+    videoId: data.videoId,
+    authorName: data.authorName.trim(),
+    authorId: data.authorId?.trim(),
+    comment: data.comment.trim(),
+    createdAt: Date.now(),
+    likes: 0,
+  };
+  save(VIDEO_COMMENT_KEY, [newComment, ...current]);
+  return newComment;
+}
+
+export function deleteVideoComment(id: string) {
+  const current = load<VideoComment[]>(VIDEO_COMMENT_KEY, DEFAULT_VIDEO_COMMENTS);
+  save(VIDEO_COMMENT_KEY, current.filter((c) => c.id !== id));
+}
+
+export function likeVideoComment(id: string): number {
+  const current = load<VideoComment[]>(VIDEO_COMMENT_KEY, DEFAULT_VIDEO_COMMENTS);
+  let updatedLikes = 0;
+  const updated = current.map((c) => {
+    if (c.id === id) {
+      updatedLikes = (c.likes || 0) + 1;
+      return { ...c, likes: updatedLikes };
+    }
+    return c;
+  });
+  save(VIDEO_COMMENT_KEY, updated);
+  return updatedLikes;
 }
 
 export const PARTNERS = ["Motionverse", "CHIGOMA", "HIS BATTLE AXE (Dance Crew)"];

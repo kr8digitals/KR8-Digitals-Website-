@@ -1,28 +1,29 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
-  SKILLS, ATTENDANCE_TYPES, CONTACT, PORTFOLIO, BLOG,
+  SKILLS, ATTENDANCE_TYPES, PORTFOLIO,
   getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
   getPaymentSettings, savePaymentSettings, getSkillRegistration, getSkillWhatsApp,
-  saveSkillSetting, getFounders, saveFounders, getTeam, saveTeam,
-  getTestimonials, saveTestimonials, getAccounts, getStudents, updateAccount,
+  saveSkillSetting, getFounders, saveFounders, getTeam,
+  getTestimonials, addTestimonial, deleteTestimonial,
+  getVideoComments, deleteVideoComment,
+  getAccounts, getStudents, updateAccount,
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
-  addFeed, MAIN_ADMIN_PASSWORD, ADMIN_SECTIONS, buildPhone, COUNTRIES,
-  type Account, type Announcement,
+  addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
+  type Account, type Announcement, type Testimonial, type VideoComment,
 } from "../data/store";
 import { Card } from "../components/ui";
 import Icon from "../components/Icon";
 import {
   processGraduationCertificate,
   saveCertificateData,
-  downloadCertificatePdf,
   type CertPosition,
 } from "../utils/certificate";
 
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Home", "Academy", "Agency", "Student Management", "Blog",
+  "Overview", "Home", "Academy", "Testimonial Videos", "Agency", "Student Management", "Blog",
   "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
   "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions",
 ];
@@ -145,8 +146,9 @@ export default function Admin() {
             </div>
           )}
 
-          {tab === "Home" && <HomeManager />}
-          {tab === "Academy" && <AcademyManager />}
+          {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
+          {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
+          {tab === "Testimonial Videos" && <TestimonialVideosManager />}
           {tab === "Agency" && <AgencyManager />}
           {tab === "Student Management" && <StudentManager students={students} />}
           {tab === "Blog" && <BlogManager />}
@@ -1315,9 +1317,27 @@ function SocialLinksManager() {
   );
 }
 
-function AcademyManager() {
+function AcademyManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4">
+        <div>
+          <h4 className="font-bold text-white text-sm">Academy Testimonial Videos</h4>
+          <p className="text-xs text-[#b8aecf]">
+            The student testimonial reels power the Academy page.
+          </p>
+        </div>
+        {onOpenVideos && (
+          <button
+            onClick={onOpenVideos}
+            className="flex items-center gap-1.5 rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+          >
+            <Icon name="video" size={14} />
+            <span>Open Video Manager</span>
+          </button>
+        )}
+      </div>
+
       {SKILLS.map((s) => (
         <AcademySkillManager key={s.key} skill={s} />
       ))}
@@ -1400,22 +1420,91 @@ function AgencyManager() {
 
 function AnnouncementManager() {
   const [items, setItems] = useState<Announcement[]>(getAnnouncements());
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
   const [saved, setSaved] = useState(false);
 
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !body.trim()) return;
+    const newA: Announcement = {
+      id: "a-" + Date.now(),
+      title: title.trim(),
+      body: body.trim(),
+      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      author: "Admin Desk",
+      type: "text",
+    };
+    const updated = [newA, ...items];
+    saveAnnouncements(updated);
+    setItems(updated);
+    setTitle("");
+    setBody("");
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleDelete = (id: string) => {
+    const updated = items.filter((a) => a.id !== id);
+    saveAnnouncements(updated);
+    setItems(updated);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
   return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Announcements</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">Live announcements displayed on the site.</p>
-      <div className="mt-4 space-y-3">
-        {items.map((item) => (
-          <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <p className="text-xs text-pink-400 font-semibold">{item.date}</p>
-            <h4 className="text-base font-bold text-white mt-1">{item.title}</h4>
-            <p className="text-xs text-[#cabfe0] mt-1">{item.body || item.caption}</p>
-          </div>
-        ))}
-      </div>
-    </Card>
+    <div className="space-y-6">
+      <Card>
+        <h3 className="font-bold text-white text-lg">Post New Announcement</h3>
+        {saved && <p className="mt-2 text-xs text-pink-300 font-semibold">Announcements updated successfully!</p>}
+        <form onSubmit={handleAdd} className="mt-4 space-y-3">
+          <input
+            type="text"
+            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Announcement Title"
+            className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+          />
+          <textarea
+            required
+            rows={2}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Announcement details..."
+            className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:brightness-110 active:scale-95 transition-all"
+          >
+            Publish Announcement
+          </button>
+        </form>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold text-white text-lg">Active Announcements ({items.length})</h3>
+        <p className="mt-1 text-sm text-[#b8aecf]">Live announcements displayed on the site.</p>
+        <div className="mt-4 space-y-3">
+          {items.map((item) => (
+            <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div>
+                <p className="text-xs text-pink-400 font-semibold">{item.date} · {item.author}</p>
+                <h4 className="text-base font-bold text-white mt-1">{item.title}</h4>
+                <p className="text-xs text-[#cabfe0] mt-1">{item.body || item.caption}</p>
+              </div>
+              <button
+                onClick={() => handleDelete(item.id)}
+                className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -1479,12 +1568,443 @@ function TeamManager() {
   );
 }
 
-function HomeManager() {
+function timeAgo(timestamp: number): string {
+  const elapsed = Math.floor((Date.now() - timestamp) / 1000);
+  if (elapsed < 60) return "just now";
+  const minutes = Math.floor(elapsed / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function TestimonialVideosManager() {
+  const [items, setItems] = useState<Testimonial[]>(getTestimonials());
+  const [comments, setComments] = useState<VideoComment[]>(getVideoComments());
+  const [name, setName] = useState("");
+  const [skill, setSkill] = useState("Graphic Design");
+  const [schoolOrRole, setSchoolOrRole] = useState("");
+  const [caption, setCaption] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [posterUrl, setPosterUrl] = useState("");
+  const [captionsInput, setCaptionsInput] = useState("");
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [previewingVideo, setPreviewingVideo] = useState<Testimonial | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleVideoFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setVideoUrl(reader.result as string);
+      setUploading(false);
+      setStatusMsg(`Video "${file.name}" loaded ready for upload!`);
+    };
+    reader.onerror = () => {
+      setUploading(false);
+      setStatusMsg("Failed to read video file");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePosterFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPosterUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCreateTestimonial = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !caption.trim()) {
+      setStatusMsg("Student name and caption quote are required.");
+      return;
+    }
+
+    const effectiveVideo = videoUrl.trim() || "/videos/testimonial1.mp4";
+    const effectivePoster = posterUrl.trim() || "/videos/testimonial1_poster.jpg";
+
+    let parsedCaptions = undefined;
+    if (captionsInput.trim()) {
+      const lines = captionsInput.split("\n").filter((l) => l.trim().length > 0);
+      parsedCaptions = lines.map((line, idx) => ({
+        start: idx * 5,
+        end: (idx + 1) * 5,
+        text: line.trim(),
+      }));
+    }
+
+    const created = addTestimonial({
+      name: name.trim(),
+      skill: skill.trim(),
+      schoolOrRole: schoolOrRole.trim() || undefined,
+      caption: caption.trim(),
+      video: effectiveVideo,
+      img: effectivePoster,
+      duration: 60,
+      captions: parsedCaptions,
+    });
+
+    const refreshed = getTestimonials();
+    setItems(refreshed);
+    setName("");
+    setSchoolOrRole("");
+    setCaption("");
+    setVideoUrl("");
+    setPosterUrl("");
+    setCaptionsInput("");
+    setStatusMsg(`Published "${created.name}"! This video is now the latest upload and will lead playback.`);
+    setTimeout(() => setStatusMsg(null), 5000);
+  };
+
+  const handleDelete = (id: string, title: string) => {
+    if (!confirm(`Are you sure you want to remove the testimonial for "${title}"?`)) return;
+    deleteTestimonial(id);
+    setItems(getTestimonials());
+    setStatusMsg(`Removed "${title}" from testimonials.`);
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
+
+  const handleDeleteComment = (commentId: string) => {
+    if (!confirm("Are you sure you want to delete this comment?")) return;
+    deleteVideoComment(commentId);
+    setComments(getVideoComments());
+    setStatusMsg("Comment deleted.");
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
+
   return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Homepage Settings</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">Homepage banner & announcements are synchronized across user sessions.</p>
-    </Card>
+    <div className="space-y-6">
+      {/* Overview Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="!p-4">
+          <p className="text-xs text-[#8a7ba8] uppercase tracking-wider font-semibold">Total Video Stories</p>
+          <p className="mt-1 text-2xl font-bold text-white">{items.length}</p>
+          <p className="text-xs text-pink-400 mt-1">Continuous Loop Active</p>
+        </Card>
+        <Card className="!p-4">
+          <p className="text-xs text-[#8a7ba8] uppercase tracking-wider font-semibold">Community Comments</p>
+          <p className="mt-1 text-2xl font-bold text-white">{comments.length}</p>
+          <p className="text-xs text-[#b8aecf] mt-1">Across all videos</p>
+        </Card>
+        <Card className="!p-4">
+          <p className="text-xs text-[#8a7ba8] uppercase tracking-wider font-semibold">Playback Sequence</p>
+          <p className="mt-1 text-sm font-bold text-pink-300">Latest Leads, Rest Shuffled</p>
+          <p className="text-xs text-[#8a7ba8] mt-1">Auto-advances on video end</p>
+        </Card>
+      </div>
+
+      {statusMsg && (
+        <div className="rounded-2xl border border-pink-500/40 bg-pink-500/10 p-4 text-xs font-semibold text-pink-300 animate-fade-in flex items-center justify-between">
+          <span>{statusMsg}</span>
+          <button onClick={() => setStatusMsg(null)} className="text-white hover:text-pink-300">✕</button>
+        </div>
+      )}
+
+      {/* UPLOAD / ADD NEW TESTIMONIAL VIDEO FORM */}
+      <Card>
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <Icon name="video" size={20} className="text-pink-400" />
+          <h3 className="font-bold text-white text-lg">Upload New Student Testimonial Video</h3>
+        </div>
+        <p className="mt-2 text-xs text-[#b8aecf]">
+          Newly uploaded videos automatically lead playback as the premier video on both Home and Academy pages, followed by the rest in continuous shuffle.
+        </p>
+
+        <form onSubmit={handleCreateTestimonial} className="mt-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Student Full Name *</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Ebuka Emmanuel"
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Skill Learned *</label>
+              <select
+                value={skill}
+                onChange={(e) => setSkill(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+              >
+                <option value="Graphic Design">Graphic Design</option>
+                <option value="Web Development">Web Development</option>
+                <option value="Video Editing">Video Editing</option>
+                <option value="UI/UX Design">UI/UX Design</option>
+                <option value="AI Prompt Engineering">AI Prompt Engineering</option>
+                <option value="Content Creation">Content Creation</option>
+                <option value="Tech & Design">Tech & Design</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">University / Role (Optional)</label>
+              <input
+                type="text"
+                value={schoolOrRole}
+                onChange={(e) => setSchoolOrRole(e.target.value)}
+                placeholder="e.g. Federal University Dutse or Cohort Graduate"
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Video File / URL</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="/videos/testimonial1.mp4 or URL"
+                  className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+                <label className="cursor-pointer shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 active:scale-95 transition-all">
+                  {uploading ? "Reading..." : "Browse File"}
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={handleVideoFile}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Poster Thumbnail (Image File / URL)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={posterUrl}
+                  onChange={(e) => setPosterUrl(e.target.value)}
+                  placeholder="/videos/testimonial1_poster.jpg or URL"
+                  className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+                <label className="cursor-pointer shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 active:scale-95 transition-all">
+                  Browse Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePosterFile}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Auto-Captions / Transcript (One line per cue)</label>
+              <textarea
+                rows={2}
+                value={captionsInput}
+                onChange={(e) => setCaptionsInput(e.target.value)}
+                placeholder="Optional: Enter spoken sentences. Each line creates a subtitle segment."
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Key Student Quote / Caption *</label>
+            <textarea
+              required
+              rows={2}
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="e.g. KR8 Digitals taught me graphic design for free. Now I handle client brand identities!"
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="flex items-center gap-2 rounded-xl bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-xl hover:brightness-110 active:scale-95 transition-all glow-pink-sm"
+          >
+            <Icon name="video" size={16} />
+            <span>Publish Testimonial Video (Leads Playback)</span>
+          </button>
+        </form>
+      </Card>
+
+      {/* ACTIVE TESTIMONIALS LIST */}
+      <Card>
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <h3 className="font-bold text-white text-lg">Published Video Stories ({items.length})</h3>
+          <span className="text-xs text-[#8a7ba8]">First card plays first; remainder auto-shuffle</span>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-white/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative h-16 w-12 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/20">
+                  <img src={item.img} alt={item.name} className="h-full w-full object-cover" />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-white text-[10px]">▶</span>
+                  </span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                    {index === 0 && (
+                      <span className="rounded-full bg-pink-500/30 border border-pink-400/40 px-2 py-0.5 text-[10px] font-bold text-pink-300">
+                        🔥 Leads Reel (Latest)
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-pink-300">{item.skill} {item.schoolOrRole ? `· ${item.schoolOrRole}` : ""}</p>
+                  <p className="text-xs text-[#cabfe0] line-clamp-1 mt-0.5 italic">"{item.caption}"</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setPreviewingVideo(item)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all"
+                >
+                  Preview
+                </button>
+                <button
+                  onClick={() => {
+                    const url = `${window.location.origin}/?video=${item.id}`;
+                    navigator.clipboard?.writeText(url);
+                    setStatusMsg(`Copied share link for ${item.name}!`);
+                    setTimeout(() => setStatusMsg(null), 3000);
+                  }}
+                  className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all"
+                >
+                  Copy Link
+                </button>
+                <button
+                  onClick={() => handleDelete(item.id, item.name)}
+                  className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* COMMENTS MODERATION PANEL */}
+      <Card>
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <Icon name="message" size={18} className="text-pink-400" />
+            <h3 className="font-bold text-white text-lg">Community Comments & Moderation ({comments.length})</h3>
+          </div>
+          <span className="text-xs text-[#8a7ba8]">Delete spam or inappropriate user comments</span>
+        </div>
+
+        <div className="mt-4 space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
+          {comments.length === 0 ? (
+            <p className="py-6 text-center text-xs text-[#8a7ba8]">No comments yet.</p>
+          ) : (
+            comments.map((c) => {
+              const video = items.find((v) => v.id === c.videoId);
+              return (
+                <div
+                  key={c.id}
+                  className="flex items-start justify-between gap-3 rounded-2xl border border-white/5 bg-black/25 p-3.5"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-white text-xs">{c.authorName}</span>
+                      {c.authorId && (
+                        <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] text-pink-300">
+                          {c.authorId}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-[#7d6f96]">
+                        on {video?.name || "Testimonial"} ({timeAgo(c.createdAt)})
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#d8cde8] mt-1">{c.comment}</p>
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteComment(c.id)}
+                    className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/20 transition-all"
+                  >
+                    Delete
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </Card>
+
+      {/* VIDEO PREVIEW MODAL */}
+      {previewingVideo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+          <div className="relative w-full max-w-sm rounded-3xl border border-white/20 bg-[#160d2b] p-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h4 className="font-bold text-white text-sm">{previewingVideo.name}</h4>
+              <button
+                onClick={() => setPreviewingVideo(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mt-3 aspect-[9/16] overflow-hidden rounded-2xl bg-black">
+              <video
+                src={previewingVideo.video}
+                poster={previewingVideo.img}
+                controls
+                autoPlay
+                className="h-full w-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HomeManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-bold text-white text-lg">Homepage Settings & Video Testimonials</h3>
+            <p className="mt-1 text-sm text-[#b8aecf]">Homepage banner & announcements are synchronized across user sessions.</p>
+          </div>
+          {onOpenVideos && (
+            <button
+              onClick={onOpenVideos}
+              className="flex items-center gap-2 rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+            >
+              <Icon name="video" size={16} />
+              <span>Manage Testimonial Videos →</span>
+            </button>
+          )}
+        </div>
+      </Card>
+      <TestimonialVideosManager />
+    </div>
   );
 }
 

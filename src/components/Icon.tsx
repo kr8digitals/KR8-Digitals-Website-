@@ -4,7 +4,7 @@ export type IconName =
   | "palette" | "video" | "code" | "mobile" | "chart" | "spark" | "bot" | "pen"
   | "book" | "check" | "user" | "briefcase" | "bell" | "lock" | "unlock" | "certificate"
   | "paperclip" | "alert" | "heart" | "bolt" | "trophy" | "users" | "calendar" | "youtube"
-  | "tiktok" | "instagram" | "facebook" | "x" | "linkedin" | "message";
+  | "tiktok" | "instagram" | "facebook" | "x" | "linkedin" | "message" | "share" | "volume" | "volumeX";
 
 const paths: Record<IconName, string> = {
   palette: "M12 3a9 9 0 1 0 0 18h1.2a1.8 1.8 0 0 0 0-3.6h-.8a1.8 1.8 0 0 1 0-3.6H15a6 6 0 0 0 0-12.8A9 9 0 0 0 12 3Z M7.5 9.2h.01 M10.2 6.5h.01 M15.2 6.8h.01 M17.4 10h.01",
@@ -37,6 +37,9 @@ const paths: Record<IconName, string> = {
   x: "M5 4l14 16 M19 4 5 20",
   linkedin: "M5 8v12 M5 4.5v.01 M10 20v-7a4 4 0 0 1 8 0v7 M10 11a4 4 0 0 1 8 0",
   message: "M4 5h16v11H8l-4 4V5Z",
+  share: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13",
+  volume: "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 0 1 0 7.07 M19.07 4.93a10 10 0 0 1 0 14.14",
+  volumeX: "M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6",
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.7, className = "" }: { name: IconName; size?: number; strokeWidth?: number; className?: string } & SVGProps<SVGSVGElement>) {

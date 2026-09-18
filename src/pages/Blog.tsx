@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { getBlogPosts, type BLOG } from "../data/store";
+import { getBlogPosts } from "../data/store";
 import { Pill } from "../components/ui";
 
 const cats = ["All", "Digital Skills", "AI", "Community", "Announcements", "Company News"];
