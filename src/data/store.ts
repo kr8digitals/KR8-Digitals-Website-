@@ -1028,7 +1028,8 @@ const VIDEO_COMMENT_KEY = "kr8_video_comments_v1";
 
 export function getTestimonials(): Testimonial[] {
   const loaded = load<Testimonial[]>(TESTIMONIAL_KEY, REAL_STUDENT_TESTIMONIALS);
-  if (!loaded || !loaded.length || !loaded.some((item) => item.video)) {
+  if (!loaded || !loaded.length || !loaded.some((item) => item.video && item.video.includes("testimonial"))) {
+    save(TESTIMONIAL_KEY, REAL_STUDENT_TESTIMONIALS);
     return REAL_STUDENT_TESTIMONIALS;
   }
   return loaded.sort((a, b) => b.createdAt - a.createdAt);
