@@ -12,6 +12,7 @@ import TestimonialCarousel from "../components/TestimonialCarousel";
 import Icon from "../components/Icon";
 import CountryPhone from "../components/CountryPhone";
 import { downloadCertificatePdf } from "../utils/certificate";
+import { authenticateWithBiometrics, getRegisteredBiometrics } from "../utils/biometrics";
 
 export default function Academy() {
   const { student } = useAuth();
@@ -297,6 +298,33 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   const [newPassword, setNewPassword] = useState("");
   const [demoCode, setDemoCode] = useState("");
   const [msg, setMsg] = useState("");
+  const [bioLoading, setBioLoading] = useState(false);
+
+  const registeredBios = getRegisteredBiometrics();
+
+  const handleBiometricSignIn = async (targetId?: string) => {
+    setMsg("");
+    setBioLoading(true);
+    try {
+      const res = await authenticateWithBiometrics(targetId || (value.trim() ? value.trim() : undefined));
+      if (!res.ok || !res.studentId) {
+        setMsg(res.error || "Biometric authentication failed or was cancelled.");
+        return;
+      }
+      const all = getStudents();
+      const account = all.find((a) => a.id.toLowerCase() === res.studentId!.toLowerCase());
+      if (!account) {
+        setMsg(`Account for ID ${res.studentId} could not be found.`);
+        return;
+      }
+      onDone(account);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Biometric authentication error");
+    } finally {
+      setBioLoading(false);
+    }
+  };
+
   const submit = () => {
     setMsg("");
     if (mode === "reset") return;
@@ -314,9 +342,64 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   const finishReset = () => { const result = completePasswordReset(resetId, resetCode, newPassword); setMsg(result.message); if (result.ok) { setMode("id"); setValue(resetId); } };
   return (
     <Card>
-      <h3 className="text-xl font-bold text-white">{mode === "id" ? "Sign in with your KR8 ID" : mode === "recover" ? "Recover my KR8 ID" : "Reset my password"}</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">{mode === "id" ? "Enter your ID and password." : mode === "recover" ? "Enter your email or phone to retrieve your ID." : "Verify your email and KR8 ID with a reset code."}</p>
-      <div className="mt-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-bold text-white">{mode === "id" ? "Sign in to KR8" : mode === "recover" ? "Recover my KR8 ID" : "Reset my password"}</h3>
+        {mode === "id" && registeredBios.length > 0 && (
+          <span className="flex items-center gap-1 rounded-full bg-green-500/20 px-2.5 py-1 text-[11px] font-semibold text-green-300">
+            <Icon name="fingerprint" size={12} /> Biometrics ready
+          </span>
+        )}
+      </div>
+      <p className="mt-1 text-sm text-[#b8aecf]">
+        {mode === "id"
+          ? "Sign in with your KR8 ID and password, or use device fingerprint."
+          : mode === "recover"
+          ? "Enter your email or phone to retrieve your ID."
+          : "Verify your email and KR8 ID with a reset code."}
+      </p>
+
+      {/* Quick Biometric Sign In button if registered on this device */}
+      {mode === "id" && (
+        <div className="mt-5 space-y-2">
+          <button
+            type="button"
+            onClick={() => handleBiometricSignIn()}
+            disabled={bioLoading}
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-pink-400/40 bg-pink-500/10 py-3 text-sm font-semibold text-pink-200 hover:bg-pink-500/20 hover:border-pink-400/70 transition-all disabled:opacity-50"
+          >
+            <Icon name="fingerprint" size={18} className="text-pink-400" />
+            <span>{bioLoading ? "Verifying sensor..." : "Sign in with Fingerprint / Biometrics"}</span>
+          </button>
+
+          {registeredBios.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <span className="text-[11px] text-[#8a7ba8] self-center">Saved on device:</span>
+              {registeredBios.slice(0, 3).map((b) => (
+                <button
+                  key={b.studentId}
+                  type="button"
+                  onClick={() => handleBiometricSignIn(b.studentId)}
+                  className="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[11px] font-mono text-pink-300 hover:bg-white/10"
+                  title={`Tap to sign in as ${b.studentName}`}
+                >
+                  {b.studentName.split(" ")[0]} ({b.studentId.slice(-6)})
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] text-[#8a7ba8] text-center">
+              New here? Sign in with your password first, then activate Fingerprint in Settings.
+            </p>
+          )}
+
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10" /></div>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-[#160026] px-2 text-[#8a7ba8]">Or with credentials</span></div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
         {mode === "reset" ? <>
           <input className={inputCls} placeholder="Registered email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
           <input className={inputCls} placeholder="KR8 ID" value={resetId} onChange={(e) => setResetId(e.target.value)} />
@@ -332,7 +415,7 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
         {msg && <p className="rounded-lg bg-white/5 px-4 py-2.5 text-sm text-[#cabfe0]">{msg}</p>}
         {mode !== "reset" && <GradientButton onClick={submit} className="w-full">{mode === "id" ? "Sign In →" : "Recover ID →"}</GradientButton>}
         <button onClick={() => { setMode(mode === "id" ? "recover" : mode === "recover" ? "reset" : "id"); setMsg(""); }} className="w-full text-center text-sm text-pink-400">{mode === "id" ? "Forgot your ID? Recover it →" : mode === "recover" ? "Lost your password? Reset it →" : "← Back to sign in"}</button>
-        <p className="text-center text-xs text-[#8a7ba8]">{mode === "id" ? "Passwords are required for every new account." : ""}</p>
+        <p className="text-center text-xs text-[#8a7ba8]">{mode === "id" ? "Passwords or registered device biometrics can be used to sign in." : ""}</p>
       </div>
     </Card>
   );

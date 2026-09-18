@@ -4,7 +4,7 @@ export type IconName =
   | "palette" | "video" | "code" | "mobile" | "chart" | "spark" | "bot" | "pen"
   | "book" | "check" | "user" | "briefcase" | "bell" | "lock" | "unlock" | "certificate"
   | "paperclip" | "alert" | "heart" | "bolt" | "trophy" | "users" | "calendar" | "youtube"
-  | "tiktok" | "instagram" | "facebook" | "x" | "linkedin" | "message" | "share" | "volume" | "volumeX";
+  | "tiktok" | "instagram" | "facebook" | "x" | "linkedin" | "message" | "share" | "volume" | "volumeX" | "fingerprint";
 
 const paths: Record<IconName, string> = {
   palette: "M12 3a9 9 0 1 0 0 18h1.2a1.8 1.8 0 0 0 0-3.6h-.8a1.8 1.8 0 0 1 0-3.6H15a6 6 0 0 0 0-12.8A9 9 0 0 0 12 3Z M7.5 9.2h.01 M10.2 6.5h.01 M15.2 6.8h.01 M17.4 10h.01",
@@ -40,6 +40,7 @@ const paths: Record<IconName, string> = {
   share: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13",
   volume: "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 0 1 0 7.07 M19.07 4.93a10 10 0 0 1 0 14.14",
   volumeX: "M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6",
+  fingerprint: "M12 2a10 10 0 0 0-6.88 17.23 M12 6a6 6 0 0 0-4.24 10.24 M12 10a2 2 0 0 0-1.41 3.41 M12 14v4 M8.5 19.5c1 .5 2.2.8 3.5.8s2.5-.3 3.5-.8 M15 11a3 3 0 0 1-1 2.23 M18 8a6 6 0 0 1-1.5 3.9 M20 5a10 10 0 0 1-2 5",
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.7, className = "" }: { name: IconName; size?: number; strokeWidth?: number; className?: string } & SVGProps<SVGSVGElement>) {

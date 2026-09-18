@@ -12,6 +12,7 @@ const actions = [
   { icon: "user" as const, label: "Profile", title: "View My Profile", desc: "Portfolio, activity, badges & referrals.", to: "/academy" },
   { icon: "briefcase" as const, label: "Opportunities", title: "Browse Opportunities", desc: "Real client work from KR8 Agency.", to: "/agency" },
   { icon: "bot" as const, label: "Mentor", title: "Chat on KR8 AI", desc: "Unlimited access to your creative mentor.", to: "/ai" },
+  { icon: "fingerprint" as const, label: "Security", title: "Settings & Biometrics", desc: "Manage Touch ID / Fingerprint, password and privacy.", to: "/settings" },
 ];
 
 export default function Dashboard() {
@@ -61,15 +62,25 @@ export default function Dashboard() {
               <p className="mt-4 text-sm font-semibold text-pink-400 group-hover:translate-x-1">Go →</p>
             </Link>
           ))}
-          {/* Referral card */}
-          <Card>
-            <p className="text-[11px] uppercase tracking-wider text-pink-400">Referral</p>
-            <h3 className="mt-1 text-lg font-bold text-white">My Referral Link</h3>
-            <a href={getReferralUrl(student.id)} className="mt-2 block break-all rounded-lg bg-black/30 p-2 text-xs text-pink-300 underline underline-offset-2">
-              {getReferralUrl(student.id)}
-            </a>
+        </div>
+
+        {/* Referral banner */}
+        <div className="mt-6">
+          <Card className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-pink-400 font-bold">Referral Program</p>
+              <h3 className="mt-1 text-lg font-bold text-white">Your Personal KR8 Referral Link</h3>
+              <p className="mt-1 text-xs text-[#b8aecf]">Share this link to invite fellow creatives and earn XP points on the leaderboard.</p>
+              <a href={getReferralUrl(student.id)} className="mt-2 inline-block break-all rounded-lg bg-black/40 px-3 py-1.5 font-mono text-xs text-pink-300 underline underline-offset-2">
+                {getReferralUrl(student.id)}
+              </a>
+            </div>
             {student.graduated && (
-              <Link to="/academy" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-pink-400"><Icon name="certificate" size={15} /> View My Certificate →</Link>
+              <div className="sm:self-center shrink-0">
+                <Link to="/academy" className="inline-flex items-center gap-1.5 rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white glow-pink-sm">
+                  <Icon name="certificate" size={14} /> View My Certificate →
+                </Link>
+              </div>
             )}
           </Card>
         </div>
