@@ -18,29 +18,96 @@ const actions = [
 export default function Dashboard() {
   const { student } = useAuth();
   if (!student) return null;
+  const isFounder = student.type === "founder";
+  const isCoFounder = student.type === "co-founder";
   const skill = SKILLS.find((s) => s.key === student.skill);
   const ranked = [...getStudents()].sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === student.id) + 1;
   const first = student.name.split(" ")[0];
+
+  const executiveActions = [
+    { icon: "lock" as const, label: "Administration", title: "Admin Portal", desc: "Manage students, certifications, tracks, and settings.", to: "/admin" },
+    { icon: "calendar" as const, label: "Attendance", title: "Review Submissions", desc: "Open manual review queue for all tracks.", to: "/attendance-review" },
+    { icon: "user" as const, label: "Profile", title: "Leadership Profile", desc: "View and edit your executive profile and portfolio.", to: "/academy" },
+    { icon: "briefcase" as const, label: "Opportunities", title: "Agency Projects", desc: "Browse real client work shipped by graduate teams.", to: "/agency" },
+    { icon: "bot" as const, label: "Creative AI", title: "KR8 AI Mentor", desc: "Access the creative mentor and AI workspace.", to: "/ai" },
+    { icon: "fingerprint" as const, label: "Security", title: "Settings & Biometrics", desc: "Manage Touch ID / Fingerprint, password and privacy.", to: "/settings" },
+  ];
+
+  const currentActions = (isFounder || isCoFounder) ? executiveActions : actions;
 
   return (
     <div className="section-bg min-h-screen">
       <div className="mx-auto max-w-7xl px-5 py-12">
         {/* Greeting */}
         <div className="rise-in">
-          <Pill>{student.type === "tribe" ? "Tribe Member" : skill?.name ?? "Student"} · {student.id}</Pill>
+          <Pill>
+            {isFounder
+              ? "KR8 Founder & CEO"
+              : isCoFounder
+              ? "KR8 Co-Founder"
+              : student.type === "tribe"
+              ? "Tribe Member"
+              : skill?.name ?? "Student"}{" "}
+            · {student.id}
+          </Pill>
           <h1 className="font-display mt-4 text-5xl text-white sm:text-6xl">
-            Welcome back, <span className="text-gradient">{first}</span> 👋
+            {isFounder ? (
+              <>Welcome back, <span className="text-gradient">Founder Timfire</span> 👑</>
+            ) : isCoFounder ? (
+              <>Welcome back, <span className="text-gradient">Co-Founder {first}</span> ⭐</>
+            ) : (
+              <>Welcome back, <span className="text-gradient">{first}</span> 👋</>
+            )}
           </h1>
-          {student.admin && <Link to="/admin" className="mt-4 block max-w-xl rounded-2xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-sm leading-relaxed text-pink-100 hover:border-pink-300">Congratulations — you are recognized as a {student.admin.title ?? student.admin.role}. Click here to open your password-protected admin access. Your assigned rights are managed from the Admin Permissions system.</Link>}
+
+          {isFounder ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-pink-400/40 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-xl">
+              <div>
+                <p className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>👑</span> Founder & CEO Executive Authority Active
+                </p>
+                <p className="text-xs text-[#cabfe0] mt-1">
+                  You have full, unrestricted access across all 17 admin sections, review queues, and system parameters.
+                </p>
+              </div>
+              <Link
+                to="/admin"
+                className="rounded-full bg-gradient-pink px-5 py-2 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform"
+              >
+                Open Admin Dashboard →
+              </Link>
+            </div>
+          ) : isCoFounder ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-pink-400/40 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-xl">
+              <div>
+                <p className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>⭐</span> Co-Founder Executive Access Active
+                </p>
+                <p className="text-xs text-[#cabfe0] mt-1">
+                  You hold executive authority across KR8 Digitals. Open the Admin menu to manage tracks and reviews.
+                </p>
+              </div>
+              <Link
+                to="/admin"
+                className="rounded-full bg-gradient-pink px-5 py-2 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform"
+              >
+                Open Admin Dashboard →
+              </Link>
+            </div>
+          ) : student.admin ? (
+            <Link to="/admin" className="mt-4 block max-w-xl rounded-2xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-sm leading-relaxed text-pink-100 hover:border-pink-300">
+              Congratulations — you are recognized as a {student.admin.title ?? student.admin.role}. Click here to open your password-protected admin access. Your assigned rights are managed from the Admin Permissions system.
+            </Link>
+          ) : null}
         </div>
 
         {/* Stats bar */}
         <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-5">
           {[
-            { n: student.attendanceAccepted, l: "Attendance Accepted" },
-            { n: student.submissions, l: "Assignments Submitted" },
-            { n: `#${rank}`, l: "Leaderboard Rank" },
+            { n: student.attendanceAccepted, l: isFounder || isCoFounder ? "Attendance Sessions" : "Attendance Accepted" },
+            { n: student.submissions, l: isFounder || isCoFounder ? "Assignments Reviewed" : "Assignments Submitted" },
+            { n: isFounder ? "👑 Founder" : isCoFounder ? "⭐ Co-Founder" : `#${rank}`, l: "Leadership Status" },
             { n: student.points, l: "Points" },
             { n: student.referrals, l: "Referrals" },
           ].map((s) => (
@@ -53,7 +120,7 @@ export default function Dashboard() {
 
         {/* Action cards */}
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {actions.map((a) => (
+          {currentActions.map((a) => (
             <Link key={a.title} to={a.to} className="group rounded-3xl border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-pink-400/50">
               <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white"><Icon name={a.icon} size={22} /></div>
               <p className="text-[11px] uppercase tracking-wider text-pink-400">{a.label}</p>

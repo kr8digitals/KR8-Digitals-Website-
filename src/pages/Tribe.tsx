@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { IMG } from "../data/images";
-import { tribeCount, CONTACT, getTribeWhatsApp, registerTribe, buildPhone } from "../data/store";
+import { tribeCount, CONTACT, getTribeWhatsApp, registerTribe, buildPhone, type Account } from "../data/store";
 import { useAuth } from "../context/AuthContext";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Check, GlowImage } from "../components/ui";
 import Marquee from "../components/Marquee";
@@ -31,7 +31,15 @@ export default function Tribe() {
     const res = registerTribe({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password });
     if (!res.ok) { setErr(res.error!); return; }
     signIn(res.member!);
-    addNotification("Welcome to the KR8 Tribe.");
+    const isFounder = res.member?.type === "founder";
+    const isCoFounder = res.member?.type === "co-founder";
+    addNotification(
+      isFounder
+        ? "Welcome, Founder & CEO! Executive identity confirmed."
+        : isCoFounder
+        ? "Welcome, Co-Founder! Executive identity confirmed."
+        : "Welcome to the KR8 Tribe."
+    );
     setDone(true);
   };
 
@@ -134,10 +142,40 @@ export default function Tribe() {
             {done ? (
               <Card className="text-center">
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-pink text-white"><Icon name="check" size={24} /></div>
-                <h3 className="text-xl font-bold text-white">Welcome to the Tribe!</h3>
-                <p className="mt-2 text-sm text-[#b8aecf]">You're in. Join your WhatsApp community to get started.</p>
-                {(() => { const account = JSON.parse(localStorage.getItem("kr8_current") || "null") as { admin?: { role: string; passwordNotice?: string } } | null; return account?.admin ? <p className="mt-3 rounded-xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-left text-xs leading-relaxed text-pink-100"><strong className="capitalize">{account.admin.role} access recognized.</strong> {account.admin.passwordNotice} Use the Admin menu and your admin password to continue.</p> : null; })()}
-                <div className="mt-5"><GradientButton href={getTribeWhatsApp()} className="w-full">Open Tribe WhatsApp Group →</GradientButton></div>
+                {(() => {
+                  const account = JSON.parse(localStorage.getItem("kr8_current") || "null") as Account | null;
+                  const isFounder = account?.type === "founder";
+                  const isCoFounder = account?.type === "co-founder";
+                  return (
+                    <>
+                      <h3 className="text-xl font-bold text-white">
+                        {isFounder ? "Welcome, Founder & CEO!" : isCoFounder ? "Welcome, Co-Founder!" : "Welcome to the Tribe!"}
+                      </h3>
+                      <p className="mt-2 text-sm text-[#b8aecf]">
+                        {isFounder
+                          ? "Your Founder identity has been confirmed across the Tribe and Academy."
+                          : isCoFounder
+                          ? "Your Co-Founder identity has been confirmed."
+                          : "You're in. Join your WhatsApp community to get started."}
+                      </p>
+                      {account?.admin && (
+                        <div className="mt-4 rounded-xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-left text-xs leading-relaxed text-pink-100">
+                          <strong className="capitalize">{account.admin.title ?? account.admin.role} access active.</strong> {account.admin.passwordNotice}
+                        </div>
+                      )}
+                      <div className="mt-5 space-y-2">
+                        {(isFounder || isCoFounder) && (
+                          <GradientButton to="/admin" className="w-full">
+                            Open Admin Portal →
+                          </GradientButton>
+                        )}
+                        <GhostButton href={getTribeWhatsApp()} className="w-full">
+                          Open Tribe WhatsApp Group →
+                        </GhostButton>
+                      </div>
+                    </>
+                  );
+                })()}
               </Card>
             ) : (
               <Card>

@@ -76,28 +76,76 @@ export default function Verify() {
                     <h3 className="text-xl font-bold text-white">{result.account.name}</h3>
                     <p className="font-mono text-xs text-pink-400">{result.account.id}</p>
                   </div>
-                  {result.account.vip && (
-                    <span className="ml-auto rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">
-                      VIP
+                  {result.account.type === "founder" ? (
+                    <span className="ml-auto rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold text-white shadow-lg glow-pink-sm">
+                      👑 Founder & CEO
                     </span>
+                  ) : result.account.type === "co-founder" ? (
+                    <span className="ml-auto rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold text-white shadow-lg glow-pink-sm">
+                      ⭐ Co-Founder
+                    </span>
+                  ) : (
+                    result.account.vip && (
+                      <span className="ml-auto rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">
+                        VIP
+                      </span>
+                    )
                   )}
                 </div>
 
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                  <Info label="Skill Track" value={skill?.name ?? result.account.skill ?? "—"} />
-                  <Info label="Cohort Year" value={String(result.account.year ?? COHORT_YEAR)} />
+                  <Info
+                    label={result.account.type === "founder" || result.account.type === "co-founder" ? "Executive Role" : "Skill Track"}
+                    value={
+                      result.account.type === "founder"
+                        ? "Founder & CEO · Executive Leadership"
+                        : result.account.type === "co-founder"
+                        ? "Co-Founder · Executive Leadership"
+                        : skill?.name ?? result.account.skill ?? "—"
+                    }
+                  />
+                  <Info
+                    label="Cohort / Origin"
+                    value={
+                      result.account.type === "founder" || result.account.type === "co-founder"
+                        ? "Founding Executive"
+                        : String(result.account.year ?? COHORT_YEAR)
+                    }
+                  />
                   <Info
                     label="Status"
                     value={
-                      result.account.graduated
+                      result.account.type === "founder"
+                        ? "Verified Founder & CEO ✓"
+                        : result.account.type === "co-founder"
+                        ? "Verified Co-Founder ✓"
+                        : result.account.graduated
                         ? `Certified ✓ (${result.account.certTier ?? "Completion"})`
                         : "In Training"
                     }
-                    highlight={result.account.graduated}
+                    highlight={result.account.graduated || result.account.type === "founder" || result.account.type === "co-founder"}
                   />
                 </div>
 
-                {result.account.graduated && (
+                {result.account.type === "founder" ? (
+                  <div className="mt-4 rounded-xl border border-pink-400/50 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-lg">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">
+                      ✓ Official KR8 Digitals Executive Leadership
+                    </p>
+                    <p className="mt-1 text-sm text-[#cabfe0]">
+                      This identity confirms <strong className="text-white">{result.account.name}</strong> as the official <strong className="text-white">Founder & Chief Executive Officer</strong> of KR8 Digitals.
+                    </p>
+                  </div>
+                ) : result.account.type === "co-founder" ? (
+                  <div className="mt-4 rounded-xl border border-pink-400/50 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-lg">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">
+                      ✓ Official KR8 Digitals Executive Leadership
+                    </p>
+                    <p className="mt-1 text-sm text-[#cabfe0]">
+                      This identity confirms <strong className="text-white">{result.account.name}</strong> as an official <strong className="text-white">Co-Founder</strong> of KR8 Digitals.
+                    </p>
+                  </div>
+                ) : result.account.graduated && (
                   <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-green-300">
                       ✓ Official KR8 Digitals Graduate

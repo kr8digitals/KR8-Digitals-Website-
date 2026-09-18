@@ -137,7 +137,7 @@ export default function Navbar() {
 
                 {/* User Avatar */}
                 <Link
-                  to={student.type === "student" ? "/academy" : "/tribe"}
+                  to={student.type === "tribe" ? "/tribe" : "/academy"}
                   title={`My Profile (${student.name})`}
                   className="transition-transform hover:scale-105"
                 >
@@ -231,12 +231,28 @@ export default function Navbar() {
                         )}
                       </div>
                       <p className="font-mono text-xs text-pink-300 truncate">{student.id}</p>
-                      <p className="text-[11px] text-[#8a7ba8] capitalize">{student.type} account</p>
+                      {student.type === "founder" ? (
+                        <span className="inline-block mt-0.5 rounded-full bg-gradient-pink px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          👑 Founder & CEO
+                        </span>
+                      ) : student.type === "co-founder" ? (
+                        <span className="inline-block mt-0.5 rounded-full bg-purple-500/30 border border-purple-400/40 px-2 py-0.5 text-[10px] font-bold text-purple-200 shadow-sm">
+                          ⭐ Co-Founder
+                        </span>
+                      ) : student.type === "tribe" ? (
+                        <span className="inline-block mt-0.5 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-[#cabfe0]">
+                          Tribe Member
+                        </span>
+                      ) : (
+                        <span className="inline-block mt-0.5 rounded-full bg-pink-500/10 px-2 py-0.5 text-[10px] text-pink-300">
+                          Student Account
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2 pt-3 border-t border-white/10 text-center">
                     <Link
-                      to={student.type === "student" ? "/academy" : "/tribe"}
+                      to={student.type === "tribe" ? "/tribe" : "/academy"}
                       onClick={closeDrawer}
                       className="rounded-lg bg-white/5 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
                     >

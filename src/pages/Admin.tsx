@@ -34,13 +34,13 @@ export default function Admin() {
   const [auth, setAuth] = useState(false);
   const [err, setErr] = useState(false);
   const [tab, setTab] = useState("Overview");
-  const [students, setStudents] = useState<Account[]>(getStudents);
+  const [students, setStudents] = useState<Account[]>(() => getAccounts().filter((a) => a.type !== "tribe"));
 
   const isUltimate = currentUser?.admin?.role === "ultimate" || (!currentUser?.admin && !currentUser) || pw === MAIN_ADMIN_PASSWORD;
 
   // Real-time synchronization whenever student data or accounts update
   useEffect(() => {
-    const refresh = () => setStudents(getStudents());
+    const refresh = () => setStudents(getAccounts().filter((a) => a.type !== "tribe"));
     window.addEventListener("kr8:accounts-updated", refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -263,7 +263,15 @@ function StudentManager({ students }: { students: Account[] }) {
                       </td>
                       <td className="p-3 font-medium">{s.points} pts</td>
                       <td className="p-3">
-                        {s.restricted ? (
+                        {s.type === "founder" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-pink px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                            👑 Founder & CEO
+                          </span>
+                        ) : s.type === "co-founder" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/30 border border-purple-400/40 px-2.5 py-1 text-xs font-bold text-purple-200 shadow-sm">
+                            ⭐ Co-Founder
+                          </span>
+                        ) : s.restricted ? (
                           <span className="rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-medium text-red-300">
                             Restricted
                           </span>
@@ -278,21 +286,29 @@ function StudentManager({ students }: { students: Account[] }) {
                         )}
                       </td>
                       <td className="p-3 text-right text-xs">
-                        <button
-                          onClick={() => setGraduatingStudent(s)}
-                          className="mr-2 rounded-full bg-gradient-pink px-3 py-1 font-bold text-white hover:opacity-90"
-                        >
-                          {s.graduated ? "Update Cert" : "Graduate"}
-                        </button>
+                        {s.type === "founder" || s.type === "co-founder" ? (
+                          <span className="mr-2 rounded-full border border-pink-400/50 bg-pink-500/10 px-3 py-1 text-xs font-bold text-pink-300">
+                            Executive
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setGraduatingStudent(s)}
+                            className="mr-2 rounded-full bg-gradient-pink px-3 py-1 font-bold text-white hover:opacity-90"
+                          >
+                            {s.graduated ? "Update Cert" : "Graduate"}
+                          </button>
+                        )}
                         <button onClick={() => editName(s)} className="mr-2 text-pink-300 hover:text-white">
                           Edit
                         </button>
-                        <button
-                          onClick={() => toggleRestrict(s)}
-                          className={`mr-2 ${s.restricted ? "text-green-300" : "text-yellow-400"}`}
-                        >
-                          {s.restricted ? "Unrestrict" : "Restrict"}
-                        </button>
+                        {s.type !== "founder" && s.type !== "co-founder" && (
+                          <button
+                            onClick={() => toggleRestrict(s)}
+                            className={`mr-2 ${s.restricted ? "text-green-300" : "text-yellow-400"}`}
+                          >
+                            {s.restricted ? "Unrestrict" : "Restrict"}
+                          </button>
+                        )}
                         <button onClick={() => resetId(s)} className="text-[#8a7ba8] hover:text-white">
                           Reset ID
                         </button>

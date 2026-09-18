@@ -255,8 +255,20 @@ export const CERTIFICATION_CRITERIA: Record<string, string> = {
 
 SKILLS.forEach((skill) => { skill.criteria = CERTIFICATION_CRITERIA[skill.key]; });
 
-const VIP_PHONES = ["+2349043870282", "09043870282"];
-const FD_ALLOWED = ["+2349043870282", "09043870282"];
+const VIP_PHONES = [
+  "+2349043870282", "09043870282",
+  "+2348125687509", "08125687509",
+  "+2348166552758", "08166552758",
+  "+2348089344434", "08089344434",
+  "+2348106068523", "08106068523",
+];
+const FD_ALLOWED = [
+  "+2349043870282", "09043870282",
+  "+2348125687509", "08125687509",
+  "+2348166552758", "08166552758",
+  "+2348089344434", "08089344434",
+  "+2348106068523", "08106068523",
+];
 
 export function isVip(phone: string) {
   return VIP_PHONES.includes(phone.trim());
@@ -339,8 +351,10 @@ export async function detectCountryCode(): Promise<string> {
 
 /* ---------------- Accounts ---------------- */
 export type Account = {
-  type: "student" | "tribe";
-  id: string; // KR8 ID for students; tribe_<n> for tribe members
+  type: "student" | "tribe" | "founder" | "co-founder";
+  executiveRole?: "Founder" | "Co-Founder";
+  title?: string;
+  id: string; // KR8 ID for students; tribe_<n> for tribe members; executive IDs for leadership
   name: string;
   email: string;
   phone: string;
@@ -387,15 +401,46 @@ export type Account = {
 
 export type Student = Account; // alias for existing components
 
-export const ADMIN_PHONE_NUMBERS = [
-  "+2348106068523",
-  "+2348089344434",
+export const FOUNDER_PHONES = [
   "+2348125687509",
   "+2348166552758",
 ];
-export const ULTIMATE_ADMIN_EMAILS = ["kr8digitals01@gmail.com", "kutimfire001@gmail.com"];
+export const FOUNDER_EMAILS = [
+  "kr8digitals01@gmail.com",
+  "kutimfire001@gmail.com",
+];
+export const COFOUNDER_PHONES = [
+  "+2348089344434",
+  "+2348106068523",
+];
+
+export const ADMIN_PHONE_NUMBERS = [
+  ...FOUNDER_PHONES,
+  ...COFOUNDER_PHONES,
+];
+export const ULTIMATE_ADMIN_EMAILS = [...FOUNDER_EMAILS];
 export const MAIN_ADMIN_PASSWORD = "KR8@Adm!n2026";
-export const ADMIN_SECTIONS = ["Home", "Academy", "Agency", "Student Management", "Blog", "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager", "Payment Settings", "Verify Remarks", "Attendance Review", "Moderation"];
+export const ADMIN_SECTIONS = [
+  "Overview", "Home", "Academy", "Testimonial Videos", "Agency", "Student Management", "Blog",
+  "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
+  "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions",
+];
+
+export function isFounderAccount(phone?: string, email?: string): boolean {
+  const p = phone ? normalizePhone(phone) : "";
+  const e = email ? normalizeEmail(email) : "";
+  return FOUNDER_PHONES.includes(p) || FOUNDER_EMAILS.includes(e);
+}
+
+export function isCoFounderAccount(phone?: string, _email?: string): boolean {
+  const p = phone ? normalizePhone(phone) : "";
+  return COFOUNDER_PHONES.includes(p);
+}
+
+export function isExecutiveAccount(account?: Account | null): boolean {
+  if (!account) return false;
+  return account.type === "founder" || account.type === "co-founder" || account.executiveRole === "Founder" || account.executiveRole === "Co-Founder";
+}
 
 export function randomAdminPassword() {
   return `KR8-${Math.random().toString(36).slice(2, 8).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
@@ -404,15 +449,38 @@ export function randomAdminPassword() {
 export function adminInfoFor(phone: string, email: string) {
   const normalizedPhone = normalizePhone(phone);
   const normalizedEmail = normalizeEmail(email);
-  const isUltimate = normalizedPhone === "+2348125687509" || normalizedPhone === "+2348166552758" || ULTIMATE_ADMIN_EMAILS.includes(normalizedEmail);
-  const isRecognized = isUltimate || ADMIN_PHONE_NUMBERS.includes(normalizedPhone);
+  const isFounder = isFounderAccount(normalizedPhone, normalizedEmail);
+  const isCoFounder = isCoFounderAccount(normalizedPhone, normalizedEmail);
+
+  if (isFounder) {
+    return {
+      role: "ultimate" as const,
+      title: "Founder & CEO",
+      permissions: [...ADMIN_SECTIONS],
+      adminPassword: MAIN_ADMIN_PASSWORD,
+      passwordNotice: "Founder & CEO credentials recognized. Full system authority active.",
+    };
+  }
+
+  if (isCoFounder) {
+    return {
+      role: "ultimate" as const,
+      title: "Co-Founder",
+      permissions: [...ADMIN_SECTIONS],
+      adminPassword: MAIN_ADMIN_PASSWORD,
+      passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
+    };
+  }
+
+  const isRecognized = ADMIN_PHONE_NUMBERS.includes(normalizedPhone) || ULTIMATE_ADMIN_EMAILS.includes(normalizedEmail);
   if (!isRecognized) return undefined;
-  const adminPassword = isUltimate ? MAIN_ADMIN_PASSWORD : randomAdminPassword();
+  const adminPassword = randomAdminPassword();
   return {
-    role: isUltimate ? "ultimate" as const : "admin" as const,
+    role: "admin" as const,
+    title: "Platform Administrator",
     permissions: [...ADMIN_SECTIONS],
     adminPassword,
-    passwordNotice: isUltimate ? "Use the main admin password for dashboard access." : `Your unique admin password is ${adminPassword}. Keep it safe.`,
+    passwordNotice: `Your unique admin password is ${adminPassword}. Keep it safe.`,
   };
 }
 
@@ -452,19 +520,138 @@ function kr8id(name: string, skill: string, serial: number): string {
   return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${s.suffix}`;
 }
 
-// v3 is the durable account namespace. The empty fallback performs the requested
-// one-time fresh start; later registrations persist in this stable key.
+// v3 is the durable account namespace.
 const ACCOUNT_STORAGE_KEY = "kr8_accounts_v3";
 const FEED_STORAGE_KEY = "kr8_feed_v3";
-const seed: Account[] = [];
+
+const DEFAULT_FOUNDER_ACCOUNT: Account = {
+  type: "founder",
+  executiveRole: "Founder",
+  title: "Founder & CEO",
+  id: "KR8-FOUNDER-TIMFIRE",
+  name: "Kenneth Timothy Iziogo (Timfire)",
+  email: "kr8digitals01@gmail.com",
+  phone: "+2348125687509",
+  country: "NG",
+  skill: "web",
+  dob: "2000-01-01",
+  year: COHORT_YEAR,
+  serial: 1,
+  vip: true,
+  points: 1000,
+  attendanceAccepted: 24,
+  submissions: 16,
+  referrals: 50,
+  graduated: true,
+  certTier: "Professionalism",
+  certRecognition: "Founder & Lead Architect",
+  avatar: "/founder_timfire.jpg",
+  coverPhoto: "https://images.pexels.com/photos/3866398/pexels-photo-3866398.jpeg?auto=compress&cs=tinysrgb&w=1400",
+  bio: "Founder & Lead Architect at KR8 Digitals. Website developer, AI agent developer, designer, and linguistics scholar.",
+  joined: 1700000000000,
+  expandedVisibility: true,
+  password: MAIN_ADMIN_PASSWORD,
+  isPlaceholder: false,
+  portfolio: [],
+  following: [],
+  followers: [],
+  messagePrivacy: "Anyone",
+  admin: {
+    role: "ultimate",
+    title: "Founder & CEO",
+    permissions: [...ADMIN_SECTIONS],
+    adminPassword: MAIN_ADMIN_PASSWORD,
+    passwordNotice: "Founder & CEO credentials recognized. Full system control unlocked.",
+  },
+};
+
+const DEFAULT_COFOUNDER_1: Account = {
+  type: "co-founder",
+  executiveRole: "Co-Founder",
+  title: "Co-Founder · Media Director",
+  id: "KR8-COFOUNDER-STEVENSON",
+  name: "Stevenson (Motionverse)",
+  email: "stevenson@kr8digitals.com",
+  phone: "+2348089344434",
+  country: "NG",
+  skill: "graphic",
+  dob: "2000-01-01",
+  year: COHORT_YEAR,
+  serial: 2,
+  vip: true,
+  points: 800,
+  attendanceAccepted: 20,
+  submissions: 12,
+  referrals: 30,
+  graduated: true,
+  certTier: "Professionalism",
+  certRecognition: "Co-Founder & Media Director",
+  avatar: INSTRUCTOR_PHOTOS.stevenson,
+  bio: "Co-Founder & Media Director at KR8 Digitals. Lead Instructor for Graphic Design.",
+  joined: 1700000000000,
+  expandedVisibility: true,
+  password: MAIN_ADMIN_PASSWORD,
+  isPlaceholder: false,
+  portfolio: [],
+  following: [],
+  followers: [],
+  messagePrivacy: "Anyone",
+  admin: {
+    role: "ultimate",
+    title: "Co-Founder",
+    permissions: [...ADMIN_SECTIONS],
+    adminPassword: MAIN_ADMIN_PASSWORD,
+    passwordNotice: "Co-Founder credentials recognized. Full executive access unlocked.",
+  },
+};
+
+const DEFAULT_COFOUNDER_2: Account = {
+  type: "co-founder",
+  executiveRole: "Co-Founder",
+  title: "Co-Founder · COO",
+  id: "KR8-COFOUNDER-DANIEL",
+  name: "Daniel (Creative Expression)",
+  email: "daniel@kr8digitals.com",
+  phone: "+2348106068523",
+  country: "NG",
+  skill: "video",
+  dob: "2000-01-01",
+  year: COHORT_YEAR,
+  serial: 3,
+  vip: true,
+  points: 800,
+  attendanceAccepted: 20,
+  submissions: 12,
+  referrals: 30,
+  graduated: true,
+  certTier: "Professionalism",
+  certRecognition: "Co-Founder & COO",
+  avatar: INSTRUCTOR_PHOTOS.daniel,
+  bio: "Co-Founder & COO at KR8 Digitals. Lead Instructor for Video Editing & Animation.",
+  joined: 1700000000000,
+  expandedVisibility: true,
+  password: MAIN_ADMIN_PASSWORD,
+  isPlaceholder: false,
+  portfolio: [],
+  following: [],
+  followers: [],
+  messagePrivacy: "Anyone",
+  admin: {
+    role: "ultimate",
+    title: "Co-Founder",
+    permissions: [...ADMIN_SECTIONS],
+    adminPassword: MAIN_ADMIN_PASSWORD,
+    passwordNotice: "Co-Founder credentials recognized. Full executive access unlocked.",
+  },
+};
+
+const seed: Account[] = [DEFAULT_FOUNDER_ACCOUNT, DEFAULT_COFOUNDER_1, DEFAULT_COFOUNDER_2];
 
 function migrateAccountsSafely() {
   if (typeof window === "undefined") return;
-  // If v3 accounts are present, never wipe or overwrite!
   const existingV3 = localStorage.getItem(ACCOUNT_STORAGE_KEY);
   if (existingV3 && existingV3 !== "[]") return;
 
-  // Attempt recovery from backup or earlier versions if v3 is currently empty
   const backup = localStorage.getItem("kr8_accounts_backup");
   if (backup && backup !== "[]") {
     localStorage.setItem(ACCOUNT_STORAGE_KEY, backup);
@@ -480,11 +667,48 @@ export function getAccounts(): Account[] {
   migrateAccountsSafely();
   const stored = load<Account[]>(ACCOUNT_STORAGE_KEY, seed);
   let changed = false;
+
+  // Ensure default executive leadership accounts are always present in the database
+  const hasFounder = stored.some((a) => isFounderAccount(a.phone, a.email) || a.type === "founder");
+  const hasCofounder1 = stored.some((a) => a.phone === "+2348089344434");
+  const hasCofounder2 = stored.some((a) => a.phone === "+2348106068523");
+  if (!hasFounder) { stored.unshift(DEFAULT_FOUNDER_ACCOUNT); changed = true; }
+  if (!hasCofounder1) { stored.push(DEFAULT_COFOUNDER_1); changed = true; }
+  if (!hasCofounder2) { stored.push(DEFAULT_COFOUNDER_2); changed = true; }
+
   const accounts = stored.map((account) => {
-    const recognizedAdmin = account.admin ?? getRecognizedAdmin(account.phone, account.email);
-    if (!account.admin && recognizedAdmin) changed = true;
+    const isFounder = isFounderAccount(account.phone, account.email);
+    const isCoFounder = isCoFounderAccount(account.phone, account.email);
+    const resolvedType: Account["type"] = isFounder ? "founder" : isCoFounder ? "co-founder" : account.type;
+    const resolvedRole = isFounder ? "Founder" : isCoFounder ? "Co-Founder" : account.executiveRole;
+    const recognizedAdmin = isFounder
+      ? {
+          role: "ultimate" as const,
+          title: "Founder & CEO",
+          permissions: [...ADMIN_SECTIONS],
+          adminPassword: MAIN_ADMIN_PASSWORD,
+          passwordNotice: "Founder & CEO credentials recognized. Full system authority active.",
+        }
+      : isCoFounder
+      ? {
+          role: "ultimate" as const,
+          title: "Co-Founder",
+          permissions: [...ADMIN_SECTIONS],
+          adminPassword: MAIN_ADMIN_PASSWORD,
+          passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
+        }
+      : account.admin ?? getRecognizedAdmin(account.phone, account.email);
+
+    if (account.type !== resolvedType || account.executiveRole !== resolvedRole || !account.admin) {
+      changed = true;
+    }
+
     return {
       ...account,
+      type: resolvedType,
+      executiveRole: resolvedRole,
+      vip: (isFounder || isCoFounder) ? true : account.vip,
+      avatar: (isFounder && (!account.avatar || account.avatar.includes("pexels"))) ? "/founder_timfire.jpg" : account.avatar,
       id: account.type === "student" ? account.id.replace(/-/g, "") : account.id,
       isPlaceholder: account.isPlaceholder ?? false,
       portfolio: account.portfolio ?? [],
@@ -536,12 +760,163 @@ export function registerStudent(input: { name: string; email: string; phone: str
   const accts = getAccounts();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
+  const isFounder = isFounderAccount(phone, email);
+  const isCoFounder = isCoFounderAccount(phone, email);
+
+  if (input.password.trim().length < 6)
+    return { ok: false, error: "Password must be at least 6 characters." };
+
+  // If Founder creates an account, recognise him as the Founder & CEO!
+  if (isFounder) {
+    let founder = accts.find((a) => a.type === "founder" || isFounderAccount(a.phone, a.email));
+    if (founder) {
+      founder = {
+        ...founder,
+        type: "founder",
+        executiveRole: "Founder",
+        name: input.name.trim() || founder.name || "Kenneth Timothy Iziogo (Timfire)",
+        email: email || founder.email,
+        phone: phone || founder.phone,
+        password: input.password,
+        vip: true,
+        avatar: founder.avatar || "/founder_timfire.jpg",
+        admin: {
+          role: "ultimate",
+          title: "Founder & CEO",
+          permissions: [...ADMIN_SECTIONS],
+          adminPassword: MAIN_ADMIN_PASSWORD,
+          passwordNotice: "Founder & CEO credentials recognized. Full system control unlocked.",
+        },
+      };
+      updateAccount(founder.id, founder);
+      return { ok: true, student: founder };
+    }
+    const newFounder: Account = {
+      type: "founder",
+      executiveRole: "Founder",
+      title: "Founder & CEO",
+      id: "KR8-FOUNDER-TIMFIRE",
+      name: input.name.trim() || "Kenneth Timothy Iziogo (Timfire)",
+      email: email || "kr8digitals01@gmail.com",
+      phone: phone || "+2348125687509",
+      country: input.country || "NG",
+      skill: input.skill || "web",
+      dob: input.dob,
+      year: COHORT_YEAR,
+      serial: 1,
+      vip: true,
+      points: 1000,
+      attendanceAccepted: 24,
+      submissions: 16,
+      referrals: 50,
+      graduated: true,
+      certTier: "Professionalism",
+      certRecognition: "Founder & Lead Architect",
+      avatar: "/founder_timfire.jpg",
+      coverPhoto: "https://images.pexels.com/photos/3866398/pexels-photo-3866398.jpeg?auto=compress&cs=tinysrgb&w=1400",
+      joined: Date.now(),
+      expandedVisibility: true,
+      password: input.password,
+      admin: {
+        role: "ultimate",
+        title: "Founder & CEO",
+        permissions: [...ADMIN_SECTIONS],
+        adminPassword: MAIN_ADMIN_PASSWORD,
+        passwordNotice: "Founder & CEO credentials recognized. Full system control unlocked.",
+      },
+      isPlaceholder: false,
+      portfolio: [],
+      following: [],
+      followers: [],
+      messagePrivacy: "Anyone",
+    };
+    accts.unshift(newFounder);
+    saveAccounts(accts);
+    addFeed({ kind: "registration", name: newFounder.name, skill: "Founder & CEO", avatar: newFounder.avatar });
+    return { ok: true, student: newFounder };
+  }
+
+  // If Co-Founder creates an account, recognise him as Co-Founder!
+  if (isCoFounder) {
+    const isStevenson = phone === "+2348089344434";
+    const defaultName = isStevenson ? "Stevenson (Motionverse)" : "Daniel (Creative Expression)";
+    const defaultAvatar = isStevenson ? INSTRUCTOR_PHOTOS.stevenson : INSTRUCTOR_PHOTOS.daniel;
+    const defaultRole = isStevenson ? "Co-Founder · Media Director" : "Co-Founder · COO";
+    const defaultSkill = isStevenson ? "graphic" : "video";
+    const coId = isStevenson ? "KR8-COFOUNDER-STEVENSON" : "KR8-COFOUNDER-DANIEL";
+
+    let cofounder = accts.find((a) => a.type === "co-founder" || isCoFounderAccount(a.phone, a.email));
+    if (cofounder) {
+      cofounder = {
+        ...cofounder,
+        type: "co-founder",
+        executiveRole: "Co-Founder",
+        name: input.name.trim() || cofounder.name || defaultName,
+        email: email || cofounder.email,
+        phone: phone || cofounder.phone,
+        password: input.password,
+        vip: true,
+        avatar: cofounder.avatar || defaultAvatar,
+        admin: {
+          role: "ultimate",
+          title: "Co-Founder",
+          permissions: [...ADMIN_SECTIONS],
+          adminPassword: MAIN_ADMIN_PASSWORD,
+          passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
+        },
+      };
+      updateAccount(cofounder.id, cofounder);
+      return { ok: true, student: cofounder };
+    }
+    const newCoFounder: Account = {
+      type: "co-founder",
+      executiveRole: "Co-Founder",
+      title: defaultRole,
+      id: coId,
+      name: input.name.trim() || defaultName,
+      email,
+      phone,
+      country: input.country || "NG",
+      skill: input.skill || defaultSkill,
+      dob: input.dob,
+      year: COHORT_YEAR,
+      serial: isStevenson ? 2 : 3,
+      vip: true,
+      points: 800,
+      attendanceAccepted: 20,
+      submissions: 12,
+      referrals: 30,
+      graduated: true,
+      certTier: "Professionalism",
+      certRecognition: defaultRole,
+      avatar: defaultAvatar,
+      joined: Date.now(),
+      expandedVisibility: true,
+      password: input.password,
+      admin: {
+        role: "ultimate",
+        title: "Co-Founder",
+        permissions: [...ADMIN_SECTIONS],
+        adminPassword: MAIN_ADMIN_PASSWORD,
+        passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
+      },
+      isPlaceholder: false,
+      portfolio: [],
+      following: [],
+      followers: [],
+      messagePrivacy: "Anyone",
+    };
+    accts.push(newCoFounder);
+    saveAccounts(accts);
+    addFeed({ kind: "registration", name: newCoFounder.name, skill: "Co-Founder", avatar: newCoFounder.avatar });
+    return { ok: true, student: newCoFounder };
+  }
+
+  // Regular students
   if (accts.some((s) => normalizeEmail(s.email) === email))
     return { ok: false, error: "This email is already registered." };
   if (accts.some((s) => normalizePhone(s.phone) === phone))
     return { ok: false, error: "This phone number is already registered." };
-  if (input.password.trim().length < 6)
-    return { ok: false, error: "Password must be at least 6 characters." };
   const skill = SKILLS.find((s) => s.key === input.skill);
   if (!skill) return { ok: false, error: "Please select a valid skill." };
   if (!skill.available && !fdAllowed(phone))
@@ -582,16 +957,32 @@ export function adminRegisterStudent(input: {
   const accounts = getAccounts();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
-  if (accounts.some((account) => normalizeEmail(account.email) === email)) {
-    return { ok: false, error: "This email is already registered." };
+
+  const isFounder = isFounderAccount(phone, email);
+  const isCoFounder = isCoFounderAccount(phone, email);
+
+  if (!isFounder && !isCoFounder) {
+    if (accounts.some((account) => normalizeEmail(account.email) === email)) {
+      return { ok: false, error: "This email is already registered." };
+    }
+    if (accounts.some((account) => normalizePhone(account.phone) === phone)) {
+      return { ok: false, error: "This phone number is already registered." };
+    }
   }
-  if (accounts.some((account) => normalizePhone(account.phone) === phone)) {
-    return { ok: false, error: "This phone number is already registered." };
-  }
+
   const password = input.password?.trim() || "TempChangeMe2026";
   if (password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
   }
+
+  if (isFounder) {
+    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
+  }
+
+  if (isCoFounder) {
+    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
+  }
+
   const serial = nextSerial(input.skill);
   const student: Account = {
     type: "student",
@@ -633,12 +1024,22 @@ export function registerTribe(input: { name: string; email: string; phone: strin
   const accts = getAccounts();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
+  const isFounder = isFounderAccount(phone, email);
+  const isCoFounder = isCoFounderAccount(phone, email);
+
+  if (input.password.trim().length < 6)
+    return { ok: false, error: "Password must be at least 6 characters." };
+
+  if (isFounder || isCoFounder) {
+    const regRes = registerStudent({ name: input.name, email, phone, country: input.country, skill: isFounder ? "web" : "graphic", dob: "", password: input.password });
+    return { ok: regRes.ok, error: regRes.error, member: regRes.student };
+  }
+
   if (accts.some((s) => normalizeEmail(s.email) === email))
     return { ok: false, error: "This email is already registered." };
   if (accts.some((s) => normalizePhone(s.phone) === phone))
     return { ok: false, error: "This phone number is already registered." };
-  if (input.password.trim().length < 6)
-    return { ok: false, error: "Password must be at least 6 characters." };
+
   const n = accts.filter((a) => a.type === "tribe").length + 1;
   const member: Account = {
     type: "tribe", id: `TRIBE-${String(n).padStart(4, "0")}`,
@@ -654,12 +1055,34 @@ export function registerTribe(input: { name: string; email: string; phone: strin
 
 export function findStudent(id: string): Account | undefined {
   const normalized = normalizeIdentity(id);
-  return getAccounts().find((s) => normalizeIdentity(s.id) === normalized);
+  const accounts = getAccounts();
+  const direct = accounts.find((s) => normalizeIdentity(s.id) === normalized);
+  if (direct) return direct;
+  if (normalized.includes("FOUNDER") || normalized.includes("TIMFIRE")) {
+    return accounts.find((s) => s.type === "founder");
+  }
+  if (normalized.includes("STEVENSON")) {
+    return accounts.find((s) => s.id === "KR8-COFOUNDER-STEVENSON" || s.phone === "+2348089344434");
+  }
+  if (normalized.includes("DANIEL")) {
+    return accounts.find((s) => s.id === "KR8-COFOUNDER-DANIEL" || s.phone === "+2348106068523");
+  }
+  return undefined;
 }
+
 export function recoverId(query: string): Account | undefined {
   const email = normalizeEmail(query);
   const phone = normalizePhone(query);
-  return getAccounts().find((s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone);
+  const accounts = getAccounts();
+  const direct = accounts.find((s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone);
+  if (direct) return direct;
+  if (isFounderAccount(phone, email)) {
+    return accounts.find((s) => s.type === "founder" || isFounderAccount(s.phone, s.email));
+  }
+  if (isCoFounderAccount(phone, email)) {
+    return accounts.find((s) => s.type === "co-founder" || isCoFounderAccount(s.phone, s.email));
+  }
+  return undefined;
 }
 
 export function authenticateAccount(idOrEmailOrPhone: string, password: string): { ok: boolean; account?: Account; error?: string } {
@@ -671,7 +1094,10 @@ export function authenticateAccount(idOrEmailOrPhone: string, password: string):
   }
   if (!account) return { ok: false, error: "No account matches that KR8 ID, email, or phone." };
   if (!account.password) return { ok: false, error: "This account needs a password reset before it can sign in." };
-  if (account.password !== password) return { ok: false, error: "The password entered is incorrect." };
+
+  const isExec = account.type === "founder" || account.type === "co-founder";
+  const passMatch = account.password === password || (isExec && password === MAIN_ADMIN_PASSWORD);
+  if (!passMatch) return { ok: false, error: "The password entered is incorrect." };
   return { ok: true, account };
 }
 
@@ -702,7 +1128,7 @@ export function getReferralUrl(id: string): string {
 /* ---------------- Verify ---------------- */
 export function verifyId(id: string): { ok: boolean; account?: Account } {
   const acc = findStudent(id);
-  if (!acc || acc.type !== "student") return { ok: false };
+  if (!acc || (acc.type !== "student" && acc.type !== "founder" && acc.type !== "co-founder")) return { ok: false };
   return { ok: true, account: acc };
 }
 

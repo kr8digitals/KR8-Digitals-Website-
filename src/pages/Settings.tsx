@@ -166,9 +166,21 @@ export default function Settings() {
   return (
     <div className="section-bg min-h-screen px-5 py-14">
       <div className="mx-auto max-w-3xl">
-        <Pill>Account Settings</Pill>
+        <Pill>
+          {student.type === "founder"
+            ? "Founder Executive Settings"
+            : student.type === "co-founder"
+            ? "Co-Founder Executive Settings"
+            : "Account Settings"}
+        </Pill>
         <h1 className="font-display mt-4 text-4xl text-white sm:text-5xl">
-          Your Account, <span className="text-gradient">Your Control.</span>
+          {student.type === "founder" ? (
+            <>Founder Account, <span className="text-gradient">Executive Control.</span></>
+          ) : student.type === "co-founder" ? (
+            <>Co-Founder Account, <span className="text-gradient">Executive Control.</span></>
+          ) : (
+            <>Your Account, <span className="text-gradient">Your Control.</span></>
+          )}
         </h1>
         <p className="mt-2 text-sm text-[#b8aecf]">
           Manage your verification privacy, security, profile information, and referral link.
@@ -178,9 +190,15 @@ export default function Settings() {
         <Card className="mt-8">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div>
-              <h2 className="font-bold text-white text-lg">Verified Identity Record</h2>
+              <h2 className="font-bold text-white text-lg">
+                {student.type === "founder" || student.type === "co-founder"
+                  ? "Verified Executive Leadership Record"
+                  : "Verified Identity Record"}
+              </h2>
               <p className="text-xs text-[#8a7ba8]">
-                These official registration facts are locked to protect the integrity of your KR8 credential.
+                {student.type === "founder" || student.type === "co-founder"
+                  ? "These leadership credentials confirm your executive status across KR8 Digitals."
+                  : "These official registration facts are locked to protect the integrity of your KR8 credential."}
               </p>
             </div>
             <span className="rounded-full bg-pink-500/10 px-3 py-1 font-mono text-xs font-bold text-pink-400">
@@ -197,13 +215,23 @@ export default function Settings() {
               <p className="font-semibold text-white mt-1 text-sm">{student.email}</p>
             </div>
             <div className="rounded-xl bg-black/20 p-3">
-              <span className="text-[#8a7ba8]">Skill Track</span>
-              <p className="font-semibold text-white mt-1 text-sm">{skill?.name ?? student.skill}</p>
+              <span className="text-[#8a7ba8]">Platform Role</span>
+              <p className="font-semibold text-white mt-1 text-sm">
+                {student.type === "founder"
+                  ? "Founder & CEO · Executive Leadership"
+                  : student.type === "co-founder"
+                  ? "Co-Founder · Executive Leadership"
+                  : skill?.name ?? student.skill}
+              </p>
             </div>
             <div className="rounded-xl bg-black/20 p-3">
-              <span className="text-[#8a7ba8]">Cohort Year & Status</span>
+              <span className="text-[#8a7ba8]">Status & Authority</span>
               <p className="font-semibold text-white mt-1 text-sm">
-                Cohort {student.year ?? 2026} · {student.graduated ? `Graduated (${student.certTier})` : "In Training"}
+                {student.type === "founder"
+                  ? "Founder & CEO · Full System Authority"
+                  : student.type === "co-founder"
+                  ? "Co-Founder · Executive Leadership Authority"
+                  : `Cohort ${student.year ?? 2026} · ${student.graduated ? `Graduated (${student.certTier})` : "In Training"}`}
               </p>
             </div>
           </div>

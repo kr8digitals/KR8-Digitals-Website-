@@ -16,7 +16,9 @@ import { authenticateWithBiometrics, getRegisteredBiometrics } from "../utils/bi
 
 export default function Academy() {
   const { student } = useAuth();
-  if (student && student.type === "student") return <Profile student={student} />;
+  if (student && (student.type === "student" || student.type === "founder" || student.type === "co-founder")) {
+    return <Profile student={student} />;
+  }
   return <GuestAcademy />;
 }
 
@@ -113,9 +115,36 @@ function GuestAcademy() {
           {view === "auth" ? (
             <AuthPanel
               preSkill={preSkill}
-              onStudent={(s) => { signIn(s); addNotification("Registration complete — welcome to KR8 Academy."); }}
-              onTribe={(m) => { signIn(m); addNotification(`Welcome to the KR8 Tribe. Join the community group: ${getTribeWhatsApp()}`); }}
-              onSignIn={(s) => { signIn(s); addNotification(`Welcome back, ${s.name.split(" ")[0]}!`); }}
+              onStudent={(s) => {
+                signIn(s);
+                addNotification(
+                  s.type === "founder"
+                    ? "Welcome, Founder & CEO — executive identity confirmed."
+                    : s.type === "co-founder"
+                    ? "Welcome, Co-Founder — executive identity confirmed."
+                    : "Registration complete — welcome to KR8 Academy."
+                );
+              }}
+              onTribe={(m) => {
+                signIn(m);
+                addNotification(
+                  m.type === "founder"
+                    ? "Welcome, Founder & CEO."
+                    : m.type === "co-founder"
+                    ? "Welcome, Co-Founder."
+                    : `Welcome to the KR8 Tribe. Join the community group: ${getTribeWhatsApp()}`
+                );
+              }}
+              onSignIn={(s) => {
+                signIn(s);
+                addNotification(
+                  s.type === "founder"
+                    ? "Welcome back, Founder Timfire! Executive authority active."
+                    : s.type === "co-founder"
+                    ? `Welcome back, Co-Founder ${s.name.split(" ")[0]}! Executive access active.`
+                    : `Welcome back, ${s.name.split(" ")[0]}!`
+                );
+              }}
             />
           ) : (
             <div className="text-center">
@@ -201,19 +230,55 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
   const [result, setResult] = useState<Account | null>(null);
 
   if (result) {
+    const isFounder = result.type === "founder";
+    const isCoFounder = result.type === "co-founder";
     const skill = SKILLS.find((s) => s.key === result.skill)!;
+
     return (
       <Card className="text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-pink text-white"><Icon name="check" size={28} /></div>
-        <h3 className="text-2xl font-bold text-white">You're in!</h3>
-        <p className="mt-2 text-[#b8aecf]">Your KR8 Identity has been generated.</p>
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-pink text-white">
+          <Icon name="check" size={28} />
+        </div>
+        <h3 className="text-2xl font-bold text-white">
+          {isFounder ? "Welcome, KR8 Founder & CEO!" : isCoFounder ? "Welcome, KR8 Co-Founder!" : "You're in!"}
+        </h3>
+        <p className="mt-2 text-[#b8aecf]">
+          {isFounder
+            ? "Your Executive Founder Identity has been recognized with unrestricted authority."
+            : isCoFounder
+            ? "Your Executive Co-Founder Identity has been recognized."
+            : "Your KR8 Identity has been generated."}
+        </p>
+
         <div className="mx-auto mt-5 inline-flex flex-wrap items-center justify-center gap-3 rounded-2xl border border-pink-400/40 bg-pink-500/10 px-6 py-4">
           <span className="font-mono text-xl font-bold tracking-wider text-gradient sm:text-2xl">{result.id}</span>
-          {result.vip && <span className="rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">VIP</span>}
+          {isFounder ? (
+            <span className="rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg glow-pink-sm">
+              Founder & CEO
+            </span>
+          ) : isCoFounder ? (
+            <span className="rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-lg glow-pink-sm">
+              Co-Founder
+            </span>
+          ) : (
+            result.vip && <span className="rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">VIP</span>
+          )}
         </div>
-        {result.admin && <div className="mx-auto mt-4 max-w-lg rounded-xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-left text-xs leading-relaxed text-pink-100"><strong className="capitalize">{result.admin.role} access recognized.</strong> {result.admin.passwordNotice} Click the Admin menu and enter this password whenever you need your assigned dashboard sections.</div>}
+
+        {result.admin && (
+          <div className="mx-auto mt-4 max-w-lg rounded-xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-left text-xs leading-relaxed text-pink-100">
+            <strong className="capitalize">{result.admin.title ?? result.admin.role} access recognized.</strong>{" "}
+            {result.admin.passwordNotice} Click the Admin menu and enter this password whenever you need your assigned dashboard sections.
+          </div>
+        )}
+
         <div className="mt-6 space-y-3">
-          <GradientButton href={getSkillWhatsApp(skill.key)} className="w-full">Join {skill.name} WhatsApp Group →</GradientButton>
+          {(isFounder || isCoFounder) && (
+            <GradientButton to="/admin" className="w-full">
+              Open Admin Dashboard Portal →
+            </GradientButton>
+          )}
+          {skill && <GhostButton href={getSkillWhatsApp(skill.key)} className="w-full">Join {skill.name} WhatsApp Group →</GhostButton>}
           <a href={getReferralUrl(result.id)} className="block break-all rounded-xl bg-black/30 p-3 text-xs text-pink-300 underline underline-offset-2">Referral link: {getReferralUrl(result.id)}</a>
           <GhostButton onClick={() => onDone(result)} className="w-full">Go to My Profile →</GhostButton>
         </div>
@@ -485,14 +550,49 @@ function Profile({ student }: { student: Account }) {
           <div className="flex-1 pb-2">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="font-display text-3xl text-white">{profile.name}</h1>
-              {profile.vip && <span className="rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">VIP</span>}
-              {profile.graduated && <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs text-[#cabfe0]"><Icon name="certificate" size={13} /> {profile.certTier}</span>}
-              {profile.admin && <Link to="/admin" className="rounded-full border border-pink-400/50 bg-pink-500/10 px-3 py-1 text-xs font-bold capitalize text-pink-200 hover:border-pink-300">{profile.admin.title ?? profile.admin.role} · open admin</Link>}
+              {profile.type === "founder" ? (
+                <span className="rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-xl glow-pink-sm">
+                  👑 KR8 Founder & CEO
+                </span>
+              ) : profile.type === "co-founder" ? (
+                <span className="rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-white shadow-xl glow-pink-sm">
+                  ⭐ KR8 Co-Founder
+                </span>
+              ) : (
+                profile.vip && <span className="rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">VIP</span>
+              )}
+              {profile.graduated && profile.type === "student" && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs text-[#cabfe0]">
+                  <Icon name="certificate" size={13} /> {profile.certTier}
+                </span>
+              )}
+              {profile.admin && (
+                <Link
+                  to="/admin"
+                  className="rounded-full border border-pink-400/50 bg-pink-500/10 px-3 py-1 text-xs font-bold capitalize text-pink-200 hover:border-pink-300"
+                >
+                  {profile.type === "founder" ? "Founder & CEO · Open Admin" : profile.type === "co-founder" ? "Co-Founder · Open Admin" : `${profile.admin.title ?? profile.admin.role} · Open Admin`}
+                </Link>
+              )}
             </div>
             <p className="mt-1 font-mono text-sm text-pink-400">{profile.id}</p>
-            <span className="mt-2 inline-block rounded-full bg-pink-500/10 px-3 py-1 text-xs font-semibold text-pink-400">{skill?.name}</span>
-            <p className="mt-2 text-[11px] text-[#8a7ba8]">Name, KR8 ID, registration date, skill code and suffix are locked identity fields.</p>
-            {profile.admin && <div className="mt-3 max-w-xl rounded-xl border border-pink-400/30 bg-pink-500/5 px-3 py-2 text-xs leading-relaxed text-pink-100">Congratulations — you have {profile.admin.title ?? profile.admin.role} access. Open the Admin menu to use your assigned sections. {profile.admin.role !== "ultimate" && profile.admin.passwordNotice}</div>}
+            <span className="mt-2 inline-block rounded-full bg-pink-500/10 px-3 py-1 text-xs font-semibold text-pink-400">
+              {profile.type === "founder" ? "Founder & CEO · Executive Leadership" : profile.type === "co-founder" ? "Co-Founder · Executive Leadership" : skill?.name}
+            </span>
+            <p className="mt-2 text-[11px] text-[#8a7ba8]">
+              {profile.type === "founder" || profile.type === "co-founder"
+                ? "Official Executive Leadership Identity Record · Verified Leadership Status."
+                : "Name, KR8 ID, registration date, skill code and suffix are locked identity fields."}
+            </p>
+            {profile.admin && (
+              <div className="mt-3 max-w-xl rounded-xl border border-pink-400/30 bg-pink-500/5 px-3 py-2 text-xs leading-relaxed text-pink-100">
+                {profile.type === "founder"
+                  ? "Welcome, Founder & CEO. You hold complete administrative authority over the entire platform. Open the Admin menu to manage all tracks, submissions, and settings."
+                  : profile.type === "co-founder"
+                  ? "Welcome, Co-Founder. You hold executive administrative authority across KR8 Digitals. Open the Admin menu to access platform tools."
+                  : `Congratulations — you have ${profile.admin.title ?? profile.admin.role} access. Open the Admin menu to use your assigned sections. ${profile.admin.role !== "ultimate" && profile.admin.passwordNotice}`}
+              </div>
+            )}
           </div>
           <div className="flex gap-6 pb-2">
             <div className="text-center"><div className="font-display text-2xl text-gradient">#{rank}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Rank</div></div>
@@ -501,8 +601,56 @@ function Profile({ student }: { student: Account }) {
           </div>
         </div>
 
-        {/* Congratulatory Graduation Banner */}
-        {profile.graduated && (
+        {/* Congratulatory / Executive Leadership Banner */}
+        {profile.type === "founder" ? (
+          <div className="mt-6 rounded-3xl border border-pink-400/50 bg-gradient-to-r from-pink-500/20 via-[#1a0030] to-purple-600/20 p-6 shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-pink text-white text-3xl shadow-lg">
+                  👑
+                </div>
+                <div>
+                  <span className="rounded-full bg-pink-500/30 border border-pink-400/40 px-3 py-1 text-xs font-bold text-pink-200 uppercase tracking-wider">
+                    Executive Leadership
+                  </span>
+                  <h2 className="mt-1 font-display text-2xl text-white sm:text-3xl">
+                    Founder & CEO — Kenneth Timothy Iziogo (Timfire)
+                  </h2>
+                  <p className="mt-1 text-sm text-[#cabfe0]">
+                    Chief Executive Officer & Lead Architect. You hold full system authority across KR8 Academy, Tribe, Agency, and live review moderation.
+                  </p>
+                </div>
+              </div>
+              <Link to="/admin" className="rounded-full bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform">
+                Open Admin Portal →
+              </Link>
+            </div>
+          </div>
+        ) : profile.type === "co-founder" ? (
+          <div className="mt-6 rounded-3xl border border-pink-400/50 bg-gradient-to-r from-pink-500/20 via-[#1a0030] to-purple-600/20 p-6 shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-pink text-white text-3xl shadow-lg">
+                  ⭐
+                </div>
+                <div>
+                  <span className="rounded-full bg-pink-500/30 border border-pink-400/40 px-3 py-1 text-xs font-bold text-pink-200 uppercase tracking-wider">
+                    Executive Leadership
+                  </span>
+                  <h2 className="mt-1 font-display text-2xl text-white sm:text-3xl">
+                    KR8 Co-Founder — {profile.name}
+                  </h2>
+                  <p className="mt-1 text-sm text-[#cabfe0]">
+                    Executive Co-Founder & Track Director. Full administrative authority and curriculum oversight are active.
+                  </p>
+                </div>
+              </div>
+              <Link to="/admin" className="rounded-full bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform">
+                Open Admin Portal →
+              </Link>
+            </div>
+          </div>
+        ) : profile.graduated && (
           <div className="mt-6 rounded-3xl border border-green-500/40 bg-gradient-to-r from-green-500/15 via-[#1a0030] to-pink-500/15 p-6 shadow-xl">
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-pink text-white text-2xl">
@@ -531,7 +679,41 @@ function Profile({ student }: { student: Account }) {
 
         <div className="grid gap-8 py-8 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
-            {tab === "posts" && <AttendanceWidget student={profile} />}
+            {tab === "posts" && (
+              profile.type === "founder" || profile.type === "co-founder" ? (
+                <Card>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-white text-lg">Executive Attendance Management</h3>
+                      <p className="mt-1 text-sm text-[#b8aecf]">
+                        As {profile.type === "founder" ? "Founder & CEO" : "Co-Founder"}, student attendance proofs submit to you for manual review.
+                      </p>
+                    </div>
+                    <Link
+                      to="/attendance-review"
+                      className="rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white glow-pink-sm"
+                    >
+                      Open Attendance Review Queue →
+                    </Link>
+                  </div>
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4 space-y-2">
+                    <p className="text-xs text-[#cabfe0] leading-relaxed">
+                      All four attendance types (Class, Assignment, Mindset Shift, Monthly Hangout) are reviewed manually by coaches and executive leadership.
+                    </p>
+                    <div className="pt-2 flex flex-wrap gap-2">
+                      <Link to="/attendance-review" className="rounded-xl border border-pink-400/40 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300">
+                        Review Submissions
+                      </Link>
+                      <Link to="/admin" className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-[#cabfe0]">
+                        Open Admin Portal
+                      </Link>
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <AttendanceWidget student={profile} />
+              )
+            )}
             {tab === "portfolio" && (
               <PortfolioManager profile={profile} onSave={(portfolio) => save({ portfolio })} />
             )}
@@ -566,8 +748,50 @@ function Profile({ student }: { student: Account }) {
 
           <div className="space-y-6">
             <Card>
-              <h3 className="flex items-center gap-2 font-bold text-white"><Icon name="certificate" size={18} /> Official Certificate</h3>
-              {profile.graduated ? (
+              <h3 className="flex items-center gap-2 font-bold text-white"><Icon name="certificate" size={18} /> Official Credential</h3>
+              {profile.type === "founder" ? (
+                <div className="mt-3 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">KR8 Founder & CEO Credential</p>
+                    <p className="text-xs text-[#8a7ba8]">KR8 Digitals Executive Board · Founded 2026</p>
+                  </div>
+                  <div className="rounded-2xl border border-pink-400/40 bg-pink-500/10 p-4">
+                    <p className="text-xs font-bold text-pink-300">Verified Executive Leadership</p>
+                    <p className="text-xs text-[#cabfe0] mt-1 leading-relaxed">
+                      "Chief Executive Officer & Lead Architect. Recognized authority across all tracks and systems."
+                    </p>
+                  </div>
+                  <Link
+                    to={`/verify?id=${encodeURIComponent(profile.id)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-center text-xs text-pink-300 underline underline-offset-2 hover:text-white pt-1"
+                  >
+                    Open Public Founder Verification Page ↗
+                  </Link>
+                </div>
+              ) : profile.type === "co-founder" ? (
+                <div className="mt-3 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-white">KR8 Co-Founder Credential</p>
+                    <p className="text-xs text-[#8a7ba8]">KR8 Digitals Executive Board</p>
+                  </div>
+                  <div className="rounded-2xl border border-pink-400/40 bg-pink-500/10 p-4">
+                    <p className="text-xs font-bold text-pink-300">Verified Executive Leadership</p>
+                    <p className="text-xs text-[#cabfe0] mt-1 leading-relaxed">
+                      "Executive Co-Founder and Track Director at KR8 Digitals."
+                    </p>
+                  </div>
+                  <Link
+                    to={`/verify?id=${encodeURIComponent(profile.id)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-center text-xs text-pink-300 underline underline-offset-2 hover:text-white pt-1"
+                  >
+                    Open Public Co-Founder Verification Page ↗
+                  </Link>
+                </div>
+              ) : profile.graduated ? (
                 <div className="mt-3 space-y-4">
                   <div>
                     <p className="text-sm font-semibold text-white">Certificate of {profile.certTier ?? "Completion"}</p>
