@@ -16,7 +16,7 @@ export default function LeaderboardList({ limit }: { limit?: number }) {
   const all = getStudents();
   const real = all.filter((s) => !s.isPlaceholder).sort((a, b) => b.points - a.points);
   const placeholders = all.filter((s) => s.isPlaceholder).sort((a, b) => b.points - a.points);
-  const max = Math.min(limit ?? 10, 10);
+  const max = limit ?? 50;
   // Real registrants always occupy the first slots; placeholders only backfill the remainder.
   const rows = [...real.slice(0, max), ...placeholders.slice(0, Math.max(0, max - real.length))];
 

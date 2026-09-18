@@ -13,6 +13,7 @@ import Verify from "./pages/Verify";
 import Admin from "./pages/Admin";
 import AttendanceReview from "./pages/AttendanceReview";
 import Settings from "./pages/Settings";
+import Dashboard from "./pages/Dashboard";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
             <Route path="/academy" element={<Academy />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/tribe" element={<Tribe />} />
             <Route path="/agency" element={<Agency />} />
             <Route path="/ai" element={<AIPage />} />

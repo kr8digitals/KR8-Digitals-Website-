@@ -76,7 +76,8 @@ export default function Navbar() {
                     </div>
                   )}
                 </div>
-                <Link to={student.type === "student" ? "/academy" : "/tribe"}><Avatar src={student.avatar} name={student.name} size={38} /></Link>
+                <Link to="/dashboard" className="hidden sm:inline-block rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-[#cabfe0] hover:text-white hover:border-pink-400/60">Dashboard</Link>
+                <Link to={student.type === "student" ? "/academy" : "/tribe"} title="My Profile"><Avatar src={student.avatar} name={student.name} size={38} /></Link>
                 <button onClick={() => { signOut(); nav("/"); }} className="text-sm text-[#b8aecf] hover:text-white">Sign out</button>
               </>
             ) : (
@@ -101,6 +102,7 @@ export default function Navbar() {
               ))}
               <NavLink to="/verify" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-[#b8aecf]">Verify</NavLink>
               {student && <>
+                <NavLink to="/dashboard" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-[#b8aecf]">Dashboard</NavLink>
                 <NavLink to="/blog" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-[#b8aecf]">Blog</NavLink>
                 <NavLink to="/settings" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-[#b8aecf]">Settings</NavLink>
                 <NavLink to="/admin" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-[#b8aecf]">Admin</NavLink>
