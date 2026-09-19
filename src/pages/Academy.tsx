@@ -36,16 +36,17 @@ function GuestAcademy() {
         <div className="mx-auto max-w-7xl px-5">
           <div className="max-w-3xl">
             <Pill>The Academy</Pill>
-            <h1 className="font-display mt-5 text-5xl text-white sm:text-6xl">
-              Learn a digital skill — <span className="text-gradient">completely free.</span>
+            <h1 className="font-display mt-5 text-4xl text-white sm:text-6xl font-bold">
+              Master high-income craft — <span className="text-gradient">completely free.</span>
             </h1>
-            <p className="mt-5 text-[#b8aecf]">
-              Six in-demand tracks with real, week-by-week curriculum and real instructors. Register once,
-              get a verifiable KR8 Identity, and start learning today.
+            <p className="mt-5 text-base sm:text-lg text-[#cabfe0] leading-relaxed">
+              Stop letting expensive bootcamps gatekeep your future. We offer intensive, practical tracks taught by senior practitioners who ship client work every single day. Pick your track, claim your verifiable KR8 ID, and turn your craft into income.
             </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <GradientButton onClick={() => { setPreSkill(""); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }}>Register / Sign In →</GradientButton>
-              <GhostButton to="/verify">Verify a KR8 ID</GhostButton>
+            <div className="mt-7 flex flex-wrap gap-3.5">
+              <GradientButton onClick={() => { setPreSkill(""); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }} className="shadow-xl shadow-pink-500/25">
+                Join the Free Cohort →
+              </GradientButton>
+              <GhostButton to="/verify">Verify a Graduate KR8 ID</GhostButton>
             </div>
           </div>
 
@@ -107,7 +108,7 @@ function GuestAcademy() {
         </div>
       </section>
 
-      <Marquee items={["Zero cost", "Verifiable KR8 ID", "Real curriculum", "Real instructors", "Learn by doing"]} />
+      <Marquee items={["100% Tuition-Free", "Verifiable KR8 Identity", "Zero Gatekeeping", "Live Industry Feedback", "Proof Over Paper", "From Learners to Earners", "Graduate-Powered Agency"]} />
 
       {/* Auth */}
       <section className="section-bg py-16">
@@ -157,7 +158,13 @@ function GuestAcademy() {
       {/* Testimonials */}
       <section className="section-bg py-16">
         <div className="mx-auto max-w-7xl px-5">
-          <SectionHead label="Real voices" title="From learners to" highlight="earners" center />
+          <SectionHead
+            label="Verified Proof · 100% Free Training"
+            title="From Learners to"
+            highlight="Earners."
+            sub="Real African youth who started with zero experience, completed our free cohorts, and are now landing high-paying design and video roles across the world."
+            center
+          />
           <div className="mt-10"><TestimonialCarousel items={getTestimonials()} /></div>
         </div>
       </section>

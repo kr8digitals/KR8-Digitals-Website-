@@ -1,18 +1,20 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLiveStream } from "../context/LiveStreamContext";
 import {
   SKILLS, ATTENDANCE_TYPES, PORTFOLIO,
   getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
   getPaymentSettings, savePaymentSettings, getSkillRegistration, getSkillWhatsApp,
   saveSkillSetting, getFounders, saveFounders, getTeam,
-  getTestimonials, addTestimonial, deleteTestimonial,
+  getTestimonials, addTestimonial, deleteTestimonial, updateTestimonial,
   getVideoComments, deleteVideoComment,
   getAccounts, getStudents, updateAccount,
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
   addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
-  type Account, type Announcement, type Testimonial, type VideoComment,
+  getStreamReplays, saveStreamReplays,
+  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay,
 } from "../data/store";
-import { Card } from "../components/ui";
+import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
   processGraduationCertificate,
@@ -23,7 +25,7 @@ import {
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Home", "Academy", "Testimonial Videos", "Agency", "Student Management", "Blog",
+  "Overview", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Student Management", "Blog",
   "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
   "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions",
 ];
@@ -36,7 +38,8 @@ export default function Admin() {
   const [tab, setTab] = useState("Overview");
   const [students, setStudents] = useState<Account[]>(() => getAccounts().filter((a) => a.type !== "tribe"));
 
-  const isUltimate = currentUser?.admin?.role === "ultimate" || (!currentUser?.admin && !currentUser) || pw === MAIN_ADMIN_PASSWORD;
+  const isAuthorized = !!(currentUser?.admin || currentUser?.type === "founder" || currentUser?.type === "co-founder");
+  const isUltimate = currentUser?.admin?.role === "ultimate" || currentUser?.type === "founder" || pw === MAIN_ADMIN_PASSWORD;
 
   // Real-time synchronization whenever student data or accounts update
   useEffect(() => {
@@ -59,6 +62,29 @@ export default function Admin() {
     setAuth(true);
   };
 
+  // If user is not logged in or not authorized, block public view completely
+  if (!currentUser || !isAuthorized) {
+    return (
+      <div className="section-bg flex min-h-screen items-center justify-center px-5">
+        <Card className="w-full max-w-md text-center py-10">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+            <Icon name="lock" size={28} />
+          </div>
+          <Pill>Authorized Personnel Only</Pill>
+          <h1 className="font-display mt-4 text-2xl text-white sm:text-3xl">Restricted Access</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
+            The Admin Portal is strictly reserved for verified KR8 Digitals faculty and executive leadership.
+            Access is managed directly through authorized member profiles.
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            <GradientButton to="/academy">Go to Member Portal</GradientButton>
+            <GhostButton to="/">Return to Homepage</GhostButton>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   if (!auth) {
     return (
       <div className="section-bg flex min-h-screen items-center justify-center px-5">
@@ -67,7 +93,9 @@ export default function Admin() {
             <Icon name="lock" size={23} />
           </div>
           <h1 className="font-display text-2xl text-white">Admin Access</h1>
-          <p className="mt-2 text-sm text-[#b8aecf]">Restricted area. Enter your admin password.</p>
+          <p className="mt-2 text-sm text-[#b8aecf]">
+            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative password.
+          </p>
           <input
             type="password"
             value={pw}
@@ -80,9 +108,6 @@ export default function Admin() {
           <button onClick={unlock} className="mt-4 w-full rounded-full bg-gradient-pink py-3 text-sm font-bold text-white">
             Unlock Dashboard
           </button>
-          <p className="mt-4 text-[10px] text-[#8a7ba8]">
-            Main admin password: <span className="font-mono text-pink-300">KR8@Adm!n2026</span>
-          </p>
         </Card>
       </div>
     );
@@ -149,6 +174,7 @@ export default function Admin() {
           {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
           {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
           {tab === "Testimonial Videos" && <TestimonialVideosManager />}
+          {tab === "Live Streams & Replays" && <LiveStreamsManager />}
           {tab === "Agency" && <AgencyManager />}
           {tab === "Student Management" && <StudentManager students={students} />}
           {tab === "Blog" && <BlogManager />}
@@ -964,17 +990,23 @@ function BlogManager() {
 
   const addPost = () => {
     if (!title.trim() || !excerpt.trim()) return;
-    const newPost = {
+    const newPost: BlogPost = {
       id: `b-${Date.now()}`,
       title: title.trim(),
       category,
       author: author.trim() || "KR8 Team",
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       excerpt: excerpt.trim(),
+      content: excerpt.trim(),
       readTime: "4 min",
       img: "https://images.pexels.com/photos/3182773/pexels-photo-3182773.jpeg?auto=compress&cs=tinysrgb&w=900",
-      source: "admin" as const,
+      source: "admin",
       pinned: false,
+      isPublic: true,
+      mediaType: "image",
+      likes: 0,
+      likedBy: [],
+      comments: [],
     };
     const next = [newPost, ...posts];
     setPosts(next);
@@ -1607,6 +1639,7 @@ function TestimonialVideosManager() {
   const [captionsInput, setCaptionsInput] = useState("");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [previewingVideo, setPreviewingVideo] = useState<Testimonial | null>(null);
+  const [editingItem, setEditingItem] = useState<Testimonial | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const handleVideoFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -1677,6 +1710,20 @@ function TestimonialVideosManager() {
     setCaptionsInput("");
     setStatusMsg(`Published "${created.name}"! This video is now the latest upload and will lead playback.`);
     setTimeout(() => setStatusMsg(null), 5000);
+  };
+
+  const handleSaveEditedItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    if (!editingItem.name.trim() || !editingItem.caption.trim()) {
+      setStatusMsg("Student name and caption quote are required.");
+      return;
+    }
+    updateTestimonial(editingItem);
+    setItems(getTestimonials());
+    setStatusMsg(`Testimonial for "${editingItem.name}" updated successfully!`);
+    setEditingItem(null);
+    setTimeout(() => setStatusMsg(null), 4000);
   };
 
   const handleDelete = (id: string, title: string) => {
@@ -1899,6 +1946,12 @@ function TestimonialVideosManager() {
                   Preview
                 </button>
                 <button
+                  onClick={() => setEditingItem({ ...item })}
+                  className="rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+                >
+                  Edit
+                </button>
+                <button
                   onClick={() => {
                     const url = `${window.location.origin}/?video=${item.id}`;
                     navigator.clipboard?.writeText(url);
@@ -1970,6 +2023,110 @@ function TestimonialVideosManager() {
         </div>
       </Card>
 
+      {/* VIDEO EDIT MODAL */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl rounded-3xl border border-white/20 bg-[#160d2b] p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Icon name="video" size={18} className="text-pink-400" />
+                <h4 className="font-bold text-white text-base">Edit Testimonial: {editingItem.name}</h4>
+              </div>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedItem} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Student Full Name *</label>
+                  <input
+                    type="text"
+                    value={editingItem.name}
+                    onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Skill / Track *</label>
+                  <input
+                    type="text"
+                    value={editingItem.skill}
+                    onChange={(e) => setEditingItem({ ...editingItem, skill: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">University / Role</label>
+                <input
+                  type="text"
+                  value={editingItem.schoolOrRole || ""}
+                  onChange={(e) => setEditingItem({ ...editingItem, schoolOrRole: e.target.value })}
+                  placeholder="e.g. Federal University Dutse or Cohort Graduate"
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Caption / Quote *</label>
+                <textarea
+                  value={editingItem.caption}
+                  onChange={(e) => setEditingItem({ ...editingItem, caption: e.target.value })}
+                  rows={2}
+                  required
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Video Path / URL</label>
+                  <input
+                    type="text"
+                    value={editingItem.video || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, video: e.target.value })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Poster Thumbnail Path / URL</label>
+                  <input
+                    type="text"
+                    value={editingItem.img || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, img: e.target.value })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-[#b8aecf] hover:bg-white/5 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* VIDEO PREVIEW MODAL */}
       {previewingVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
@@ -2020,6 +2177,130 @@ function HomeManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
         </div>
       </Card>
       <TestimonialVideosManager />
+    </div>
+  );
+}
+
+function LiveStreamsManager() {
+  const { isLive, activeStream, openStage, endStream } = useLiveStream();
+  const [replays, setReplays] = useState<StreamReplay[]>(getStreamReplays());
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  const handleDeleteReplay = (id: string, title: string) => {
+    if (!confirm(`Delete replay "${title}" from the archives?`)) return;
+    const next = replays.filter((r) => r.id !== id);
+    setReplays(next);
+    saveStreamReplays(next);
+    setStatusMsg(`Deleted replay "${title}".`);
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Active Broadcast Status Panel */}
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Icon name="video" size={20} className="text-pink-400" />
+              <h3 className="font-bold text-white text-lg">Live Broadcasting Studio Control</h3>
+            </div>
+            <p className="mt-1 text-xs text-[#b8aecf]">
+              Streams reflect instantly across the entire website with site-wide banner and interactive chat.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isLive ? (
+              <button
+                onClick={endStream}
+                className="rounded-xl border border-red-500/50 bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 active:scale-95 transition-all shadow-lg"
+              >
+                End Active Broadcast
+              </button>
+            ) : null}
+            <button
+              onClick={() => openStage()}
+              className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+            >
+              {isLive ? "Open Live Stage →" : "Launch Broadcast Studio (Go Live) →"}
+            </button>
+          </div>
+        </div>
+
+        {isLive && activeStream ? (
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-ping" />
+              <h4 className="font-bold text-white text-sm">CURRENTLY BROADCASTING: {activeStream.title}</h4>
+            </div>
+            <p className="text-xs text-[#d8cde8] mt-1.5">{activeStream.description}</p>
+            <div className="mt-3 flex items-center gap-4 text-xs font-mono text-pink-300">
+              <span>Host: {activeStream.hostName}</span>
+              <span>Audience: 👥 {activeStream.viewerCount} watching</span>
+              <span>Peak: {activeStream.peakViewers}</span>
+              <span>Quality: {activeStream.quality}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-white/5 bg-black/25 p-4 text-xs text-[#b8aecf]">
+            Status: <span className="font-semibold text-white">Studio Idle</span>. Click "Launch Broadcast Studio" above to configure and start your live broadcast to the entire community.
+          </div>
+        )}
+      </Card>
+
+      {/* Recorded Replays Vault */}
+      <Card>
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h3 className="font-bold text-white text-lg">Stream Replay Vault & Archives ({replays.length})</h3>
+            <p className="text-xs text-[#8a7ba8]">
+              Past recorded streams saved to site data. Guests are prompted to create a free account to watch.
+            </p>
+          </div>
+          {statusMsg && <span className="text-xs text-pink-300 font-semibold">{statusMsg}</span>}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {replays.map((r) => (
+            <div
+              key={r.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-white/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative h-14 w-20 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/15">
+                  <img src={r.thumbnail} alt={r.title} className="h-full w-full object-cover" />
+                  <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.2 text-[9px] font-mono text-white">
+                    {r.durationMinutes}m
+                  </span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">{r.title}</h4>
+                  <p className="text-xs text-pink-300">{r.category} · Host: {r.hostName}</p>
+                  <p className="text-xs text-[#8a7ba8] mt-0.5">
+                    {r.date} · 👥 {r.peakViewers} peak viewers · {r.messagesCount} chat messages
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => openStage(r)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all"
+                >
+                  Preview Replay
+                </button>
+                <button
+                  onClick={() => handleDeleteReplay(r.id, r.title)}
+                  className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

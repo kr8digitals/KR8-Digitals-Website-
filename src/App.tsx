@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { LiveStreamProvider } from "./context/LiveStreamContext";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Academy from "./pages/Academy";
@@ -18,25 +19,27 @@ import Dashboard from "./pages/Dashboard";
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/academy" element={<Academy />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/tribe" element={<Tribe />} />
-            <Route path="/agency" element={<Agency />} />
-            <Route path="/ai" element={<AIPage />} />
-            <Route path="/blog" element={<Blog />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/verify" element={<Verify />} />
-            <Route path="/attendance-review" element={<AttendanceReview />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/admin" element={<Admin />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <LiveStreamProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/academy" element={<Academy />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/tribe" element={<Tribe />} />
+              <Route path="/agency" element={<Agency />} />
+              <Route path="/ai" element={<AIPage />} />
+              <Route path="/blog" element={<Blog />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/verify" element={<Verify />} />
+              <Route path="/attendance-review" element={<AttendanceReview />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/admin" element={<Admin />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </LiveStreamProvider>
     </AuthProvider>
   );
 }
