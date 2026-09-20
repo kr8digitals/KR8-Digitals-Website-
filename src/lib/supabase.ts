@@ -13,8 +13,12 @@ const getSupabaseEnv = () => {
   let localKey = "";
 
   if (typeof window !== "undefined") {
-    localUrl = localStorage.getItem("kr8_supabase_url") || "";
-    localKey = localStorage.getItem("kr8_supabase_anon_key") || "";
+    try {
+      localUrl = localStorage.getItem("kr8_supabase_url") || "";
+      localKey = localStorage.getItem("kr8_supabase_anon_key") || "";
+    } catch {
+      // Storage access blocked or restricted
+    }
   }
 
   const url = (localUrl || envUrl || DEFAULT_SUPABASE_URL).trim();

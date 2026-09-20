@@ -81,6 +81,30 @@ export default function LiveStreamModal() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
+  const isHost = Boolean(
+    activeStream &&
+      (student?.id === activeStream.hostId ||
+        canHost ||
+        student?.type === "founder" ||
+        student?.type === "co-founder")
+  );
+
+  const canEndStream = Boolean(
+    isHost ||
+      canHost ||
+      student?.admin ||
+      student?.type === "founder" ||
+      student?.type === "co-founder" ||
+      (activeStream && !student)
+  );
+
+  const isPrivateLocked = Boolean(
+    activeStream &&
+      activeStream.visibility === "private" &&
+      !isPrivateAuthorized &&
+      !isHost
+  );
+
   // Attach MediaStream or Replay to Video element
   useEffect(() => {
     const video = videoRef.current;
@@ -132,27 +156,6 @@ export default function LiveStreamModal() {
   if (!isStageOpen) {
     return null;
   }
-
-  const isHost =
-    activeStream &&
-    (student?.id === activeStream.hostId ||
-      canHost ||
-      student?.type === "founder" ||
-      student?.type === "co-founder");
-
-  const canEndStream =
-    isHost ||
-    canHost ||
-    student?.admin ||
-    student?.type === "founder" ||
-    student?.type === "co-founder" ||
-    (activeStream && !student);
-
-  const isPrivateLocked =
-    activeStream &&
-    activeStream.visibility === "private" &&
-    !isPrivateAuthorized &&
-    !isHost;
 
   const handleStartStreamSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

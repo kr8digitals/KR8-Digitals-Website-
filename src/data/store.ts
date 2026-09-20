@@ -651,17 +651,21 @@ const seed: Account[] = [DEFAULT_FOUNDER_ACCOUNT, DEFAULT_COFOUNDER_1, DEFAULT_C
 
 function migrateAccountsSafely() {
   if (typeof window === "undefined") return;
-  const existingV3 = localStorage.getItem(ACCOUNT_STORAGE_KEY);
-  if (existingV3 && existingV3 !== "[]") return;
+  try {
+    const existingV3 = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+    if (existingV3 && existingV3 !== "[]") return;
 
-  const backup = localStorage.getItem("kr8_accounts_backup");
-  if (backup && backup !== "[]") {
-    localStorage.setItem(ACCOUNT_STORAGE_KEY, backup);
-    return;
-  }
-  const v2 = localStorage.getItem("kr8_accounts_v2");
-  if (v2 && v2 !== "[]") {
-    localStorage.setItem(ACCOUNT_STORAGE_KEY, v2);
+    const backup = localStorage.getItem("kr8_accounts_backup");
+    if (backup && backup !== "[]") {
+      localStorage.setItem(ACCOUNT_STORAGE_KEY, backup);
+      return;
+    }
+    const v2 = localStorage.getItem("kr8_accounts_v2");
+    if (v2 && v2 !== "[]") {
+      localStorage.setItem(ACCOUNT_STORAGE_KEY, v2);
+    }
+  } catch {
+    // Storage access restricted in private mode
   }
 }
 
