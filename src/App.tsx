@@ -18,6 +18,7 @@ import AttendanceReview from "./pages/AttendanceReview";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
 import LivePage from "./pages/LivePage";
+import Gallery from "./pages/Gallery";
 
 export default function App() {
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/tribe" element={<Tribe />} />
               <Route path="/agency" element={<Agency />} />
+              <Route path="/gallery" element={<Gallery />} />
               <Route path="/ai" element={<AIPage />} />
               <Route path="/blog" element={<Blog />} />
               <Route path="/about" element={<About />} />

@@ -4,6 +4,8 @@ import {
   saveAccounts,
   getActiveLiveStream,
   saveActiveLiveStream,
+  isStreamTerminated,
+  markStreamTerminated,
   getLiveChatMessages,
   saveLiveChatMessages,
   getFeed,
@@ -52,6 +54,10 @@ export function initSupabaseSync() {
           if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
             const row = payload.new as any;
             if (row && row.is_live) {
+              if (isStreamTerminated(row.id)) {
+                // Stream was stopped locally; do not resurrect it
+                return;
+              }
               const stream: LiveStream = {
                 id: row.id,
                 title: row.title,
@@ -175,6 +181,16 @@ async function hydrateLiveStreamFromSupabase() {
       .maybeSingle();
 
     if (!error && data) {
+      if (isStreamTerminated(data.id)) {
+        // This stream was already terminated locally; update Supabase so it does not persist
+        try {
+          await supabase.from("live_streams").update({ is_live: false }).eq("id", data.id);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
       const stream: LiveStream = {
         id: data.id,
         title: data.title,
@@ -241,7 +257,7 @@ export async function syncLiveStreamToSupabase(stream: LiveStream | null) {
 
   try {
     if (!stream) {
-      await supabase.from("live_streams").update({ is_live: false }).eq("is_live", true);
+      await supabase.from("live_streams").update({ is_live: false }).neq("id", "none");
     } else {
       await supabase.from("live_streams").upsert({
         id: stream.id,

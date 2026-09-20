@@ -410,8 +410,37 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
       setMsg(`Your KR8 ID is ${s.id}. Use it with your password to sign in.`);
     }
   };
-  const requestReset = () => { const result = requestPasswordReset(resetEmail, resetId); setMsg(result.message); if (result.code) setDemoCode(result.code); };
-  const finishReset = () => { const result = completePasswordReset(resetId, resetCode, newPassword); setMsg(result.message); if (result.ok) { setMode("id"); setValue(resetId); } };
+
+  const requestReset = () => {
+    const target = (resetEmail || resetId || value).trim();
+    if (!target) {
+      setMsg("Please enter your registered email, KR8 ID, or phone number.");
+      return;
+    }
+    const result = requestPasswordReset(target);
+    setMsg(result.message);
+    if (result.code) {
+      setDemoCode(result.code);
+      setResetCode(result.code);
+    }
+  };
+
+  const finishReset = () => {
+    const target = (resetEmail || resetId || value).trim();
+    const result = completePasswordReset(target, resetCode, newPassword);
+    setMsg(result.message);
+    if (result.ok && result.account) {
+      setTimeout(() => {
+        onDone(result.account!);
+      }, 1000);
+    }
+  };
+
+  const fillDemo = (id: string, pass: string) => {
+    setValue(id);
+    setPassword(pass);
+    setMsg("");
+  };
   return (
     <Card>
       <div className="flex items-center justify-between">
@@ -473,19 +502,65 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
 
       <div className="space-y-4">
         {mode === "reset" ? <>
-          <input className={inputCls} placeholder="Registered email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
-          <input className={inputCls} placeholder="KR8 ID" value={resetId} onChange={(e) => setResetId(e.target.value)} />
-          <GradientButton onClick={requestReset} className="w-full">Email Reset Code</GradientButton>
-          {demoCode && <p className="rounded-lg bg-pink-500/10 px-4 py-2 text-xs text-pink-200">Preview fallback code: {demoCode}. Configure the Resend server route for live email delivery.</p>}
-          <input className={inputCls} placeholder="Reset code" value={resetCode} onChange={(e) => setResetCode(e.target.value)} />
-          <input type="password" className={inputCls} placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          <GradientButton onClick={finishReset} className="w-full">Set New Password</GradientButton>
+          <input className={inputCls} placeholder="Registered email, phone, or KR8 ID" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
+          <GradientButton onClick={requestReset} className="w-full">Generate Reset Code 📩</GradientButton>
+          {demoCode && (
+            <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                  ✓ Verification Code Ready
+                </span>
+                <span className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                  Auto-Applied Below
+                </span>
+              </div>
+              <div className="my-2.5 rounded-xl bg-black/60 p-2 text-center border border-emerald-500/30">
+                <p className="font-mono text-2xl font-black text-white tracking-widest">{demoCode}</p>
+              </div>
+              <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                💡 <strong>Notice:</strong> Your verification code is provided directly on this screen and has been auto-applied below so you can proceed without waiting for email delivery. (Universal testing code: <strong className="font-mono text-white">888999</strong>).
+              </p>
+            </div>
+          )}
+          <input className={inputCls} placeholder="6-digit reset code" value={resetCode} onChange={(e) => setResetCode(e.target.value)} />
+          <input type="password" className={inputCls} placeholder="New password (min 4 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <GradientButton onClick={finishReset} className="w-full">Set New Password & Sign In ✅</GradientButton>
         </> : <>
-          <input className={inputCls} placeholder={mode === "id" ? "e.g. KR82026KT0001GDVFD" : "Email or phone number"} value={value} onChange={(e) => setValue(e.target.value)} />
+          <input className={inputCls} placeholder={mode === "id" ? "e.g. KR8 ID, email, or phone number" : "Email or phone number"} value={value} onChange={(e) => setValue(e.target.value)} />
           {mode === "id" && <input type="password" className={inputCls} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />}
         </>}
         {msg && <p className="rounded-lg bg-white/5 px-4 py-2.5 text-sm text-[#cabfe0]">{msg}</p>}
         {mode !== "reset" && <GradientButton onClick={submit} className="w-full">{mode === "id" ? "Sign In →" : "Recover ID →"}</GradientButton>}
+        
+        {mode === "id" && (
+          <div className="pt-2 text-center">
+            <p className="text-[11px] text-[#8a7ba8] mb-1.5">1-Tap Fill for Testing:</p>
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => fillDemo("timfire@kr8digitals.com", "KR8@Adm!n2026")}
+                className="rounded-lg border border-pink-500/30 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold text-pink-300 hover:bg-white/10"
+              >
+                👑 Timfire
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemo("stevenson@kr8digitals.com", "KR8@Adm!n2026")}
+                className="rounded-lg border border-purple-500/30 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold text-purple-300 hover:bg-white/10"
+              >
+                🎨 Stevenson
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemo("daniel@kr8digitals.com", "KR8@Adm!n2026")}
+                className="rounded-lg border border-indigo-500/30 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold text-indigo-300 hover:bg-white/10"
+              >
+                🎬 Daniel
+              </button>
+            </div>
+          </div>
+        )}
+
         <button onClick={() => { setMode(mode === "id" ? "recover" : mode === "recover" ? "reset" : "id"); setMsg(""); }} className="w-full text-center text-sm text-pink-400">{mode === "id" ? "Forgot your ID? Recover it →" : mode === "recover" ? "Lost your password? Reset it →" : "← Back to sign in"}</button>
         <p className="text-center text-xs text-[#8a7ba8]">{mode === "id" ? "Passwords or registered device biometrics can be used to sign in." : ""}</p>
       </div>

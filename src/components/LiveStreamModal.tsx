@@ -38,6 +38,8 @@ export default function LiveStreamModal() {
     assignTask,
     markTaskDone,
     awardPoints,
+    muteListener,
+    muteAll,
     sendReaction,
     unlockPrivateStream,
     closeReplay,
@@ -79,18 +81,48 @@ export default function LiveStreamModal() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
-  // Attach MediaStream to Video element
+  // Attach MediaStream or Replay to Video element
   useEffect(() => {
-    if (videoRef.current) {
-      if (localStream) {
-        videoRef.current.srcObject = localStream;
-        videoRef.current.play().catch(() => {});
-      } else if (activeReplay) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = activeReplay.videoUrl;
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (activeReplay) {
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
+      if (video.src !== activeReplay.videoUrl) {
+        video.src = activeReplay.videoUrl;
+        video.load();
+        video.play().catch(() => {});
+      }
+    } else if (localStream) {
+      // Live stage: host or presenter camera / screen / virtual studio
+      if (video.src) {
+        video.pause();
+        video.removeAttribute("src");
+        video.src = "";
+        video.load();
+      }
+      if (video.srcObject !== localStream) {
+        video.srcObject = localStream;
+        video.play().catch(() => {});
+      }
+    } else {
+      // Live stage without localStream yet
+      if (video.src) {
+        video.pause();
+        video.removeAttribute("src");
+        video.src = "";
+        video.load();
+      }
+      video.srcObject = null;
+
+      // Automatically launch camera for host if not active
+      if (isHost && isLive && isStageOpen) {
+        startCameraStream();
       }
     }
-  }, [localStream, activeReplay, isLive, isStageOpen]);
+  }, [localStream, activeReplay, isLive, isStageOpen, isHost, startCameraStream]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -101,7 +133,21 @@ export default function LiveStreamModal() {
     return null;
   }
 
-  const isHost = activeStream && student?.id === activeStream.hostId;
+  const isHost =
+    activeStream &&
+    (student?.id === activeStream.hostId ||
+      canHost ||
+      student?.type === "founder" ||
+      student?.type === "co-founder");
+
+  const canEndStream =
+    isHost ||
+    canHost ||
+    student?.admin ||
+    student?.type === "founder" ||
+    student?.type === "co-founder" ||
+    (activeStream && !student);
+
   const isPrivateLocked =
     activeStream &&
     activeStream.visibility === "private" &&
@@ -283,6 +329,18 @@ export default function LiveStreamModal() {
               </button>
             )}
 
+            {/* End Broadcast CTA in top bar */}
+            {isLive && canEndStream && !activeReplay && (
+              <button
+                onClick={endStream}
+                className="rounded-xl border border-red-500/50 bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-red-700 active:scale-95 transition-all flex items-center gap-1.5"
+                title="Stop and terminate the live broadcast"
+              >
+                <span>🛑</span>
+                <span className="hidden sm:inline">End Broadcast</span>
+              </button>
+            )}
+
             {/* Close */}
             <button
               onClick={closeStage}
@@ -365,18 +423,78 @@ export default function LiveStreamModal() {
             ) : isLive && activeStream ? (
               /* LIVE BROADCAST STAGE */
               <div className="relative flex-1 w-full bg-black flex items-center justify-center overflow-hidden">
-                {/* VIDEO ELEMENT (ATTACHED TO REAL CAMERA OR SCREEN SHARE) */}
+                {/* VIDEO ELEMENT (ATTACHED TO REAL CAMERA OR SCREEN SHARE OR VIEWER FEED) */}
                 <video
-                  ref={videoRef}
+                  ref={(el) => {
+                    videoRef.current = el;
+                    if (el) {
+                      if (localStream && el.srcObject !== localStream) {
+                        if (el.src) {
+                          el.pause();
+                          el.removeAttribute("src");
+                          el.src = "";
+                          el.load();
+                        }
+                        el.srcObject = localStream;
+                        el.play().catch(() => {});
+                      }
+                    }
+                  }}
                   autoPlay
                   playsInline
                   muted={isHost}
-                  className={`h-full w-full object-contain ${cameraActive || isScreenSharing ? "block" : "hidden"}`}
+                  className="h-full w-full object-contain block"
                 />
 
-                {/* AUDIO-ONLY / CAMERA OFF VISUALIZER */}
-                {(!cameraActive && !isScreenSharing) && (
-                  <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#1d0b36] via-[#100320] to-black p-8 text-center">
+                {/* If no localStream yet, show connecting studio overlay */}
+                {!localStream && (
+                  <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#1d0b36] via-[#100320] to-black p-8 text-center z-10">
+                    <div className="relative mb-6">
+                      <div className="absolute -inset-4 rounded-full bg-gradient-pink opacity-40 blur-xl animate-pulse" />
+                      <div className="relative flex h-28 w-28 items-center justify-center rounded-full border-2 border-pink-400 bg-black/60 shadow-2xl">
+                        {activeStream.hostAvatar ? (
+                          <img
+                            src={activeStream.hostAvatar}
+                            alt={activeStream.hostName}
+                            className="h-full w-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="font-display text-4xl font-bold text-white">
+                            {activeStream.hostName.charAt(0)}
+                          </span>
+                        )}
+                      </div>
+                      <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-black text-xs text-white">
+                        🎙️
+                      </span>
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 rounded-full bg-red-600/30 border border-red-500/50 px-3.5 py-1 text-xs font-bold text-red-300 mb-3">
+                      <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                      LIVE ON AIR
+                    </div>
+
+                    <h3 className="text-xl font-bold text-white">{activeStream.hostName}</h3>
+                    <p className="mt-1 text-xs text-pink-300 font-semibold">{activeStream.category}</p>
+                    <p className="mt-3 text-xs text-[#a594c7]">
+                      {isHost ? "Connecting Live Camera / Studio Feed..." : "Live broadcast active • Audio on air"}
+                    </p>
+
+                    {isHost && (
+                      <button
+                        onClick={() => startCameraStream()}
+                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:scale-105 active:scale-95 transition-all"
+                      >
+                        <span>🎥</span>
+                        <span>Start Camera / Virtual Studio Feed</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* AUDIO-ONLY / CAMERA OFF VISUALIZER FOR HOST ONLY */}
+                {isHost && !cameraActive && !isScreenSharing && (
+                  <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#1d0b36] via-[#100320] to-black p-8 text-center z-10">
                     <div className="relative mb-6">
                       <div className="absolute -inset-4 rounded-full bg-gradient-pink opacity-40 blur-xl animate-pulse" />
                       <div className="relative flex h-28 w-28 items-center justify-center rounded-full border-2 border-pink-400 bg-black/60 shadow-2xl">
@@ -399,7 +517,7 @@ export default function LiveStreamModal() {
 
                     <h3 className="text-xl font-bold text-white">{activeStream.hostName}</h3>
                     <p className="mt-1 text-xs text-pink-300 font-semibold">{activeStream.category}</p>
-                    <p className="mt-3 text-xs text-[#a594c7]">Studio Audio Broadcast Active</p>
+                    <p className="mt-3 text-xs text-[#a594c7]">Studio Audio Broadcast Active (Camera Muted)</p>
                   </div>
                 )}
 
@@ -572,47 +690,53 @@ export default function LiveStreamModal() {
 
             {/* BROADCAST CONTROL DECK BAR (BOTTOM OF VIDEO) */}
             <div className="border-t border-white/10 bg-black/80 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 backdrop-blur-md z-10">
-              {/* Media Controls for Host / Speaker */}
+              {/* Media Controls for Host, Speaker & Viewers */}
               <div className="flex items-center gap-2">
-                {(isHost || canHost) && isLive && (
+                {isLive && (
                   <>
-                    <button
-                      onClick={toggleCamera}
-                      className={`flex h-9 w-9 items-center justify-center rounded-xl border text-sm transition-all ${
-                        cameraActive
-                          ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
-                          : "border-red-500/50 bg-red-500/20 text-red-300"
-                      }`}
-                      title={cameraActive ? "Turn Camera Off" : "Turn Camera On"}
-                    >
-                      {cameraActive ? "📹" : "🚫"}
-                    </button>
+                    {(isHost || canHost) && (
+                      <button
+                        onClick={toggleCamera}
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border text-sm transition-all ${
+                          cameraActive
+                            ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
+                            : "border-red-500/50 bg-red-500/20 text-red-300"
+                        }`}
+                        title={cameraActive ? "Turn Camera Off" : "Turn Camera On"}
+                      >
+                        {cameraActive ? "📹" : "🚫"}
+                      </button>
+                    )}
 
+                    {/* Microphone Mute/Unmute Toggle for All Participants */}
                     <button
                       onClick={toggleMic}
-                      className={`flex h-9 w-9 items-center justify-center rounded-xl border text-sm transition-all ${
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
                         micActive
-                          ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
-                          : "border-red-500/50 bg-red-500/20 text-red-300"
+                          ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300 shadow-sm"
+                          : "border-red-500/50 bg-red-500/20 text-red-300 shadow-sm"
                       }`}
                       title={micActive ? "Mute Microphone" : "Unmute Microphone"}
                     >
-                      {micActive ? "🎙️" : "🔇"}
+                      <span>{micActive ? "🎙️" : "🔇"}</span>
+                      <span>{micActive ? "Mic On" : "Muted (Tap to speak)"}</span>
                     </button>
 
-                    <button
-                      onClick={isScreenSharing ? startCameraStream : startScreenShare}
-                      className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
-                        isScreenSharing
-                          ? "border-pink-500/50 bg-gradient-pink text-white shadow"
-                          : "border-white/15 bg-white/5 text-white hover:bg-white/10"
-                      }`}
-                    >
-                      <span>💻</span>
-                      <span className="hidden sm:inline">
-                        {isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                      </span>
-                    </button>
+                    {(isHost || canHost) && (
+                      <button
+                        onClick={isScreenSharing ? startCameraStream : startScreenShare}
+                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
+                          isScreenSharing
+                            ? "border-pink-500/50 bg-gradient-pink text-white shadow"
+                            : "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                        }`}
+                      >
+                        <span>💻</span>
+                        <span className="hidden sm:inline">
+                          {isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                        </span>
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -630,13 +754,14 @@ export default function LiveStreamModal() {
                 ))}
               </div>
 
-              {/* End Stream CTA for Host */}
-              {isHost && isLive && (
+              {/* End Stream CTA for Host / Staff / Presenter */}
+              {canEndStream && isLive && (
                 <button
                   onClick={endStream}
-                  className="rounded-xl border border-red-500/40 bg-red-600/80 px-4 py-1.5 text-xs font-bold text-white shadow hover:bg-red-600 active:scale-95 transition-all"
+                  className="rounded-xl border border-red-500/40 bg-red-600/80 px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-600 active:scale-95 transition-all flex items-center gap-1.5"
                 >
-                  End Broadcast 🛑
+                  <span>🛑</span>
+                  <span>End Broadcast</span>
                 </button>
               )}
             </div>
@@ -758,13 +883,27 @@ export default function LiveStreamModal() {
             {/* TAB 2: AUDIENCE & TASK PROMOTION */}
             {activeTab === "audience" && (
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400">
-                    Connected Viewers ({activeStream?.viewers?.length || 1})
-                  </h4>
-                  <p className="text-[11px] text-[#a594c7] mt-0.5">
-                    Real community members active right now.
-                  </p>
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400">
+                      Connected Viewers ({activeStream?.viewers?.length || 1})
+                    </h4>
+                    <p className="text-[11px] text-[#a594c7] mt-0.5">
+                      Real community members on stage.
+                    </p>
+                  </div>
+
+                  {/* Mute All Listeners Button (Host, Speakers & Admins) */}
+                  {(isHost || student?.admin || student?.type === "founder" || student?.type === "co-founder") && (
+                    <button
+                      onClick={muteAll}
+                      className="rounded-xl border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all shadow-sm flex items-center gap-1"
+                      title="Mute all listeners"
+                    >
+                      <span>🔇</span>
+                      <span>Mute All</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -782,30 +921,52 @@ export default function LiveStreamModal() {
                           )}
                         </div>
                         <div className="overflow-hidden truncate">
-                          <p className="font-semibold text-white truncate">{v.name}</p>
+                          <p className="font-semibold text-white truncate flex items-center gap-1.5">
+                            <span>{v.name}</span>
+                            <span className={`text-[10px] ${v.isMuted ? "text-red-400" : "text-emerald-400"}`}>
+                              {v.isMuted ? "🔇" : "🎙️"}
+                            </span>
+                          </p>
                           <span className="text-[10px] text-pink-300 capitalize">{v.role}</span>
                         </div>
                       </div>
 
-                      {/* Host Actions on Viewers */}
-                      {isHost && v.id !== student?.id && (
-                        <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Host / Speaker / Admin Actions on Viewers */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Mute / Unmute Listener Toggle */}
+                        {(isHost || student?.admin || student?.type === "founder" || student?.type === "co-founder") && v.id !== student?.id && (
                           <button
-                            onClick={() => openTaskModalForUser(v.id, v.name)}
-                            className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500/20"
-                            title="Assign a speed task / drill"
+                            onClick={() => muteListener(v.id)}
+                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold transition-all ${
+                              v.isMuted
+                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                                : "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                            }`}
+                            title={v.isMuted ? "Unmute Listener" : "Mute Listener"}
                           >
-                            ⚡ Task
+                            {v.isMuted ? "Unmute" : "Mute"}
                           </button>
-                          <button
-                            onClick={() => openAwardModalForUser(v.id, v.name)}
-                            className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2 py-1 text-[10px] font-bold text-pink-300 hover:bg-pink-500/20"
-                            title="Award XP Points"
-                          >
-                            ⭐ XP
-                          </button>
-                        </div>
-                      )}
+                        )}
+
+                        {isHost && v.id !== student?.id && (
+                          <>
+                            <button
+                              onClick={() => openTaskModalForUser(v.id, v.name)}
+                              className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500/20"
+                              title="Assign a speed task / drill"
+                            >
+                              ⚡ Task
+                            </button>
+                            <button
+                              onClick={() => openAwardModalForUser(v.id, v.name)}
+                              className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2 py-1 text-[10px] font-bold text-pink-300 hover:bg-pink-500/20"
+                              title="Award XP Points"
+                            >
+                              ⭐ XP
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

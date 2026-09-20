@@ -4,11 +4,13 @@ import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
 import { Avatar } from "./ui";
 import Icon from "./Icon";
+import SignInModal from "./SignInModal";
 
 const links = [
   { to: "/academy", label: "Academy" },
   { to: "/tribe", label: "Tribe" },
   { to: "/agency", label: "Agency" },
+  { to: "/gallery", label: "Gallery" },
   { to: "/about", label: "About Us" },
   { to: "/ai", label: "KR8 AI" },
 ];
@@ -16,9 +18,17 @@ const links = [
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bell, setBell] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
   const { student, signOut, notifications, clearNotifications } = useAuth();
   const { isLive, activeStream, openStage, canHost } = useLiveStream();
   const nav = useNavigate();
+
+  // Listen to open signin event
+  useEffect(() => {
+    const handleOpen = () => setSignInOpen(true);
+    window.addEventListener("kr8:open-signin", handleOpen);
+    return () => window.removeEventListener("kr8:open-signin", handleOpen);
+  }, []);
 
   // Close drawer on escape key
   useEffect(() => {
@@ -193,12 +203,12 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Link
-                  to="/academy"
+                <button
+                  onClick={() => setSignInOpen(true)}
                   className="hidden sm:inline-block rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold text-white hover:border-pink-400/60 transition-colors"
                 >
                   Login
-                </Link>
+                </button>
                 <Link
                   to="/academy"
                   className="hidden sm:inline-block rounded-full bg-gradient-pink px-4 py-1.5 text-xs font-bold text-white glow-pink-sm transition-transform hover:scale-[1.02]"
@@ -537,15 +547,32 @@ export default function Navbar() {
                     Sign Out of Account
                   </button>
                 ) : (
-                  <p className="text-center text-xs text-[#8a7ba8]">
-                    KR8 Digitals &copy; 2026. <span className="font-semibold text-pink-300">Think It. KR8 It.</span>
-                  </p>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        closeDrawer();
+                        setSignInOpen(true);
+                      }}
+                      className="w-full rounded-xl bg-gradient-pink py-2.5 text-xs font-bold text-white shadow-lg active:scale-95 transition-all"
+                    >
+                      Sign In to KR8 🔑
+                    </button>
+                    <p className="text-center text-[10px] text-[#8a7ba8]">
+                      KR8 Digitals &copy; 2026. <span className="font-semibold text-pink-300">Think It. KR8 It.</span>
+                    </p>
+                  </div>
                 )}
               </div>
             </aside>
           </div>
         </div>
       )}
+
+      {/* Global Sign In & Password Recovery Modal */}
+      <SignInModal
+        isOpen={signInOpen}
+        onClose={() => setSignInOpen(false)}
+      />
     </>
   );
 }

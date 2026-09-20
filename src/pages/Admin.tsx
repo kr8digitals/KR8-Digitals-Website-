@@ -12,7 +12,8 @@ import {
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
   addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
   getStreamReplays, saveStreamReplays,
-  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay,
+  getGalleryItems, saveGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, deleteGalleryItem, archiveAnnouncementToGallery,
+  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
@@ -25,7 +26,7 @@ import {
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Student Management", "Blog",
+  "Overview", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Gallery Archive", "Student Management", "Blog",
   "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
   "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions", "Supabase Database",
 ];
@@ -176,6 +177,7 @@ export default function Admin() {
           {tab === "Testimonial Videos" && <TestimonialVideosManager />}
           {tab === "Live Streams & Replays" && <LiveStreamsManager />}
           {tab === "Agency" && <AgencyManager />}
+          {tab === "Gallery Archive" && <GalleryManager />}
           {tab === "Student Management" && <StudentManager students={students} />}
           {tab === "Blog" && <BlogManager />}
           {tab === "Announcements" && <AnnouncementManager />}
@@ -1501,6 +1503,15 @@ function AnnouncementManager() {
     setTimeout(() => setSaved(false), 3000);
   };
 
+  const handleArchive = (id: string) => {
+    archiveAnnouncementToGallery(id);
+    const updated = items.filter((a) => a.id !== id);
+    saveAnnouncements(updated);
+    setItems(updated);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -1534,24 +1545,384 @@ function AnnouncementManager() {
 
       <Card>
         <h3 className="font-bold text-white text-lg">Active Announcements ({items.length})</h3>
-        <p className="mt-1 text-sm text-[#b8aecf]">Live announcements displayed on the site.</p>
+        <p className="mt-1 text-sm text-[#b8aecf]">
+          Live announcements displayed on the site. Instead of deleting past milestones, click "Archive to Gallery" to permanently preserve them with their dates.
+        </p>
         <div className="mt-4 space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div key={item.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
               <div>
                 <p className="text-xs text-pink-400 font-semibold">{item.date} · {item.author}</p>
                 <h4 className="text-base font-bold text-white mt-1">{item.title}</h4>
                 <p className="text-xs text-[#cabfe0] mt-1">{item.body || item.caption}</p>
               </div>
-              <button
-                onClick={() => handleDelete(item.id)}
-                className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
-              >
-                Delete
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleArchive(item.id)}
+                  className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2.5 py-1 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all flex items-center gap-1"
+                  title="Preserve in Gallery rather than deleting"
+                >
+                  <span>📦</span>
+                  <span>Archive to Gallery</span>
+                </button>
+                <button
+                  onClick={() => handleDelete(item.id)}
+                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------- Gallery Archive & Approval Manager ---------------- */
+
+function GalleryManager() {
+  const [items, setItems] = useState<GalleryItem[]>(() => getGalleryItems());
+  const [activeSubTab, setActiveSubTab] = useState<"pending" | "approved" | "new">("pending");
+  const [msg, setMsg] = useState("");
+
+  // New item form
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newCategory, setNewCategory] = useState<GalleryItem["category"]>("Flyers & Posters");
+  const [newMediaType, setNewMediaType] = useState<"image" | "video">("image");
+  const [newUrl, setNewUrl] = useState("");
+  const [newDate, setNewDate] = useState(
+    new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })
+  );
+  const [newAuthor, setNewAuthor] = useState("KR8 Admin Studio");
+  const [newLink, setNewLink] = useState("");
+
+  const pendingItems = items.filter((i) => i.status === "pending");
+  const approvedItems = items.filter((i) => i.status === "approved");
+
+  const reload = () => {
+    setItems(getGalleryItems());
+  };
+
+  const handleApprove = (id: string) => {
+    approveGalleryItem(id);
+    reload();
+    setMsg("Media piece approved and published to public Gallery!");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const handleReject = (id: string) => {
+    rejectGalleryItem(id);
+    reload();
+    setMsg("Media piece removed from queue.");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const handleDirectAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newUrl.trim()) return;
+
+    addGalleryItem({
+      title: newTitle.trim(),
+      description: newDesc.trim(),
+      category: newCategory,
+      mediaType: newMediaType,
+      url: newUrl.trim(),
+      date: newDate.trim(),
+      author: newAuthor.trim(),
+      link: newLink.trim() || undefined,
+      status: "approved",
+      featured: true,
+    });
+
+    reload();
+    setNewTitle("");
+    setNewDesc("");
+    setNewUrl("");
+    setNewLink("");
+    setMsg("Direct item added to Gallery archive successfully!");
+    setActiveSubTab("approved");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div>
+            <h3 className="font-bold text-white text-xl">Living Gallery & Media Archive</h3>
+            <p className="text-xs text-[#a594c7] mt-1">
+              Archived campaigns, client work, student milestones, and viewer suggestions.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setActiveSubTab("pending")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all relative ${
+                activeSubTab === "pending"
+                  ? "bg-gradient-pink text-white shadow"
+                  : "border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white"
+              }`}
+            >
+              Pending Approvals
+              {pendingItems.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.2 text-[10px] text-white font-bold">
+                  {pendingItems.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveSubTab("approved")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                activeSubTab === "approved"
+                  ? "bg-gradient-pink text-white shadow"
+                  : "border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white"
+              }`}
+            >
+              Public Archive ({approvedItems.length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab("new")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                activeSubTab === "new"
+                  ? "bg-gradient-pink text-white shadow"
+                  : "border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white"
+              }`}
+            >
+              + Direct Upload
+            </button>
+          </div>
+        </div>
+
+        {msg && <p className="mt-3 text-xs text-emerald-400 font-bold">{msg}</p>}
+
+        {/* SUBTAB 1: PENDING APPROVALS */}
+        {activeSubTab === "pending" && (
+          <div className="mt-6 space-y-4">
+            <h4 className="font-bold text-white text-sm">
+              Viewer Suggestions Awaiting Review ({pendingItems.length})
+            </h4>
+
+            {pendingItems.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+                <span className="text-3xl">✨</span>
+                <p className="text-sm font-semibold text-white mt-2">No pending suggestions</p>
+                <p className="text-xs text-[#8a7ba8] mt-1">
+                  When visitors or students suggest media via the Gallery page, they appear here for your approval.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {pendingItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col justify-between rounded-2xl border border-yellow-500/30 bg-yellow-500/[0.03] p-4 text-xs"
+                  >
+                    <div>
+                      <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/60 mb-3 border border-white/10">
+                        {item.mediaType === "video" ? (
+                          <video src={item.url} controls className="h-full w-full object-cover" />
+                        ) : (
+                          <img src={item.url} alt={item.title} className="h-full w-full object-cover" />
+                        )}
+                      </div>
+                      <span className="rounded bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                        {item.category}
+                      </span>
+                      <h5 className="font-bold text-white text-sm mt-1">{item.title}</h5>
+                      <p className="text-[#b8aecf] mt-1">{item.description}</p>
+                      <p className="text-[#8a7ba8] text-[10px] mt-2">
+                        Submitted by: <strong className="text-white">{item.author}</strong> ({item.date})
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex gap-2 border-t border-white/10 pt-3">
+                      <button
+                        onClick={() => handleApprove(item.id)}
+                        className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow hover:brightness-110 active:scale-95 transition-all"
+                      >
+                        Approve & Publish ✅
+                      </button>
+                      <button
+                        onClick={() => handleReject(item.id)}
+                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                      >
+                        Reject ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUBTAB 2: APPROVED PUBLIC ARCHIVE */}
+        {activeSubTab === "approved" && (
+          <div className="mt-6 space-y-3">
+            <h4 className="font-bold text-white text-sm">
+              Live in Public Gallery ({approvedItems.length})
+            </h4>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {approvedItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col justify-between rounded-2xl border border-white/10 bg-black/30 p-3 text-xs"
+                >
+                  <div>
+                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/60 mb-2 border border-white/10">
+                      {item.mediaType === "video" ? (
+                        <video src={item.url} controls className="h-full w-full object-cover" />
+                      ) : (
+                        <img src={item.url} alt={item.title} className="h-full w-full object-cover" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-pink-300 font-semibold">
+                      <span>{item.category}</span>
+                      <span>{item.date}</span>
+                    </div>
+                    <h5 className="font-bold text-white text-xs mt-1 truncate">{item.title}</h5>
+                    <p className="text-[#8a7ba8] text-[11px] truncate">By {item.author}</p>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2 text-[10px]">
+                    <a
+                      href="/gallery"
+                      target="_blank"
+                      className="text-pink-400 font-bold hover:underline"
+                    >
+                      View on site ↗
+                    </a>
+                    <button
+                      onClick={() => handleReject(item.id)}
+                      className="text-red-400 hover:text-red-300 font-bold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* SUBTAB 3: DIRECT UPLOAD */}
+        {activeSubTab === "new" && (
+          <form onSubmit={handleDirectAdd} className="mt-6 space-y-4 max-w-xl">
+            <h4 className="font-bold text-white text-sm">Direct Archival Upload</h4>
+            <p className="text-xs text-[#a594c7]">
+              Directly upload flyers, banners, brand guides, or project showreels to the public Gallery archive.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Title *</label>
+              <input
+                required
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. AfriSTEM Robotics Portal Launch Flyer"
+                className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Category</label>
+                <select
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value as GalleryItem["category"])}
+                  className="w-full rounded-xl border border-white/15 bg-[#140824] px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                >
+                  <option>Flyers & Posters</option>
+                  <option>Brand Identity</option>
+                  <option>Student Showcases</option>
+                  <option>Video Clips</option>
+                  <option>Event Moments</option>
+                  <option>Community Archives</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Media Type</label>
+                <select
+                  value={newMediaType}
+                  onChange={(e) => setNewMediaType(e.target.value as "image" | "video")}
+                  className="w-full rounded-xl border border-white/15 bg-[#140824] px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                >
+                  <option value="image">Image / Graphic</option>
+                  <option value="video">Video Clip</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                Media URL or Local Asset Path *
+              </label>
+              <input
+                required
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="e.g. /portfolio/afristem_hero.jpg or https://..."
+                className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Description</label>
+              <textarea
+                rows={2}
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                placeholder="Context, design rationale, or event story..."
+                className="w-full rounded-xl border border-white/15 bg-black/30 p-3 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Date</label>
+                <input
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  placeholder="Sep 2026"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Author / Studio</label>
+                <input
+                  value={newAuthor}
+                  onChange={(e) => setNewAuthor(e.target.value)}
+                  placeholder="KR8 Studio Team"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Project Link (Opt)</label>
+                <input
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="rounded-xl bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+            >
+              Add to Gallery Archive
+            </button>
+          </form>
+        )}
       </Card>
     </div>
   );

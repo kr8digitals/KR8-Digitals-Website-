@@ -1,0 +1,475 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import {
+  authenticateAccount,
+  requestPasswordReset,
+  completePasswordReset,
+  getAccounts,
+  MAIN_ADMIN_PASSWORD,
+  type Account,
+} from "../data/store";
+import {
+  authenticateWithBiometrics,
+  getRegisteredBiometrics,
+} from "../utils/biometrics";
+import Icon from "./Icon";
+
+interface SignInModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialMode?: "signin" | "reset";
+}
+
+export default function SignInModal({ isOpen, onClose, initialMode = "signin" }: SignInModalProps) {
+  const { signIn, addNotification } = useAuth();
+  const [mode, setMode] = useState<"signin" | "reset">(initialMode);
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ type: "error" | "success" | "info"; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Reset Password State
+  const [resetIdentifier, setResetIdentifier] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [resetStep, setResetStep] = useState<"request" | "verify">("request");
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Biometrics
+  const [bioLoading, setBioLoading] = useState(false);
+  const registeredBios = getRegisteredBiometrics();
+
+  useEffect(() => {
+    setMode(initialMode);
+    setStatusMsg(null);
+  }, [initialMode, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg(null);
+    if (!identifier.trim()) {
+      setStatusMsg({ type: "error", text: "Please enter your KR8 ID, email, or phone number." });
+      return;
+    }
+    if (!password) {
+      setStatusMsg({ type: "error", text: "Please enter your account password." });
+      return;
+    }
+
+    setLoading(true);
+    const result = authenticateAccount(identifier, password);
+    setLoading(false);
+
+    if (!result.ok || !result.account) {
+      setStatusMsg({ type: "error", text: result.error || "Invalid ID or password." });
+      return;
+    }
+
+    // Success
+    signIn(result.account);
+    addNotification(`Welcome back, ${result.account.name}!`);
+    onClose();
+  };
+
+  const handleQuickDemoFill = (type: "founder" | "stevenson" | "daniel" | "student") => {
+    setStatusMsg(null);
+    if (type === "founder") {
+      setIdentifier("timfire@kr8digitals.com");
+      setPassword(MAIN_ADMIN_PASSWORD);
+    } else if (type === "stevenson") {
+      setIdentifier("stevenson@kr8digitals.com");
+      setPassword(MAIN_ADMIN_PASSWORD);
+    } else if (type === "daniel") {
+      setIdentifier("daniel@kr8digitals.com");
+      setPassword(MAIN_ADMIN_PASSWORD);
+    } else {
+      const anyStudent = getAccounts().find((a) => a.type === "student");
+      if (anyStudent) {
+        setIdentifier(anyStudent.id);
+        setPassword(anyStudent.password || "kr8-student");
+      } else {
+        setIdentifier("KR82026KT0001GDVFD");
+        setPassword("kr8-student");
+      }
+    }
+  };
+
+  const handleBiometricSignIn = async (targetId?: string) => {
+    setStatusMsg(null);
+    setBioLoading(true);
+    try {
+      const res = await authenticateWithBiometrics(targetId || (identifier.trim() ? identifier.trim() : undefined));
+      if (!res.ok || !res.studentId) {
+        setStatusMsg({ type: "error", text: res.error || "Biometric verification cancelled." });
+        return;
+      }
+      const all = getAccounts();
+      const account = all.find((a) => a.id.toLowerCase() === res.studentId!.toLowerCase());
+      if (!account) {
+        setStatusMsg({ type: "error", text: `Account with ID ${res.studentId} was not found.` });
+        return;
+      }
+      signIn(account);
+      addNotification(`Biometric sign-in verified. Welcome, ${account.name}!`);
+      onClose();
+    } catch (err) {
+      setStatusMsg({ type: "error", text: err instanceof Error ? err.message : "Biometric authentication failed." });
+    } finally {
+      setBioLoading(false);
+    }
+  };
+
+  const handleRequestResetCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg(null);
+    if (!resetIdentifier.trim()) {
+      setStatusMsg({ type: "error", text: "Please enter your registered email, KR8 ID, or phone." });
+      return;
+    }
+
+    setLoading(true);
+    const res = requestPasswordReset(resetIdentifier);
+    setLoading(false);
+
+    if (!res.ok || !res.code) {
+      setStatusMsg({ type: "error", text: res.message });
+      return;
+    }
+
+    setGeneratedCode(res.code);
+    setResetCode(res.code); // Auto-fill for friction-free UX
+    setResetStep("verify");
+    setStatusMsg({
+      type: "success",
+      text: `Verification code generated! Enter your new password below.`,
+    });
+  };
+
+  const handleCompleteReset = (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg(null);
+    if (!resetCode.trim()) {
+      setStatusMsg({ type: "error", text: "Please provide the 6-digit verification code." });
+      return;
+    }
+    if (newPassword.trim().length < 4) {
+      setStatusMsg({ type: "error", text: "Password must be at least 4 characters long." });
+      return;
+    }
+
+    setLoading(true);
+    const res = completePasswordReset(resetIdentifier, resetCode, newPassword);
+    setLoading(false);
+
+    if (!res.ok || !res.account) {
+      setStatusMsg({ type: "error", text: res.message });
+      return;
+    }
+
+    // Auto-sign in the user
+    signIn(res.account);
+    addNotification(`Password updated! You are now logged in as ${res.account.name}.`);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md rounded-3xl border border-white/15 bg-[#170a2a] p-6 sm:p-8 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with Close */}
+        <div className="flex items-start justify-between border-b border-white/10 pb-4">
+          <div>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-pink-400">
+              KR8 Digitals Portal
+            </span>
+            <h3 className="font-display text-2xl font-bold text-white mt-0.5">
+              {mode === "signin" ? "Sign In to Account" : "Reset Account Password"}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all text-sm font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Tab Selector */}
+        <div className="mt-4 flex rounded-xl border border-white/10 bg-black/30 p-1 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              setMode("signin");
+              setStatusMsg(null);
+            }}
+            className={`flex-1 rounded-lg py-2 font-bold transition-all ${
+              mode === "signin"
+                ? "bg-gradient-pink text-white shadow"
+                : "text-[#b8aecf] hover:text-white"
+            }`}
+          >
+            Sign In 🔑
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("reset");
+              setStatusMsg(null);
+              setResetStep("request");
+            }}
+            className={`flex-1 rounded-lg py-2 font-bold transition-all ${
+              mode === "reset"
+                ? "bg-gradient-pink text-white shadow"
+                : "text-[#b8aecf] hover:text-white"
+            }`}
+          >
+            Lost Password 🔄
+          </button>
+        </div>
+
+        {/* Feedback Alert */}
+        {statusMsg && (
+          <div
+            className={`mt-4 rounded-xl p-3 text-xs font-semibold ${
+              statusMsg.type === "error"
+                ? "border border-red-500/40 bg-red-500/10 text-red-200"
+                : statusMsg.type === "success"
+                ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                : "border border-blue-500/40 bg-blue-500/10 text-blue-200"
+            }`}
+          >
+            {statusMsg.text}
+          </div>
+        )}
+
+        {/* MODE 1: SIGN IN */}
+        {mode === "signin" && (
+          <form onSubmit={handleSignIn} className="mt-5 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                KR8 ID, Email, or Phone *
+              </label>
+              <input
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="e.g. KR82026KT0001GDVFD or timfire@kr8digitals.com"
+                className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
+                required
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-[#cabfe0]">Password *</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("reset");
+                    setResetIdentifier(identifier);
+                  }}
+                  className="text-[11px] text-pink-400 hover:text-pink-300 underline"
+                >
+                  Forgot Password?
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-xs text-[#8a7ba8] hover:text-white"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-pink py-3 text-xs sm:text-sm font-bold text-white shadow-xl shadow-pink-500/25 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading ? "Authenticating..." : "Sign In to KR8 →"}
+            </button>
+
+            {/* Biometric 1-Tap Login */}
+            <div className="border-t border-white/10 pt-4">
+              <button
+                type="button"
+                onClick={() => handleBiometricSignIn()}
+                disabled={bioLoading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-pink-500/30 bg-pink-500/10 py-2.5 text-xs font-bold text-pink-200 hover:bg-pink-500/20 active:scale-95 transition-all disabled:opacity-50"
+              >
+                <Icon name="fingerprint" size={16} className="text-pink-400" />
+                <span>{bioLoading ? "Scanning sensor..." : "1-Tap Fingerprint / Biometric Sign In"}</span>
+              </button>
+            </div>
+
+            {/* Quick Demo Fill Buttons for Testing */}
+            <div className="border-t border-white/10 pt-3 text-center">
+              <p className="text-[11px] text-[#8a7ba8] mb-2">Quick 1-Tap Fill for Executive / Testing:</p>
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoFill("founder")}
+                  className="rounded-lg border border-pink-500/30 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-pink-300 hover:bg-white/10"
+                >
+                  👑 Founder Timfire
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoFill("stevenson")}
+                  className="rounded-lg border border-purple-500/30 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-purple-300 hover:bg-white/10"
+                >
+                  🎨 Co-Founder Stevenson
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickDemoFill("daniel")}
+                  className="rounded-lg border border-indigo-500/30 bg-white/5 px-2.5 py-1 text-[10px] font-bold text-indigo-300 hover:bg-white/10"
+                >
+                  🎬 Co-Founder Daniel
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* MODE 2: PASSWORD RESET */}
+        {mode === "reset" && (
+          <div className="mt-5 space-y-4">
+            {resetStep === "request" ? (
+              <form onSubmit={handleRequestResetCode} className="space-y-4">
+                <p className="text-xs text-[#b8aecf]">
+                  Enter your registered email address, KR8 ID, or phone number. We'll generate a 6-digit verification code to set your new password.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Registered Email, KR8 ID, or Phone *
+                  </label>
+                  <input
+                    type="text"
+                    value={resetIdentifier}
+                    onChange={(e) => setResetIdentifier(e.target.value)}
+                    placeholder="e.g. timfire@kr8digitals.com or +2349035655757"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-gradient-pink py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {loading ? "Verifying..." : "Generate Verification Code 📩"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleCompleteReset} className="space-y-4">
+                {generatedCode && (
+                  <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                        ✓ Verification Code Ready
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(generatedCode);
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 2000);
+                        }}
+                        className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30"
+                      >
+                        {copiedCode ? "Copied! ✓" : "Copy Code"}
+                      </button>
+                    </div>
+                    <div className="my-2.5 rounded-xl bg-black/60 p-2.5 text-center border border-emerald-500/30">
+                      <p className="font-mono text-2xl font-black text-white tracking-widest">{generatedCode}</p>
+                    </div>
+                    <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                      💡 <strong>Notice:</strong> Your verification code is provided directly on this screen and has been auto-applied below so you can proceed without waiting for email delivery. (Universal testing code: <strong className="font-mono text-white">888999</strong>).
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    6-Digit Verification Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={resetCode}
+                    onChange={(e) => setResetCode(e.target.value)}
+                    placeholder="e.g. 549210 or 888999"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs font-mono font-bold text-white focus:border-pink-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Create New Password *
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="At least 4 characters"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl bg-gradient-pink py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {loading ? "Updating..." : "Save New Password & Sign In ✅"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setResetStep("request")}
+                  className="w-full text-center text-xs text-[#8a7ba8] hover:text-white"
+                >
+                  ← Request a different code
+                </button>
+              </form>
+            )}
+
+            <div className="border-t border-white/10 pt-3 text-center">
+              <button
+                type="button"
+                onClick={() => setMode("signin")}
+                className="text-xs text-pink-400 hover:text-pink-300 font-bold"
+              >
+                ← Back to Sign In
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

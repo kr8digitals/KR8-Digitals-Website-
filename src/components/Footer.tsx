@@ -38,6 +38,7 @@ export default function Footer() {
             <li><Link to="/academy" className="hover:text-white">Academy</Link></li>
             <li><Link to="/tribe" className="hover:text-white">KR8 Tribe</Link></li>
             <li><Link to="/agency" className="hover:text-white">KR8 Agency</Link></li>
+            <li><Link to="/gallery" className="hover:text-white">Public Gallery Archive</Link></li>
             <li><Link to="/verify" className="hover:text-white">Verify a KR8 ID</Link></li>
             <li><Link to="/ai" className="hover:text-white">KR8 AI</Link></li>
             <li><Link to="/leaderboard" className="hover:text-white">Leaderboard</Link></li>
