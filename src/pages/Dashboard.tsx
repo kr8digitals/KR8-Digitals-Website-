@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useLiveStream } from "../context/LiveStreamContext";
 import { SKILLS, getStudents, getAnnouncements, CONTACT, getReferralUrl } from "../data/store";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
@@ -17,6 +18,7 @@ const actions = [
 
 export default function Dashboard() {
   const { student } = useAuth();
+  const { isLive, activeStream, openStage } = useLiveStream();
   if (!student) return null;
   const isFounder = student.type === "founder";
   const isCoFounder = student.type === "co-founder";
@@ -39,6 +41,38 @@ export default function Dashboard() {
   return (
     <div className="section-bg min-h-screen">
       <div className="mx-auto max-w-7xl px-5 py-12">
+        {/* LIVE STREAM BROADCAST BADGE FOR REGISTERED ACCOUNTS */}
+        {isLive && activeStream && (
+          <div className="mb-8 overflow-hidden rounded-3xl border-2 border-red-500/70 bg-gradient-to-r from-red-600/25 via-pink-600/20 to-purple-800/30 p-4 sm:p-5 shadow-2xl backdrop-blur-md">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-3.5 w-3.5 relative shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-80" />
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500" />
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-red-400">🔴 WE'RE LIVE RIGHT NOW</span>
+                    {activeStream.visibility === "private" ? (
+                      <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40">🔒 Private Session</span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">🌐 Open Stage</span>
+                    )}
+                  </div>
+                  <h4 className="text-base sm:text-lg font-bold text-white mt-0.5">{activeStream.title}</h4>
+                  <p className="text-xs text-[#cabfe0]">Hosted by {activeStream.hostName} · {activeStream.viewers?.length || 1} creator(s) connected</p>
+                </div>
+              </div>
+              <button
+                onClick={() => openStage()}
+                className="rounded-xl bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white shadow-xl shadow-pink-500/30 hover:scale-105 active:scale-95 transition-all shrink-0"
+              >
+                Join Live Stream Stage →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Greeting */}
         <div className="rise-in">
           <Pill>

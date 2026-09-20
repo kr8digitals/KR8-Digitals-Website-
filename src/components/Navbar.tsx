@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useLiveStream } from "../context/LiveStreamContext";
 import { Avatar } from "./ui";
 import Icon from "./Icon";
-import { getTribeWhatsApp } from "../data/store";
 
 const links = [
   { to: "/academy", label: "Academy" },
@@ -17,6 +17,7 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bell, setBell] = useState(false);
   const { student, signOut, notifications, clearNotifications } = useAuth();
+  const { isLive, activeStream, openStage, canHost } = useLiveStream();
   const nav = useNavigate();
 
   // Close drawer on escape key
@@ -78,6 +79,41 @@ export default function Navbar() {
 
           {/* Right Section: Desktop actions + Hamburger icon button */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Live Broadcast Indicator or Studio Launcher */}
+            {isLive ? (
+              <button
+                onClick={() => openStage()}
+                className="flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-xs font-black text-white shadow-lg glow-pink-sm animate-pulse hover:bg-red-500 active:scale-95 transition-all"
+                title="Active Live Broadcast in progress — Click to Join"
+              >
+                <span className="h-2 w-2 rounded-full bg-white" />
+                <span>LIVE</span>
+                {activeStream?.visibility === "private" && <span>🔒</span>}
+                <span className="hidden sm:inline font-mono">
+                  ({activeStream?.viewers?.length || activeStream?.viewerCount || 1})
+                </span>
+              </button>
+            ) : canHost ? (
+              <button
+                onClick={() => openStage()}
+                className="flex items-center gap-1.5 rounded-full border border-pink-500/50 bg-pink-500/10 px-3 py-1.5 text-xs font-bold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all shadow-sm"
+                title="Open Live Broadcast Studio"
+              >
+                <Icon name="video" size={13} />
+                <span className="hidden sm:inline">Studio</span>
+                <span>Go Live</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => openStage()}
+                className="hidden sm:flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-[#b8aecf] hover:text-white hover:border-white/20 transition-all"
+                title="Stream Replays & Masterclasses"
+              >
+                <Icon name="video" size={13} />
+                <span>Replays</span>
+              </button>
+            )}
+
             {student ? (
               <>
                 {/* Notifications Bell */}
@@ -292,6 +328,37 @@ export default function Navbar() {
 
               {/* Comprehensive Navigation Sections */}
               <div className="flex-1 px-6 py-6 space-y-6">
+                {/* Live Stream Feature Section */}
+                <div className="rounded-2xl border border-pink-500/30 bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-transparent p-3.5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-pink-300 flex items-center gap-1.5">
+                      {isLive ? <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" /> : null}
+                      <span>{isLive ? "Live Broadcast In Progress" : "KR8 Live Streaming"}</span>
+                    </span>
+                    {isLive && (
+                      <span className="text-[10px] font-mono font-bold text-white bg-red-600 px-2 py-0.5 rounded-full">
+                        {activeStream?.viewerCount} VIEWERS
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#b8aecf] mb-3">
+                    {isLive
+                      ? `"${activeStream?.title}" is live now. Join the interactive broadcast!`
+                      : "Host live streams, join Q&As, and watch recorded masterclass replays."}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        closeDrawer();
+                        openStage();
+                      }}
+                      className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow hover:brightness-110 active:scale-95 transition-all text-center"
+                    >
+                      {isLive ? "Join Live Stream →" : canHost ? "Host Studio (Go Live) →" : "Open Stream Stage →"}
+                    </button>
+                  </div>
+                </div>
+
                 {/* Main Pages */}
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-[#8a7ba8] mb-2 px-2">
@@ -388,62 +455,71 @@ export default function Navbar() {
                         <Icon name="check" size={15} className="text-pink-400" /> Verify KR8 ID
                       </span>
                     </NavLink>
-                    <NavLink
-                      to="/settings"
-                      onClick={closeDrawer}
-                      className={({ isActive }) =>
-                        `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                          isActive ? "bg-white/10 text-white font-semibold" : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
-                        }`
-                      }
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon name="fingerprint" size={15} className="text-pink-400" /> Settings & Biometrics
-                      </span>
-                    </NavLink>
-                    <NavLink
-                      to="/attendance-review"
-                      onClick={closeDrawer}
-                      className={({ isActive }) =>
-                        `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                          isActive ? "bg-white/10 text-white font-semibold" : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
-                        }`
-                      }
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon name="calendar" size={15} className="text-pink-400" /> Attendance Review
-                      </span>
-                    </NavLink>
-                    <NavLink
-                      to="/admin"
-                      onClick={closeDrawer}
-                      className={({ isActive }) =>
-                        `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                          isActive ? "bg-white/10 text-white font-semibold" : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
-                        }`
-                      }
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon name="lock" size={15} className="text-pink-400" /> Admin Portal
-                      </span>
-                    </NavLink>
+
+                    {/* Settings & Biometrics: strictly for registered users */}
+                    {student && (
+                      <NavLink
+                        to="/settings"
+                        onClick={closeDrawer}
+                        className={({ isActive }) =>
+                          `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                            isActive ? "bg-white/10 text-white font-semibold" : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
+                          }`
+                        }
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Icon name="fingerprint" size={15} className="text-pink-400" /> Settings & Biometrics
+                        </span>
+                      </NavLink>
+                    )}
+
+                    {/* Admin & Attendance Review: strictly for authorized leadership / faculty */}
+                    {student && (student.admin || student.type === "founder" || student.type === "co-founder") && (
+                      <>
+                        <NavLink
+                          to="/attendance-review"
+                          onClick={closeDrawer}
+                          className={({ isActive }) =>
+                            `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                              isActive ? "bg-white/10 text-white font-semibold" : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
+                            }`
+                          }
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <Icon name="calendar" size={15} className="text-pink-400" /> Attendance Review
+                          </span>
+                        </NavLink>
+                        <NavLink
+                          to="/admin"
+                          onClick={closeDrawer}
+                          className={({ isActive }) =>
+                            `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                              isActive ? "bg-white/10 text-white font-semibold" : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
+                            }`
+                          }
+                        >
+                          <span className="flex items-center gap-2.5">
+                            <Icon name="lock" size={15} className="text-pink-400" /> Admin Portal
+                          </span>
+                        </NavLink>
+                      </>
+                    )}
                   </nav>
                 </div>
 
-                {/* Community & WhatsApp */}
+                {/* Community Link */}
                 <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-bold text-white mb-1">Direct Community Support</p>
+                  <p className="text-xs font-bold text-white mb-1">Creative Community</p>
                   <p className="text-xs text-[#8a7ba8] leading-relaxed">
-                    Join thousands of active students and creators in our official WhatsApp group.
+                    Connect, collaborate, and grow with thousands of African creators in the KR8 Tribe.
                   </p>
-                  <a
-                    href={getTribeWhatsApp()}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-flex items-center justify-center gap-2 w-full rounded-xl bg-green-600/30 border border-green-500/40 px-3 py-2 text-xs font-bold text-green-300 hover:bg-green-600/50 transition-colors"
+                  <Link
+                    to="/tribe"
+                    onClick={closeDrawer}
+                    className="mt-3 inline-flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-pink px-3 py-2 text-xs font-bold text-white hover:opacity-95 transition-opacity"
                   >
-                    <span>💬 Join Official WhatsApp</span>
-                  </a>
+                    <span>✦ Explore the Tribe</span>
+                  </Link>
                 </div>
               </div>
 
@@ -462,7 +538,7 @@ export default function Navbar() {
                   </button>
                 ) : (
                   <p className="text-center text-xs text-[#8a7ba8]">
-                    KR8 Digitals &copy; 2026. Empowering Next-Gen African Creatives.
+                    KR8 Digitals &copy; 2026. <span className="font-semibold text-pink-300">Think It. KR8 It.</span>
                   </p>
                 )}
               </div>

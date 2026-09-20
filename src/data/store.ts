@@ -381,6 +381,8 @@ export type Account = {
   isPlaceholder?: boolean;
   bio?: string;
   coverPhoto?: string;
+  interests?: string[];
+  tribeGoal?: string;
   portfolio?: { type: "image" | "video" | "link"; url: string; title: string }[];
   following?: string[];
   followers?: string[];
@@ -1019,8 +1021,15 @@ export function adminRegisterStudent(input: {
   return { ok: true, student };
 }
 
-export function registerTribe(input: { name: string; email: string; phone: string; country: string; password: string }):
-  { ok: boolean; error?: string; member?: Account } {
+export function registerTribe(input: {
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  password: string;
+  interests?: string[];
+  reason?: string;
+}): { ok: boolean; error?: string; member?: Account } {
   const accts = getAccounts();
   const email = normalizeEmail(input.email);
   const phone = normalizePhone(input.phone);
@@ -1042,10 +1051,29 @@ export function registerTribe(input: { name: string; email: string; phone: strin
 
   const n = accts.filter((a) => a.type === "tribe").length + 1;
   const member: Account = {
-    type: "tribe", id: `TRIBE-${String(n).padStart(4, "0")}`,
-    name: input.name.trim(), email, phone, country: input.country,
-    vip: false, points: 0, attendanceAccepted: 0, submissions: 0, referrals: 0,
-    graduated: false, avatar: "", joined: Date.now(), password: input.password, isPlaceholder: false, portfolio: [], following: [], followers: [], messagePrivacy: "Anyone", admin: getRecognizedAdmin(phone, email),
+    type: "tribe",
+    id: `TRIBE-${String(n).padStart(4, "0")}`,
+    name: input.name.trim(),
+    email,
+    phone,
+    country: input.country,
+    interests: input.interests && input.interests.length > 0 ? input.interests : ["General Creative Track"],
+    tribeGoal: input.reason || "Learning & Collaborating in Tribe",
+    vip: false,
+    points: 25, // bonus 25 welcome community XP
+    attendanceAccepted: 0,
+    submissions: 0,
+    referrals: 0,
+    graduated: false,
+    avatar: "",
+    joined: Date.now(),
+    password: input.password,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+    admin: getRecognizedAdmin(phone, email),
   };
   accts.push(member);
   saveAccounts(accts);
@@ -1135,7 +1163,7 @@ export function verifyId(id: string): { ok: boolean; account?: Account } {
 /* ---------------- Live feed ---------------- */
 export type FeedItem = {
   id: string;
-  kind: "submission" | "attendance" | "graduation" | "registration" | "tribe" | "blog" | "project";
+  kind: "submission" | "attendance" | "graduation" | "registration" | "tribe" | "blog" | "project" | "stream_live" | "stream_ended";
   name: string; skill: string; avatar: string; ts: number;
 };
 const feedActions: Record<FeedItem["kind"], string> = {
@@ -1146,6 +1174,8 @@ const feedActions: Record<FeedItem["kind"], string> = {
   tribe: "joined the Tribe",
   blog: "published a new post",
   project: "shipped a client project",
+  stream_live: "is broadcasting live right now",
+  stream_ended: "completed a live masterclass (restream available)",
 };
 export function feedAction(k: FeedItem["kind"]) {
   return feedActions[k];
@@ -1332,22 +1362,249 @@ export function savePortfolio(items: typeof PORTFOLIO) {
   save("kr8_portfolio_v3", items);
 }
 
-export const BLOG = [
-  { id: "b1", title: "5 Digital Skills Nigerian Employers Are Hiring For in 2026", excerpt: "The market shifted again. Here are the skills turning learners into earners this year.", author: "Timfire", date: "Feb 10, 2026", category: "Digital Skills", readTime: "6 min", img: IMG.student, source: "admin" as const, pinned: true },
-  { id: "b2", title: "How KR8 AI Became Every Student's Late-Night Mentor", excerpt: "Inside the always-on assistant helping thousands of creators unblock, plan and ship.", author: "KR8 Team", date: "Feb 05, 2026", category: "AI", readTime: "4 min", img: IMG.collab2, source: "admin" as const, pinned: false },
-  { id: "b3", title: "No Status Barriers: Why the Tribe Works", excerpt: "Community isn't a feature — it's the whole point. A look at how belonging drives results.", author: "Amara Okeke", date: "Jan 28, 2026", category: "Community", readTime: "5 min", img: IMG.heroGroup, source: "student" as const, pinned: false },
-  { id: "b4", title: "From Free Class to First Client: A Graduate Story", excerpt: "How one video editing student landed paid work three weeks after graduation.", author: "Ngozi Ade", date: "Jan 20, 2026", category: "Company News", readTime: "7 min", img: IMG.collab, source: "student" as const, pinned: false },
+export type BlogComment = {
+  id: string;
+  author: string;
+  authorId?: string;
+  avatar?: string;
+  text: string;
+  date: string;
+};
+
+export type BlogPost = {
+  id: string;
+  title: string;
+  excerpt: string;
+  content?: string;
+  author: string;
+  authorId?: string;
+  authorAvatar?: string;
+  date: string;
+  category: string;
+  readTime: string;
+  img?: string;
+  videoUrl?: string;
+  mediaType?: "text" | "image" | "video";
+  source: "admin" | "student" | "tribe";
+  pinned?: boolean;
+  isPublic?: boolean;
+  likes: number;
+  likedBy?: string[];
+  comments: BlogComment[];
+};
+
+export const BLOG: BlogPost[] = [
+  {
+    id: "b1",
+    title: "5 Digital Skills Nigerian Employers Are Hiring For in 2026",
+    excerpt: "The market shifted again. Here are the skills turning learners into earners this year.",
+    content: "The market shifted again. Here are the skills turning learners into earners this year. From AI workflow automation and motion design to high-converting UI/UX and fullstack web engineering, African companies and international clients are actively hunting for creators who can think strategically and ship fast.\n\nAt KR8 Digitals, we teach these core high-leverage tracks completely free, backing every lesson with practical, portfolio-ready projects.",
+    author: "Timfire",
+    authorId: "KR8-FOUNDER-TIMFIRE",
+    date: "Feb 10, 2026",
+    category: "Digital Skills",
+    readTime: "6 min",
+    img: IMG.student,
+    mediaType: "image",
+    source: "admin",
+    pinned: true,
+    isPublic: true,
+    likes: 42,
+    likedBy: [],
+    comments: [
+      { id: "c1", author: "Grant Gideon", text: "Motion design and AI automation have literally 3xed my client inquiries this quarter!", date: "Feb 11, 2026" },
+      { id: "c2", author: "Elizabeth Oyejobi", text: "The advice on building proof-of-work before pitching changed everything for me.", date: "Feb 12, 2026" },
+    ],
+  },
+  {
+    id: "b2",
+    title: "How KR8 AI Became Every Student's Late-Night Mentor",
+    excerpt: "Inside the always-on assistant helping thousands of creators unblock, plan and ship.",
+    content: "Inside the always-on assistant helping thousands of creators unblock, plan and ship. When you are debugging code at 2 AM or polishing keyframes for a client deliverable, having an instant senior mentor changes the learning curve completely.\n\nKR8 AI is fine-tuned to encourage critical creative thinking while solving technical road-blocks in real time.",
+    author: "KR8 Team",
+    authorId: "KR8-TEAM",
+    date: "Feb 05, 2026",
+    category: "AI",
+    readTime: "4 min",
+    img: IMG.collab2,
+    mediaType: "image",
+    source: "admin",
+    pinned: false,
+    isPublic: true,
+    likes: 31,
+    likedBy: [],
+    comments: [],
+  },
+  {
+    id: "b3",
+    title: "No Status Barriers: Why the Tribe Works",
+    excerpt: "Community isn't a feature — it's the whole point. A look at how belonging drives results.",
+    content: "Community isn't a feature — it's the whole point. A look at how belonging drives results. When learners share their messy in-progress designs, ask vulnerable questions, and celebrate small wins without fear of gatekeeping, skill development accelerates at an unprecedented pace.",
+    author: "Amara Okeke",
+    authorId: "KR8-STUDENT-0012",
+    date: "Jan 28, 2026",
+    category: "Community",
+    readTime: "5 min",
+    img: IMG.heroGroup,
+    mediaType: "image",
+    source: "student",
+    pinned: false,
+    isPublic: true,
+    likes: 27,
+    likedBy: [],
+    comments: [
+      { id: "c3", author: "Maduka Samuel", text: "100% truth. The feedback in the tribe is sharper than most paid masterclasses.", date: "Jan 29, 2026" },
+    ],
+  },
+  {
+    id: "b4",
+    title: "From Free Class to First Client: A Graduate Story",
+    excerpt: "How one video editing student landed paid work three weeks after graduation.",
+    content: "How one video editing student landed paid work three weeks after graduation. Armed with capstone projects and client-ready reel templates from the KR8 curriculum, she reached out to local brands with tailored spec videos. Within 21 days, she closed two recurring retainers.",
+    author: "Ngozi Ade",
+    authorId: "KR8-STUDENT-0044",
+    date: "Jan 20, 2026",
+    category: "Company News",
+    readTime: "7 min",
+    img: IMG.collab,
+    mediaType: "image",
+    source: "student",
+    pinned: false,
+    isPublic: true,
+    likes: 38,
+    likedBy: [],
+    comments: [],
+  },
 ];
 
-export function getBlogPosts() {
-  return load<typeof BLOG>("kr8_blog_posts_v2", BLOG);
+export function getBlogPosts(): BlogPost[] {
+  const loaded = load<BlogPost[]>("kr8_blog_posts_v4", BLOG);
+  return loaded.map((post) => ({
+    ...post,
+    likes: typeof post.likes === "number" ? post.likes : 0,
+    likedBy: Array.isArray(post.likedBy) ? post.likedBy : [],
+    comments: Array.isArray(post.comments) ? post.comments : [],
+    isPublic: post.isPublic ?? true,
+    mediaType: post.mediaType ?? (post.img ? "image" : "text"),
+  }));
 }
 
-export function saveBlogPosts(posts: typeof BLOG) {
-  save("kr8_blog_posts_v2", posts);
+export function saveBlogPosts(posts: BlogPost[]) {
+  save("kr8_blog_posts_v4", posts);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:blog-updated"));
   }
+}
+
+export function createBlogPost(postInput: {
+  title: string;
+  excerpt: string;
+  content: string;
+  author: string;
+  authorId: string;
+  authorAvatar?: string;
+  category: string;
+  mediaType: "text" | "image" | "video";
+  img?: string;
+  videoUrl?: string;
+  source: "admin" | "student" | "tribe";
+  isPublic: boolean;
+}): BlogPost {
+  const posts = getBlogPosts();
+  const id = `post-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const dateStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const words = (postInput.content || postInput.excerpt || "").trim().split(/\s+/).length;
+  const readTime = `${Math.max(1, Math.ceil(words / 150))} min`;
+
+  const newPost: BlogPost = {
+    id,
+    title: postInput.title.trim(),
+    excerpt: postInput.excerpt.trim() || postInput.content.slice(0, 140).trim() + "...",
+    content: postInput.content.trim(),
+    author: postInput.author,
+    authorId: postInput.authorId,
+    authorAvatar: postInput.authorAvatar,
+    date: dateStr,
+    category: postInput.category || "Community",
+    readTime,
+    img: postInput.img,
+    videoUrl: postInput.videoUrl,
+    mediaType: postInput.mediaType,
+    source: postInput.source,
+    pinned: false,
+    isPublic: postInput.isPublic,
+    likes: 0,
+    likedBy: [],
+    comments: [],
+  };
+
+  const updated = [newPost, ...posts];
+  saveBlogPosts(updated);
+  return newPost;
+}
+
+export function toggleLikePost(postId: string, userKey: string): { likes: number; liked: boolean } {
+  const posts = getBlogPosts();
+  const post = posts.find((p) => p.id === postId);
+  if (!post) return { likes: 0, liked: false };
+
+  const likedBy = post.likedBy || [];
+  const alreadyLiked = likedBy.includes(userKey);
+  const nextLikedBy = alreadyLiked ? likedBy.filter((k) => k !== userKey) : [...likedBy, userKey];
+  const nextLikes = Math.max(0, alreadyLiked ? post.likes - 1 : post.likes + 1);
+
+  const updated = posts.map((p) =>
+    p.id === postId ? { ...p, likes: nextLikes, likedBy: nextLikedBy } : p
+  );
+  saveBlogPosts(updated);
+  return { likes: nextLikes, liked: !alreadyLiked };
+}
+
+export function addPostComment(
+  postId: string,
+  commentInput: { author: string; authorId?: string; avatar?: string; text: string }
+): BlogComment | null {
+  const posts = getBlogPosts();
+  const post = posts.find((p) => p.id === postId);
+  if (!post) return null;
+
+  const newComment: BlogComment = {
+    id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    author: commentInput.author.trim(),
+    authorId: commentInput.authorId,
+    avatar: commentInput.avatar,
+    text: commentInput.text.trim(),
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+  };
+
+  const updated = posts.map((p) =>
+    p.id === postId ? { ...p, comments: [...(p.comments || []), newComment] } : p
+  );
+  saveBlogPosts(updated);
+  return newComment;
+}
+
+export function toggleFollowUser(currentUserId: string, targetIdOrName: string): boolean {
+  const accts = getAccounts();
+  const current = accts.find((a) => a.id === currentUserId || a.email === currentUserId);
+  if (!current) return false;
+
+  const target = accts.find((a) => a.id === targetIdOrName || a.name === targetIdOrName);
+  const targetKey = target ? target.id : targetIdOrName;
+
+  const following = current.following || [];
+  const isFollowing = following.includes(targetKey);
+  const nextFollowing = isFollowing ? following.filter((id) => id !== targetKey) : [...following, targetKey];
+
+  updateAccount(current.id, { following: nextFollowing });
+
+  if (target) {
+    const targetFollowers = target.followers || [];
+    const nextFollowers = isFollowing ? targetFollowers.filter((id) => id !== current.id) : [...targetFollowers, current.id];
+    updateAccount(target.id, { followers: nextFollowers });
+  }
+
+  return !isFollowing;
 }
 
 export function saveVerifyRemark(studentId: string, remark: string) {
@@ -1397,10 +1654,10 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     schoolOrRole: "Federal University Dutse",
     skill: "Graphic Design",
     caption: "KR8 Digitals is a digital academy that gives skills for free. The community helps you keep up with assignments and transition to professional design.",
-    img: "/videos/testimonial1_poster.jpg",
-    video: "/videos/testimonial1.mp4",
+    img: "/videos/testimonial_grant_gideon_poster.jpg",
+    video: "/videos/testimonial_grant_gideon.mp4",
     duration: 85,
-    createdAt: 1726000000000 + 300000,
+    createdAt: 1726000000000 + 700000,
     captions: [
       { start: 0.0, end: 2.8, text: "My name is Grant Gideon, a student of Federal University Dutse." },
       { start: 3.0, end: 5.8, text: "And this is a shout-out to KR8 Digitals Tribe." },
@@ -1422,10 +1679,10 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     schoolOrRole: "Cohort Student",
     skill: "Tech & Design",
     caption: "Learning digital skills with KR8 Digitals has been life-changing. Practical mentorship, real project execution, and great community.",
-    img: "/videos/testimonial3_poster.jpg",
-    video: "/videos/testimonial3.mp4",
+    img: "/videos/testimonial_elizabeth_oyejobi_poster.jpg",
+    video: "/videos/testimonial_elizabeth_oyejobi.mp4",
     duration: 40,
-    createdAt: 1726000000000 + 200000,
+    createdAt: 1726000000000 + 600000,
     captions: [
       { start: 0.0, end: 4.5, text: "Hello everyone, my name is Elizabeth Oyejobi, and I am proud to be a student at KR8 Digitals." },
       { start: 4.5, end: 10.5, text: "Learning practical digital skills here has been an eye-opening journey for me." },
@@ -1441,10 +1698,10 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     schoolOrRole: "Cohort Graduate",
     skill: "Graphic Design",
     caption: "Zero cost for training, graduation, or certificate. The tutors guided me all the way — invite you all to my graduation!",
-    img: "/videos/testimonial2_poster.jpg",
-    video: "/videos/testimonial2.mp4",
-    duration: 60,
-    createdAt: 1726000000000 + 100000,
+    img: "/videos/testimonial_maduka_samuel_poster.jpg",
+    video: "/videos/testimonial_maduka_samuel.mp4",
+    duration: 65,
+    createdAt: 1726000000000 + 500000,
     captions: [
       { start: 0.0, end: 3.2, text: "My name is Maduka Samuel, one of the cohort students at KR8 Digitals." },
       { start: 3.2, end: 8.5, text: "Before I got here, I was convinced by a friend to try KR8 Digitals." },
@@ -1456,7 +1713,85 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
       { start: 38.5, end: 45.0, text: "No cost for certificates — it is truly an amazing learning experience." },
       { start: 45.0, end: 50.0, text: "I highly recommend everyone to choose KR8 Digitals." },
       { start: 50.0, end: 56.5, text: "Lastly, I want to invite you all to my graduation coming up very soon!" },
-      { start: 56.5, end: 60.0, text: "I'll be very happy to see you all there. Thank you, and have a nice day!" },
+      { start: 56.5, end: 65.0, text: "I'll be very happy to see you all there. Thank you, and have a nice day!" },
+    ],
+  },
+  {
+    id: "vid-4",
+    name: "Afolayan Grace Taiwo",
+    schoolOrRole: "Cohort Student",
+    skill: "Digital Skills & Strategy",
+    caption: "Learning with KR8 transformed how I approach creative problem solving and digital growth. The tutors give real-time feedback.",
+    img: "/videos/testimonial_afolayan_grace_poster.jpg",
+    video: "/videos/testimonial_afolayan_grace.mp4",
+    duration: 102,
+    createdAt: 1726000000000 + 400000,
+    captions: [
+      { start: 0.0, end: 5.0, text: "My name is Afolayan Grace Taiwo, a student at KR8 Digitals." },
+      { start: 5.0, end: 16.0, text: "KR8 Digitals has really opened my eyes to the power of practical digital skills and teamwork." },
+      { start: 16.0, end: 32.0, text: "The lessons are direct, hands-on, and the tutors give real-time feedback on your assignments." },
+      { start: 32.0, end: 50.0, text: "If you want to build a career in tech or design, you don't need millions — KR8 teaches free." },
+      { start: 50.0, end: 70.0, text: "Being part of this creative tribe keeps you accountable and motivated every single week." },
+      { start: 70.0, end: 88.0, text: "I am grateful to KR8 Digitals and the leadership for giving us this life-changing opportunity." },
+      { start: 88.0, end: 102.0, text: "Join the KR8 Tribe today, level up your skills, and let's win together!" },
+    ],
+  },
+  {
+    id: "vid-5",
+    name: "Bio Nicz",
+    schoolOrRole: "Cohort Creator",
+    skill: "Video Editing & Content",
+    caption: "From raw footage to professional storytelling — KR8 taught me the industry workflow and pushed me to produce client-grade work.",
+    img: "/videos/testimonial_bio_nicz_poster.jpg",
+    video: "/videos/testimonial_bio_nicz.mp4",
+    duration: 191,
+    createdAt: 1726000000000 + 300000,
+    captions: [
+      { start: 0.0, end: 8.0, text: "Hello everyone, my name is Bio Nicz, video editor and creator at KR8 Digitals." },
+      { start: 8.0, end: 25.0, text: "Learning video editing here took my skills from basic cuts to storytelling and high-impact pacing." },
+      { start: 25.0, end: 55.0, text: "The community pushes you to produce client-grade work, and the mentors break down complex tools." },
+      { start: 55.0, end: 85.0, text: "Every project we handled was built to prepare us for real client contracts and the freelance market." },
+      { start: 85.0, end: 125.0, text: "KR8 Digitals is genuinely building the next generation of creative powerhouses across Africa." },
+      { start: 125.0, end: 165.0, text: "Special appreciation to our instructors, Timfire, and the entire leadership team for this vision." },
+      { start: 165.0, end: 191.0, text: "If you have a creative dream, take action now — start learning free with KR8 Digitals." },
+    ],
+  },
+  {
+    id: "vid-6",
+    name: "Ibeh Chinenye Helen",
+    schoolOrRole: "Cohort Graduate",
+    skill: "Brand Design & Tech",
+    caption: "The live classes, design reviews, and tutor guidance gave me the confidence to handle client work and ship real designs.",
+    img: "/videos/testimonial_ibeh_chinenye_poster.jpg",
+    video: "/videos/testimonial_ibeh_chinenye.mp4",
+    duration: 91,
+    createdAt: 1726000000000 + 200000,
+    captions: [
+      { start: 0.0, end: 6.0, text: "Hello, my name is Ibeh Chinenye Helen, learning brand design with KR8 Digitals." },
+      { start: 6.0, end: 22.0, text: "The journey so far has been nothing short of transformative for my creative thinking." },
+      { start: 22.0, end: 45.0, text: "The live classes, design reviews, and tutor guidance gave me the confidence to handle client work." },
+      { start: 45.0, end: 68.0, text: "You are not alone in the tribe; everyone helps you solve design blocks and finish your assignments." },
+      { start: 68.0, end: 82.0, text: "Thank you KR8 Digitals for providing free, world-class education for passionate African youths." },
+      { start: 82.0, end: 91.0, text: "Don't sleep on this opportunity — register and join the tribe today!" },
+    ],
+  },
+  {
+    id: "vid-7",
+    name: "Obo Peter",
+    schoolOrRole: "Cohort Student",
+    skill: "Video Editing & Motion",
+    caption: "The consistency and practical drills at KR8 helped me master video editing, reels, and promo clips with speed and precision.",
+    img: "/videos/testimonial_obo_peter_poster.jpg",
+    video: "/videos/testimonial_obo_peter.mp4",
+    duration: 86,
+    createdAt: 1726000000000 + 100000,
+    captions: [
+      { start: 0.0, end: 7.0, text: "My name is Obo Peter, a video editing and motion student at KR8 Digitals." },
+      { start: 7.0, end: 24.0, text: "Before joining KR8, I struggled with video editing software and project consistency." },
+      { start: 24.0, end: 45.0, text: "The hands-on curriculum, weekly drills, and supportive tutors changed everything for me." },
+      { start: 45.0, end: 68.0, text: "I can now edit professional videos, reels, and promo clips with speed and precision." },
+      { start: 68.0, end: 80.0, text: "A massive shout-out to KR8 Digitals for giving us the best training without paying a dime." },
+      { start: 80.0, end: 86.0, text: "KR8 Digitals is the real deal — join us today!" },
     ],
   },
 ];
@@ -1507,14 +1842,50 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
     createdAt: Date.now() - 3600000 * 4,
     likes: 15,
   },
+  {
+    id: "vc-6",
+    videoId: "vid-4",
+    authorName: "Timfire",
+    authorId: "KR8-FOUNDER",
+    comment: "Grace, watching your strategic growth and problem solving during the cohort has been remarkable. Keep setting the pace! 🌟",
+    createdAt: Date.now() - 3600000 * 12,
+    likes: 12,
+  },
+  {
+    id: "vc-7",
+    videoId: "vid-5",
+    authorName: "Timfire",
+    authorId: "KR8-FOUNDER",
+    comment: "Top-tier video production right here Bio Nicz! Your pacing and narrative editing are world-class 🎬🔥",
+    createdAt: Date.now() - 3600000 * 8,
+    likes: 21,
+  },
+  {
+    id: "vc-8",
+    videoId: "vid-6",
+    authorName: "Tunde Bello",
+    authorId: "KR8-26-C002",
+    comment: "Helen's brand design portfolio during the final review blew all of us away! Pure quality.",
+    createdAt: Date.now() - 3600000 * 6,
+    likes: 9,
+  },
+  {
+    id: "vc-9",
+    videoId: "vid-7",
+    authorName: "Stevenson Uche",
+    authorId: "KR8-COFOUNDER",
+    comment: "Speed, clarity, and precision. Obo Peter is proof that daily drills produce industry-ready creators! 🚀",
+    createdAt: Date.now() - 3600000 * 2,
+    likes: 14,
+  },
 ];
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v4";
-const VIDEO_COMMENT_KEY = "kr8_video_comments_v2";
+const TESTIMONIAL_KEY = "kr8_testimonials_v7";
+const VIDEO_COMMENT_KEY = "kr8_video_comments_v3";
 
 export function getTestimonials(): Testimonial[] {
   const loaded = load<Testimonial[]>(TESTIMONIAL_KEY, REAL_STUDENT_TESTIMONIALS);
-  if (!loaded || !loaded.length || !loaded.some((item) => item.video && item.video.includes("testimonial"))) {
+  if (!loaded || !loaded.length || loaded.length < REAL_STUDENT_TESTIMONIALS.length || !loaded.some((item) => item.video && item.video.includes("testimonial_grant_gideon"))) {
     save(TESTIMONIAL_KEY, REAL_STUDENT_TESTIMONIALS);
     return REAL_STUDENT_TESTIMONIALS;
   }
@@ -1628,4 +1999,600 @@ export function tribeCount(): number {
 }
 export function studentCount(): number {
   return 1200 + getStudents().length;
+}
+
+// ==========================================
+// LIVE STREAMING & BROADCAST SYSTEM
+// ==========================================
+
+export type StreamRole = "host" | "co-host" | "moderator" | "speaker" | "viewer";
+
+export type LiveStreamParticipant = {
+  id: string;
+  name: string;
+  avatar?: string;
+  role: StreamRole;
+  isMuted?: boolean;
+  isVideoOn?: boolean;
+  joinedAt: number;
+};
+
+export type LiveChatMessage = {
+  id: string;
+  streamId: string;
+  senderId: string;
+  senderName: string;
+  senderRole: StreamRole;
+  senderBadge?: string;
+  text: string;
+  createdAt: number;
+  isPinned?: boolean;
+  isDeleted?: boolean;
+};
+
+export type LiveStreamTask = {
+  id: string;
+  targetUserId: string;
+  targetUserName: string;
+  task: string;
+  points: number;
+  status: "pending" | "completed";
+  assignedAt: number;
+};
+
+export type LiveStream = {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  hostId: string;
+  hostName: string;
+  hostAvatar?: string;
+  visibility: "public" | "private";
+  accessKey?: string;
+  isLive: boolean;
+  startedAt: number;
+  endedAt?: number;
+  viewerCount: number;
+  peakViewers: number;
+  quality: "1080p60" | "720p" | "audio-only";
+  videoUrl?: string;
+  posterUrl?: string;
+  pinnedNotice?: string;
+  promotedModerators: string[];
+  promotedSpeakers: string[];
+  viewers: LiveStreamParticipant[];
+  assignedTasks: LiveStreamTask[];
+  recognizedParticipants: {
+    userId: string;
+    userName: string;
+    reason: string;
+    points: number;
+  }[];
+};
+
+export type StreamReplay = {
+  id: string;
+  streamId: string;
+  title: string;
+  category: string;
+  description: string;
+  hostName: string;
+  hostAvatar?: string;
+  visibility?: "public" | "private";
+  accessKey?: string;
+  date: string;
+  durationMinutes: number;
+  peakViewers: number;
+  realViewersCount?: number;
+  thumbnail: string;
+  videoUrl: string;
+  messagesCount: number;
+  requiresAccount: boolean;
+  tasksCompleted?: number;
+  recognizedEngagers?: {
+    name: string;
+    badge: string;
+    points: number;
+  }[];
+};
+
+const LIVE_STREAM_KEY = "kr8_live_stream_v2";
+const LIVE_CHAT_KEY = "kr8_live_chat_v2";
+const STREAM_REPLAYS_KEY = "kr8_stream_replays_v2";
+const LAST_ENDED_STREAM_KEY = "kr8_last_ended_stream_v2";
+
+export function getLastEndedStream(): StreamReplay | null {
+  return load<StreamReplay | null>(LAST_ENDED_STREAM_KEY, null);
+}
+
+export function canUserHostStream(account: Account | null | undefined): boolean {
+  if (!account) return false;
+  if (account.type === "founder" || account.type === "co-founder") return true;
+  if (account.admin) {
+    const role = account.admin.role;
+    return role === "ultimate" || role === "admin" || role === "coach";
+  }
+  return false;
+}
+
+export const INITIAL_STREAM_REPLAYS: StreamReplay[] = [
+  {
+    id: "replay-1",
+    streamId: "stream-prev-01",
+    title: "Masterclass: High-Income Graphic Design & Brand Identity in 2026",
+    category: "Graphic Design",
+    description: "Deep dive with Founder Timfire on breaking through client objections, crafting typography systems, and packaging design projects for global clients.",
+    hostName: "Timfire (Founder & CEO)",
+    hostAvatar: "/founder_timfire.jpg",
+    date: "Sep 14, 2026",
+    durationMinutes: 54,
+    peakViewers: 348,
+    thumbnail: "/founder_timfire_wide.jpg",
+    videoUrl: "/videos/testimonial_grant_gideon.mp4",
+    messagesCount: 142,
+    requiresAccount: true,
+  },
+  {
+    id: "replay-2",
+    streamId: "stream-prev-02",
+    title: "Live Creative Jam: Motion Editing & Narrative Storytelling",
+    category: "Video Editing",
+    description: "Hands-on breakdown of pacing, sound design, and EBU loudness mixing for commercial tech reels with live community critiques.",
+    hostName: "Stevenson Uche (Co-Founder)",
+    date: "Sep 08, 2026",
+    durationMinutes: 48,
+    peakViewers: 295,
+    thumbnail: "/videos/testimonial_bio_nicz_poster.jpg",
+    videoUrl: "/videos/testimonial_bio_nicz.mp4",
+    messagesCount: 118,
+    requiresAccount: true,
+  },
+  {
+    id: "replay-3",
+    streamId: "stream-prev-03",
+    title: "Creative Career Strategy: Landing High-Paying Remote Contracts",
+    category: "Career & Mindset",
+    description: "Timfire and KR8 Coaches share actionable frameworks for African creators to build verifiable proof of work and close international retainers.",
+    hostName: "Timfire & Faculty",
+    hostAvatar: "/founder_timfire.jpg",
+    date: "Aug 30, 2026",
+    durationMinutes: 62,
+    peakViewers: 420,
+    thumbnail: "/videos/testimonial_maduka_samuel_poster.jpg",
+    videoUrl: "/videos/testimonial_maduka_samuel.mp4",
+    messagesCount: 204,
+    requiresAccount: true,
+  },
+];
+
+export function getActiveLiveStream(): LiveStream | null {
+  const stream = load<LiveStream | null>(LIVE_STREAM_KEY, null);
+  if (stream && stream.isLive) {
+    return stream;
+  }
+  return null;
+}
+
+export function saveActiveLiveStream(stream: LiveStream | null): void {
+  save(LIVE_STREAM_KEY, stream);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:live-stream-updated"));
+  }
+}
+
+export function startLiveStream(input: {
+  title: string;
+  category: string;
+  description?: string;
+  host: Account;
+  quality?: "1080p60" | "720p" | "audio-only";
+  visibility?: "public" | "private";
+  accessKey?: string;
+}): LiveStream {
+  const hostName = input.host.type === "founder" ? "Timfire" : input.host.name;
+  const isPrivate = input.visibility === "private";
+  const accessKey = isPrivate
+    ? (input.accessKey?.trim() || `KR8-${Math.floor(1000 + Math.random() * 9000)}`)
+    : undefined;
+
+  const newStream: LiveStream = {
+    id: `stream-${Date.now()}`,
+    title: input.title.trim() || "Creative Mastery Live",
+    category: input.category || "Creative Tech & Strategy",
+    description: input.description?.trim() || "Live community broadcast and interactive drill with KR8 Digitals.",
+    hostId: input.host.id,
+    hostName,
+    hostAvatar: input.host.avatar || (input.host.type === "founder" ? "/founder_timfire.jpg" : undefined),
+    visibility: isPrivate ? "private" : "public",
+    accessKey,
+    isLive: true,
+    startedAt: Date.now(),
+    viewerCount: 1, // Real viewers count only: starts at 1 (the host)
+    peakViewers: 1,
+    quality: input.quality || "1080p60",
+    videoUrl: "",
+    posterUrl: "/founder_timfire_wide.jpg",
+    pinnedNotice: isPrivate
+      ? "🔒 Private Broadcast Session. Only invited participants with the key have access."
+      : "Welcome to the KR8 Live Stream! Engage in chat to receive tasks and earn XP.",
+    promotedModerators: [],
+    promotedSpeakers: [],
+    viewers: [
+      {
+        id: input.host.id,
+        name: hostName,
+        avatar: input.host.avatar,
+        role: "host",
+        joinedAt: Date.now(),
+      },
+    ],
+    assignedTasks: [],
+    recognizedParticipants: [],
+  };
+
+  saveActiveLiveStream(newStream);
+
+  // Initialize initial welcome messages in chat
+  const initMsg: LiveChatMessage = {
+    id: `msg-${Date.now()}`,
+    streamId: newStream.id,
+    senderId: input.host.id,
+    senderName: hostName,
+    senderRole: "host",
+    senderBadge: "👑 Host & Founder",
+    text: `Welcome everyone to "${newStream.title}"! Ask your questions and let's build together.`,
+    createdAt: Date.now(),
+    isPinned: true,
+  };
+  saveLiveChatMessages(newStream.id, [initMsg]);
+
+  // Add event to Live Tribe Feed
+  addFeed({
+    kind: "stream_live",
+    name: hostName,
+    skill: newStream.title,
+    avatar: newStream.hostAvatar || "/founder_timfire.jpg",
+  });
+
+  return newStream;
+}
+
+export function endActiveLiveStream(recordedBlobUrl?: string): StreamReplay | null {
+  const stream = getActiveLiveStream();
+  if (!stream) return null;
+
+  const endedAt = Date.now();
+  const durationMinutes = Math.max(1, Math.round((endedAt - stream.startedAt) / 60000));
+  const messages = getLiveChatMessages(stream.id);
+
+  // Compute recognized engagers
+  const recognizedMap = new Map<string, { name: string; badge: string; points: number }>();
+
+  // From recognized participants list
+  (stream.recognizedParticipants || []).forEach((rp) => {
+    recognizedMap.set(rp.userId, {
+      name: rp.userName,
+      badge: rp.reason,
+      points: rp.points,
+    });
+  });
+
+  // From completed tasks
+  (stream.assignedTasks || []).filter((t) => t.status === "completed").forEach((t) => {
+    if (!recognizedMap.has(t.targetUserId)) {
+      recognizedMap.set(t.targetUserId, {
+        name: t.targetUserName,
+        badge: "Completed Stream Drill",
+        points: t.points,
+      });
+    }
+  });
+
+  // From chat activity if not already recognized
+  messages.filter((m) => m.senderRole !== "host").slice(0, 3).forEach((m) => {
+    if (!recognizedMap.has(m.senderId)) {
+      recognizedMap.set(m.senderId, {
+        name: m.senderName,
+        badge: "Active Chat Contributor",
+        points: 25,
+      });
+    }
+  });
+
+  const recognizedEngagers = Array.from(recognizedMap.values());
+  const tasksCompleted = (stream.assignedTasks || []).filter((t) => t.status === "completed").length;
+
+  // Use recorded blob URL if available, otherwise fallback to recorded video
+  const videoUrl = recordedBlobUrl || stream.videoUrl || "/videos/testimonial_grant_gideon.mp4";
+
+  // Archive as recorded replay
+  const replay: StreamReplay = {
+    id: `replay-${Date.now()}`,
+    streamId: stream.id,
+    title: stream.title,
+    category: stream.category,
+    description: stream.description,
+    hostName: stream.hostName,
+    hostAvatar: stream.hostAvatar,
+    visibility: stream.visibility,
+    accessKey: stream.accessKey,
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    durationMinutes,
+    peakViewers: Math.max(stream.peakViewers, stream.viewers?.length || 1),
+    realViewersCount: stream.viewers?.length || 1,
+    thumbnail: stream.posterUrl || "/founder_timfire_wide.jpg",
+    videoUrl,
+    messagesCount: messages.length,
+    requiresAccount: true,
+    tasksCompleted,
+    recognizedEngagers,
+  };
+
+  const replays = getStreamReplays();
+  saveStreamReplays([replay, ...replays]);
+  save(LAST_ENDED_STREAM_KEY, replay);
+
+  // Turn off active live stream
+  saveActiveLiveStream(null);
+
+  // Add event to Live Tribe Feed
+  addFeed({
+    kind: "stream_ended",
+    name: stream.hostName,
+    skill: stream.title,
+    avatar: stream.hostAvatar || "/founder_timfire.jpg",
+  });
+
+  return replay;
+}
+
+export function joinStreamViewer(streamId: string, participant: LiveStreamParticipant): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+
+  const existing = stream.viewers || [];
+  const idx = existing.findIndex((v) => v.id === participant.id);
+  let nextViewers = [...existing];
+  if (idx >= 0) {
+    nextViewers[idx] = { ...nextViewers[idx], ...participant };
+  } else {
+    nextViewers.push(participant);
+  }
+
+  const viewerCount = nextViewers.length;
+  const peakViewers = Math.max(stream.peakViewers, viewerCount);
+  updateLiveStream({ viewers: nextViewers, viewerCount, peakViewers });
+}
+
+export function leaveStreamViewer(streamId: string, participantId: string): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+
+  const existing = stream.viewers || [];
+  // Keep host always
+  if (participantId === stream.hostId) return;
+  const nextViewers = existing.filter((v) => v.id !== participantId);
+  const viewerCount = Math.max(1, nextViewers.length);
+  updateLiveStream({ viewers: nextViewers, viewerCount });
+}
+
+export function assignTaskToViewer(
+  streamId: string,
+  input: {
+    targetUserId: string;
+    targetUserName: string;
+    task: string;
+    points?: number;
+  }
+): LiveStreamTask | null {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return null;
+
+  const points = input.points || 50;
+  const newTask: LiveStreamTask = {
+    id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    targetUserId: input.targetUserId,
+    targetUserName: input.targetUserName,
+    task: input.task.trim(),
+    points,
+    status: "pending",
+    assignedAt: Date.now(),
+  };
+
+  const tasks = [...(stream.assignedTasks || []), newTask];
+  updateLiveStream({ assignedTasks: tasks });
+
+  // Broadcast announcement in chat
+  sendLiveChatMessage({
+    streamId,
+    senderId: "system",
+    senderName: "KR8 Stage Director",
+    senderRole: "moderator",
+    senderBadge: "⚡ Live Task",
+    text: `📋 TASK ASSIGNED to ${input.targetUserName}: "${input.task}" (+${points} XP upon completion!)`,
+  });
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("kr8:task-assigned", { detail: newTask }));
+  }
+
+  return newTask;
+}
+
+export function completeStreamTask(streamId: string, taskId: string): boolean {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return false;
+
+  const tasks = stream.assignedTasks || [];
+  const targetTask = tasks.find((t) => t.id === taskId);
+  if (!targetTask || targetTask.status === "completed") return false;
+
+  const updatedTasks = tasks.map((t) => (t.id === taskId ? { ...t, status: "completed" as const } : t));
+
+  // Award XP points directly to the user if they have an account
+  const acc = getAccounts().find((a) => a.id === targetTask.targetUserId);
+  if (acc) {
+    updateAccount(acc.id, { points: (acc.points || 0) + targetTask.points });
+  }
+
+  const recognized = [
+    ...(stream.recognizedParticipants || []),
+    {
+      userId: targetTask.targetUserId,
+      userName: targetTask.targetUserName,
+      reason: `Completed: ${targetTask.task.slice(0, 30)}...`,
+      points: targetTask.points,
+    },
+  ];
+
+  updateLiveStream({ assignedTasks: updatedTasks, recognizedParticipants: recognized });
+
+  // Broadcast in chat
+  sendLiveChatMessage({
+    streamId,
+    senderId: "system",
+    senderName: "KR8 Stage Director",
+    senderRole: "moderator",
+    senderBadge: "🎉 Task Completed",
+    text: `⭐ ${targetTask.targetUserName} completed their drill: "${targetTask.task}" and was awarded +${targetTask.points} XP!`,
+  });
+
+  return true;
+}
+
+export function awardPointsToStreamViewer(
+  streamId: string,
+  userId: string,
+  userName: string,
+  points: number,
+  reason: string
+): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+
+  const acc = getAccounts().find((a) => a.id === userId);
+  if (acc) {
+    updateAccount(acc.id, { points: (acc.points || 0) + points });
+  }
+
+  const recognized = [
+    ...(stream.recognizedParticipants || []),
+    {
+      userId,
+      userName,
+      reason,
+      points,
+    },
+  ];
+
+  updateLiveStream({ recognizedParticipants: recognized });
+
+  sendLiveChatMessage({
+    streamId,
+    senderId: "system",
+    senderName: "KR8 Stage Director",
+    senderRole: "moderator",
+    senderBadge: "⭐ XP Award",
+    text: `🌟 ${userName} earned +${points} XP for: ${reason}!`,
+  });
+}
+
+export function updateLiveStream(updates: Partial<LiveStream>): LiveStream | null {
+  const stream = getActiveLiveStream();
+  if (!stream) return null;
+  const updated: LiveStream = { ...stream, ...updates };
+  saveActiveLiveStream(updated);
+  return updated;
+}
+
+export function getLiveChatMessages(streamId: string): LiveChatMessage[] {
+  const all = load<Record<string, LiveChatMessage[]>>(LIVE_CHAT_KEY, {});
+  return (all[streamId] || []).filter((m) => !m.isDeleted);
+}
+
+export function saveLiveChatMessages(streamId: string, messages: LiveChatMessage[]): void {
+  const all = load<Record<string, LiveChatMessage[]>>(LIVE_CHAT_KEY, {});
+  all[streamId] = messages;
+  save(LIVE_CHAT_KEY, all);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:live-chat-updated"));
+  }
+}
+
+export function sendLiveChatMessage(input: {
+  streamId: string;
+  senderId: string;
+  senderName: string;
+  senderRole?: StreamRole;
+  senderBadge?: string;
+  text: string;
+}): LiveChatMessage {
+  const messages = getLiveChatMessages(input.streamId);
+  const newMsg: LiveChatMessage = {
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    streamId: input.streamId,
+    senderId: input.senderId,
+    senderName: input.senderName.trim() || "Guest Creator",
+    senderRole: input.senderRole || "viewer",
+    senderBadge: input.senderBadge,
+    text: input.text.trim(),
+    createdAt: Date.now(),
+  };
+
+  const updated = [...messages, newMsg];
+  saveLiveChatMessages(input.streamId, updated);
+  return newMsg;
+}
+
+export function pinLiveChatMessage(streamId: string, messageId: string): void {
+  const messages = getLiveChatMessages(streamId);
+  const updated = messages.map((m) => ({
+    ...m,
+    isPinned: m.id === messageId ? !m.isPinned : false,
+  }));
+  saveLiveChatMessages(streamId, updated);
+}
+
+export function deleteLiveChatMessage(streamId: string, messageId: string): void {
+  const messages = getLiveChatMessages(streamId);
+  const updated = messages.map((m) => (m.id === messageId ? { ...m, isDeleted: true } : m));
+  saveLiveChatMessages(streamId, updated);
+}
+
+export function promoteViewerToMod(streamId: string, participantKey: string): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+  const mods = stream.promotedModerators || [];
+  if (!mods.includes(participantKey)) {
+    updateLiveStream({ promotedModerators: [...mods, participantKey] });
+  }
+}
+
+export function promoteViewerToSpeaker(streamId: string, participantKey: string): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+  const speakers = stream.promotedSpeakers || [];
+  if (!speakers.includes(participantKey)) {
+    updateLiveStream({ promotedSpeakers: [...speakers, participantKey] });
+  }
+}
+
+export function demoteViewer(streamId: string, participantKey: string): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+  const mods = (stream.promotedModerators || []).filter((k) => k !== participantKey);
+  const speakers = (stream.promotedSpeakers || []).filter((k) => k !== participantKey);
+  updateLiveStream({ promotedModerators: mods, promotedSpeakers: speakers });
+}
+
+export function getStreamReplays(): StreamReplay[] {
+  return load<StreamReplay[]>(STREAM_REPLAYS_KEY, INITIAL_STREAM_REPLAYS);
+}
+
+export function saveStreamReplays(replays: StreamReplay[]): void {
+  save(STREAM_REPLAYS_KEY, replays);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:replays-updated"));
+  }
 }

@@ -3,6 +3,7 @@ import { findStudent, type Account } from "../data/store";
 
 type AuthCtx = {
   student: Account | null; // active account (student or tribe)
+  user: Account | null; // universal alias for active user
   signIn: (s: Account) => void;
   signOut: () => void;
   notifications: { id: string; text: string; ts: number }[];
@@ -106,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ student, signIn, signOut, notifications, addNotification, clearNotifications }}>
+    <Ctx.Provider value={{ student, user: student, signIn, signOut, notifications, addNotification, clearNotifications }}>
       {children}
     </Ctx.Provider>
   );
