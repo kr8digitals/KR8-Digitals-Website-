@@ -387,7 +387,8 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
   const [created, setCreated] = useState<Account | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const years = Array.from({ length: 40 }, (_, i) => 2010 - i);
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 1920 + 1 }, (_, i) => currentYear - i);
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
 

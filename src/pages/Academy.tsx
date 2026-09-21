@@ -1,9 +1,9 @@
 import { useState, useEffect, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   SKILLS, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
-  registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, addFeed, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders,
+  registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, addFeed, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
   type Account, type Skill,
 } from "../data/store";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Avatar, Check, ImageWithFallback } from "../components/ui";
@@ -25,10 +25,18 @@ export default function Academy() {
 const inputCls = "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none";
 
 function GuestAcademy() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn, addNotification } = useAuth();
   const [view, setView] = useState<"skills" | "auth">("skills");
   const [curriculum, setCurriculum] = useState<Skill | null>(null);
   const [preSkill, setPreSkill] = useState<string>("");
+
+  useEffect(() => {
+    if (searchParams.get("auth") === "true" || searchParams.get("register") === "true" || window.location.hash === "#auth") {
+      setView("auth");
+    }
+  }, [searchParams]);
 
   return (
     <div>
@@ -43,7 +51,7 @@ function GuestAcademy() {
               Stop letting expensive bootcamps gatekeep your future. We offer intensive, practical tracks taught by senior practitioners who ship client work every single day. Pick your track, claim your verifiable KR8 ID, and turn your craft into income.
             </p>
             <div className="mt-7 flex flex-wrap gap-3.5">
-              <GradientButton onClick={() => { setPreSkill(""); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }} className="shadow-xl shadow-pink-500/25">
+              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
                 Join the Free Cohort →
               </GradientButton>
               <GhostButton to="/verify">Verify a Graduate KR8 ID</GhostButton>
@@ -95,9 +103,9 @@ function GuestAcademy() {
                     className="flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white hover:border-pink-400/60 disabled:opacity-40"
                   >View Curriculum</button>
                   <button
-                    onClick={() => { setPreSkill(s.key); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }}
+                    onClick={() => navigate(`/register?skill=${s.key}`)}
                     disabled={!s.available || !getSkillRegistration(s.key)}
-                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 hover:scale-[1.02] transition-transform"
                   >Register</button>
                 </div>
               </Card>
@@ -148,8 +156,9 @@ function GuestAcademy() {
               }}
             />
           ) : (
-            <div className="text-center">
-              <GradientButton onClick={() => setView("auth")}>Register or Sign In →</GradientButton>
+            <div className="text-center flex flex-wrap justify-center gap-3">
+              <GradientButton to="/register">Register as Student →</GradientButton>
+              <GhostButton to="/signin">Sign In to Existing Account →</GhostButton>
             </div>
           )}
         </div>
@@ -169,7 +178,17 @@ function GuestAcademy() {
         </div>
       </section>
 
-      {curriculum && <CurriculumModal skill={curriculum} onClose={() => setCurriculum(null)} onRegister={() => { setPreSkill(curriculum.key); setCurriculum(null); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }} />}
+      {curriculum && (
+        <CurriculumModal
+          skill={curriculum}
+          onClose={() => setCurriculum(null)}
+          onRegister={() => {
+            const skillKey = curriculum.key;
+            setCurriculum(null);
+            navigate(`/register?skill=${skillKey}`);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -296,12 +315,14 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
   const submit = () => {
     setError("");
     if (!form.name || !form.email || !form.phone || !form.password || !form.skill || !form.y || !form.m || !form.d) { setError("Please fill in every field, including a password."); return; }
-    const res = registerStudent({ name: form.name, email: form.email, phone: buildPhone(form.country === "NG" ? "+234" : form.country === "GH" ? "+233" : form.country === "KE" ? "+254" : form.country === "ZA" ? "+27" : form.country === "GB" ? "+44" : form.country === "AU" ? "+61" : "+1", form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
+    const dial = countryByCode(form.country)?.dial || "+234";
+    const res = registerStudent({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
     if (!res.ok) { setError(res.error!); return; }
     setResult(res.student!);
   };
 
-  const years = Array.from({ length: 40 }, (_, i) => 2010 - i);
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 1920 + 1 }, (_, i) => currentYear - i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
@@ -339,7 +360,7 @@ function TribeForm({ onDone }: { onDone: (m: Account) => void }) {
   const submit = () => {
     setError("");
     if (!form.name || !form.email || !form.phone || !form.password) { setError("Please fill in every field, including a password."); return; }
-    const dial = form.country === "NG" ? "+234" : form.country === "GH" ? "+233" : form.country === "KE" ? "+254" : form.country === "ZA" ? "+27" : form.country === "GB" ? "+44" : form.country === "AU" ? "+61" : "+1";
+    const dial = countryByCode(form.country)?.dial || "+234";
     const res = registerTribe({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password });
     if (!res.ok) { setError(res.error!); return; }
     onDone(res.member!);
@@ -453,7 +474,7 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
       </div>
       <p className="mt-1 text-sm text-[#b8aecf]">
         {mode === "id"
-          ? "Sign in with your KR8 ID and password, or use device fingerprint."
+          ? "Sign in with your Email address or KR8 ID and password, or use device fingerprint."
           : mode === "recover"
           ? "Enter your email or phone to retrieve your ID."
           : "Verify your email and KR8 ID with a reset code."}

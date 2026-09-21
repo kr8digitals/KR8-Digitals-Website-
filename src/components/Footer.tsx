@@ -35,8 +35,10 @@ export default function Footer() {
         <div>
           <h4 className="text-sm font-bold uppercase tracking-wider text-white">Explore</h4>
           <ul className="mt-4 space-y-2 text-sm text-[#b8aecf]">
-            <li><Link to="/academy" className="hover:text-white">Academy</Link></li>
-            <li><Link to="/tribe" className="hover:text-white">KR8 Tribe</Link></li>
+            <li><Link to="/register" className="hover:text-pink-300 font-semibold text-pink-400">Start Learning Free →</Link></li>
+            <li><Link to="/signin" className="hover:text-pink-300 font-semibold text-pink-400">Sign In to Portal →</Link></li>
+            <li><Link to="/academy" className="hover:text-white">Academy Tracks</Link></li>
+            <li><Link to="/tribe#join" className="hover:text-white">KR8 Tribe</Link></li>
             <li><Link to="/agency" className="hover:text-white">KR8 Agency</Link></li>
             <li><Link to="/gallery" className="hover:text-white">Public Gallery Archive</Link></li>
             <li><Link to="/verify" className="hover:text-white">Verify a KR8 ID</Link></li>

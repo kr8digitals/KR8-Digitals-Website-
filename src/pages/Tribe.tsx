@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { IMG } from "../data/images";
 import {
@@ -6,6 +6,7 @@ import {
   registerTribe,
   buildPhone,
   updateAccount,
+  countryByCode,
 } from "../data/store";
 import { useAuth } from "../context/AuthContext";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Check, GlowImage } from "../components/ui";
@@ -60,6 +61,17 @@ export default function Tribe() {
     user?.interests && user.interests.length > 0 ? user.interests : ["Graphic Design", "Digital Skills"]
   );
 
+  useEffect(() => {
+    if (window.location.hash === "#join" || window.location.search.includes("join=true")) {
+      const el = document.getElementById("join");
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 150);
+      }
+    }
+  }, []);
+
   const inputCls =
     "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none";
 
@@ -89,20 +101,7 @@ export default function Tribe() {
       setErr("Please fill in full name, email, phone number, and a password.");
       return;
     }
-    const dial =
-      form.country === "NG"
-        ? "+234"
-        : form.country === "GH"
-        ? "+233"
-        : form.country === "KE"
-        ? "+254"
-        : form.country === "ZA"
-        ? "+27"
-        : form.country === "GB"
-        ? "+44"
-        : form.country === "AU"
-        ? "+61"
-        : "+1";
+    const dial = countryByCode(form.country)?.dial || "+234";
 
     const res = registerTribe({
       name: form.name,

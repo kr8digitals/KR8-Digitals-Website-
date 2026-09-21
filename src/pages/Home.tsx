@@ -25,8 +25,12 @@ function CountUp({ end, suffix = "" }: { end: number; suffix?: string }) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") {
+      setN(end);
+      return;
+    }
     const obs = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !seen) {
+      if (entries[0]?.isIntersecting && !seen) {
         setSeen(true);
         const dur = 1200, start = performance.now();
         const tick = (now: number) => {
@@ -49,14 +53,14 @@ const pillars = [
     label: "The Academy",
     title: "Zero Tuition. Pure Craft.",
     desc: "Intensive week-by-week cohorts in Graphic Design, Web Engineering, and Video Editing. Real tutors, live feedback, verifiable graduation certificates — 100% free.",
-    to: "/academy",
+    to: "/register",
   },
   {
     icon: "users" as const,
     label: "The Tribe",
     title: "Never Build Alone Again.",
     desc: "An unbroken African creative family. Share messy in-progress drafts, find collaborators, exchange paid gigs, and lift each other into high-income careers.",
-    to: "/tribe",
+    to: "/tribe#join",
   },
   {
     icon: "video" as const,
@@ -86,117 +90,125 @@ function GuestHome() {
         {/* Dynamic Quiet Background Canvas & Ambient Floating Objects */}
         <HeroInteractiveCanvas />
 
-        <div className="hero-container relative z-10 mx-auto grid max-w-7xl items-center gap-8 md:gap-12 px-5 lg:grid-cols-12">
-          {/* Left Column: Typography, Bulletins, CTAs & Glass Stats */}
-          <div className="hero-content rise-in lg:col-span-7">
-            {/* Institution Badge with live pulsing status — Centered in the middle on desktop, laptop & mobile, 1 line on mobile */}
-            <div className="flex w-full justify-center mb-3 sm:mb-4">
-              <div className="hero-badge inline-flex items-center justify-center gap-2 rounded-full border border-pink-500/30 bg-gradient-to-r from-pink-500/15 via-purple-500/15 to-transparent px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 whitespace-nowrap text-center">
-                <span className="relative flex h-2 w-2 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pink-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-pink-500" />
-                </span>
-                <span className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 whitespace-nowrap overflow-hidden text-ellipsis">
-                  Unified Creative Institution & Digital Agency
-                </span>
-              </div>
-            </div>
-
-            {/* Headline Statement with High-Precision Bulletins */}
-            <h1 className="hero-headline font-display mt-3 sm:mt-5 space-y-2.5 sm:space-y-3.5 text-3xl font-bold leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
-              <span className="flex items-center gap-3.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-pink-500/20 text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
-                  ✦
-                </span>
-                <span>Learn digital skills <span className="text-gradient font-extrabold">free.</span></span>
+        <div className="hero-container relative z-10 mx-auto w-full max-w-7xl px-5">
+          {/* Institution Badge with live pulsing status — Centered above both columns */}
+          <div className="flex w-full justify-center mb-6 sm:mb-8">
+            <div className="hero-badge inline-flex items-center justify-center gap-2 rounded-full border border-pink-500/30 bg-gradient-to-r from-pink-500/15 via-purple-500/15 to-transparent px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 whitespace-nowrap text-center">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pink-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-pink-500" />
               </span>
-              <span className="flex items-center gap-3.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-xs text-purple-400 ring-1 ring-purple-500/40 shadow-sm shadow-purple-500/20">
-                  ✦
-                </span>
-                <span>Belong and build with our <span className="text-gradient font-extrabold">tribe.</span></span>
+              <span className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 whitespace-nowrap overflow-hidden text-ellipsis">
+                Unified Creative Institution & Digital Agency
               </span>
-              <span className="flex items-center gap-3.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-pink-500/20 text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
-                  ✦
-                </span>
-                <span>Let's bring your <span className="text-gradient font-extrabold">brand to life.</span></span>
-              </span>
-            </h1>
-
-            {/* Interactive Hero CTAs */}
-            <div className="hero-actions mt-9 flex flex-wrap items-center gap-3.5">
-              <GradientButton to="/academy" className="group shadow-xl shadow-pink-500/25">
-                <span>Start Learning Free</span>
-                <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
-              </GradientButton>
-              <GhostButton to="/tribe" className="hero-tribe-cta border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10">
-                Join the Tribe
-              </GhostButton>
-              <GhostButton to="/agency" className="hero-agency-cta border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10">
-                Hire the Agency
-              </GhostButton>
-            </div>
-
-            {/* Stats Row with Frosted Glass Panels */}
-            <div className="hero-stats mt-12 grid grid-cols-3 gap-3 sm:gap-5">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06] hover:-translate-y-1 sm:p-4">
-                <CountUp end={studentCount()} suffix="+" />
-                <div className="mt-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#a594c7] sm:text-xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  <span>Students Trained</span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-md transition-all duration-300 hover:border-purple-500/30 hover:bg-white/[0.06] hover:-translate-y-1 sm:p-4">
-                <CountUp end={tribeCount()} suffix="+" />
-                <div className="mt-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#a594c7] sm:text-xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-pink-400" />
-                  <span>Tribe Members</span>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06] hover:-translate-y-1 sm:p-4">
-                <CountUp end={homepageSettings.projectsDone} suffix="+" />
-                <div className="mt-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#a594c7] sm:text-xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
-                  <span>Projects Done</span>
-                </div>
-              </div>
             </div>
           </div>
 
-          {/* Right Column: Multi-layered Interactive Showcase */}
-          <div className="hero-media relative lg:col-span-5">
-            {/* Ambient Background Glow Layer */}
-            <div className="absolute -inset-4 rounded-3xl bg-gradient-to-tr from-pink-500/25 via-purple-600/20 to-transparent opacity-60 blur-2xl" />
+          {/* Two-Column Layout: Left Text / Right Image (Stacks vertically on mobile) */}
+          <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-12">
+            {/* Left Column: Typography, Supporting Description, CTAs & Glass Stats */}
+            <div className="hero-content rise-in lg:col-span-7">
+              {/* New Large Bold Headline */}
+              <h1 className="hero-headline font-display text-4xl font-bold leading-tight tracking-tight text-white sm:text-6xl lg:text-7xl">
+                We make it <span className="text-gradient font-extrabold">happen.</span>
+              </h1>
 
-            {/* Main Showcase Image Frame */}
-            <div className="floaty relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/10 to-transparent p-2 backdrop-blur-xl shadow-2xl">
-              <GlowImage
-                src={IMG.heroGroup}
-                alt="Diverse African creators collaborating"
-                caption="Creators in the making — learning, building, belonging."
-                className="aspect-[4/3] rounded-2xl"
-              />
-
-              {/* Floating Glass Micro-Card 1: Active Cohort */}
-              <div className="absolute top-5 right-5 flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur-md shadow-xl">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white">
-                  Cohort Active · 100% Free
-                </span>
+              {/* Repurposed three-line supporting description directly under "We make it happen." */}
+              <div className="hero-subheadline mt-5 space-y-2.5 sm:space-y-3 text-sm sm:text-base font-medium text-[#cabfe0]">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xl bg-pink-500/20 text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
+                    ✦
+                  </span>
+                  <span>Learn digital skills <span className="text-gradient font-extrabold">free.</span></span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-xs text-purple-400 ring-1 ring-purple-500/40 shadow-sm shadow-purple-500/20">
+                    ✦
+                  </span>
+                  <span>Belong and build with our <span className="text-gradient font-extrabold">tribe.</span></span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-xl bg-pink-500/20 text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
+                    ✦
+                  </span>
+                  <span>Let's bring your <span className="text-gradient font-extrabold">brand to life.</span></span>
+                </div>
               </div>
 
-              {/* Floating Glass Micro-Card 2: Community Badge */}
-              <div className="absolute bottom-5 left-5 hidden sm:flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur-md shadow-xl">
-                <span className="text-xs">⭐</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-pink-200">
-                  Think It. KR8 It
-                </span>
+              {/* Three CTA buttons on one line: Start Learning Free (larger/primary), Join the Tribe, Hire the Agency */}
+              <div className="hero-actions mt-7 sm:mt-8 flex flex-wrap items-center gap-3 sm:gap-3.5">
+                <GradientButton to="/register" className="group shadow-xl shadow-pink-500/25 px-5 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-bold">
+                  <span>Start Learning Free</span>
+                  <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
+                </GradientButton>
+                <GhostButton to="/tribe#join" className="hero-tribe-cta border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm">
+                  Join the Tribe
+                </GhostButton>
+                <GhostButton to="/agency" className="hero-agency-cta border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10 px-4 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm">
+                  Hire the Agency
+                </GhostButton>
+              </div>
+
+              {/* Stats Row with Frosted Glass Panels underneath the buttons, on one line */}
+              <div className="hero-stats mt-8 sm:mt-10 grid grid-cols-3 gap-2.5 sm:gap-4">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06] hover:-translate-y-1">
+                  <CountUp end={studentCount()} suffix="+" />
+                  <div className="mt-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#a594c7] sm:text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    <span>Students Trained</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-purple-500/30 hover:bg-white/[0.06] hover:-translate-y-1">
+                  <CountUp end={tribeCount()} suffix="+" />
+                  <div className="mt-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#a594c7] sm:text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-pink-400" />
+                    <span>Tribe Members</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06] hover:-translate-y-1">
+                  <CountUp end={homepageSettings.projectsDone} suffix="+" />
+                  <div className="mt-1 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-[#a594c7] sm:text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
+                    <span>Projects Done</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Multi-layered Interactive Showcase */}
+            <div className="hero-media relative lg:col-span-5">
+              {/* Ambient Background Glow Layer */}
+              <div className="absolute -inset-4 rounded-3xl bg-gradient-to-tr from-pink-500/25 via-purple-600/20 to-transparent opacity-60 blur-2xl" />
+
+              {/* Main Showcase Image Frame */}
+              <div className="floaty relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/10 to-transparent p-2 backdrop-blur-xl shadow-2xl">
+                <GlowImage
+                  src={IMG.heroGroup}
+                  alt="Diverse African creators collaborating"
+                  caption="Creators in the making — learning, building, belonging."
+                  className="aspect-[4/3] rounded-2xl"
+                />
+
+                {/* Floating Glass Micro-Card 1: Active Cohort */}
+                <div className="absolute top-5 right-5 flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur-md shadow-xl">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-white">
+                    Cohort Active · 100% Free
+                  </span>
+                </div>
+
+                {/* Floating Glass Micro-Card 2: Community Badge */}
+                <div className="absolute bottom-5 left-5 hidden sm:flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur-md shadow-xl">
+                  <span className="text-xs">⭐</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-pink-200">
+                    Think It. KR8 It
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -244,7 +256,7 @@ function GuestHome() {
               ))}
             </div>
             <div className="mt-12 text-center">
-              <GradientButton to="/academy" className="shadow-xl shadow-pink-500/25">
+              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
                 Join the Free Cohort Today →
               </GradientButton>
             </div>

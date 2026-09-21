@@ -122,7 +122,7 @@ export default function AIPage() {
 
         {!student && (
           <p className="mt-6 text-center text-xs text-[#8a7ba8]">
-            Signed-in accounts get unlimited access & saved history. <Link to="/academy" className="text-pink-400">Register free →</Link>
+            Signed-in accounts get unlimited access & saved history. <Link to="/register" className="text-pink-400 font-bold hover:underline">Register free →</Link>
           </p>
         )}
       </div>

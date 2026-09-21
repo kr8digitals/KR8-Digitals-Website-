@@ -746,14 +746,14 @@ export default function Blog() {
               <GradientButton to="/tribe#join" className="w-full">
                 Join KR8 Tribe (Free, No ID) →
               </GradientButton>
-              <GhostButton to="/academy" className="w-full">
+              <GhostButton to="/register" className="w-full">
                 Register as Academy Student →
               </GhostButton>
             </div>
 
             <p className="mt-4 text-[11px] text-[#8a7ba8]">
               Already have an account?{" "}
-              <Link to="/academy" className="text-pink-400 font-semibold hover:underline">
+              <Link to="/signin" className="text-pink-400 font-semibold hover:underline">
                 Sign in here
               </Link>
             </p>

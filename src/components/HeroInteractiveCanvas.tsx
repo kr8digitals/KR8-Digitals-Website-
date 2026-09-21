@@ -71,6 +71,12 @@ export default function HeroInteractiveCanvas() {
     document.addEventListener("mouseleave", handleMouseLeave);
 
     let time = 0;
+    const raf = typeof window !== "undefined" && typeof window.requestAnimationFrame === "function"
+      ? window.requestAnimationFrame.bind(window)
+      : (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16) as unknown as number;
+    const caf = typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function"
+      ? window.cancelAnimationFrame.bind(window)
+      : (id: number) => clearTimeout(id as unknown as NodeJS.Timeout);
 
     const render = () => {
       time += 0.01;
@@ -126,13 +132,13 @@ export default function HeroInteractiveCanvas() {
         }
       }
 
-      animationFrameId = requestAnimationFrame(render);
+      animationFrameId = raf(render);
     };
 
     render();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      caf(animationFrameId);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseleave", handleMouseLeave);

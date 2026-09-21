@@ -210,7 +210,7 @@ export default function Navbar() {
                   Login
                 </button>
                 <Link
-                  to="/academy"
+                  to="/register"
                   className="hidden sm:inline-block rounded-full bg-gradient-pink px-4 py-1.5 text-xs font-bold text-white glow-pink-sm transition-transform hover:scale-[1.02]"
                 >
                   Join for Free
@@ -318,17 +318,19 @@ export default function Navbar() {
                   <p className="text-sm font-semibold text-white">Join the KR8 Creative Movement</p>
                   <p className="mt-1 text-xs text-[#b8aecf]">Free digital skills, real community & verified ID.</p>
                   <div className="mt-4 flex gap-2">
-                    <Link
-                      to="/academy"
-                      onClick={closeDrawer}
-                      className="flex-1 rounded-xl border border-white/20 py-2 text-xs font-semibold text-white hover:border-pink-400/60"
+                    <button
+                      onClick={() => {
+                        closeDrawer();
+                        setSignInOpen(true);
+                      }}
+                      className="flex-1 rounded-xl border border-white/20 py-2 text-xs font-semibold text-white hover:border-pink-400/60 transition-colors"
                     >
                       Login
-                    </Link>
+                    </button>
                     <Link
-                      to="/academy"
+                      to="/register"
                       onClick={closeDrawer}
-                      className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white glow-pink-sm"
+                      className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white glow-pink-sm text-center"
                     >
                       Register Free
                     </Link>

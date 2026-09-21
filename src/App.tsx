@@ -19,6 +19,8 @@ import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
 import LivePage from "./pages/LivePage";
 import Gallery from "./pages/Gallery";
+import RegisterPage from "./pages/RegisterPage";
+import SignInPage from "./pages/SignInPage";
 
 export default function App() {
   useEffect(() => {
@@ -32,6 +34,10 @@ export default function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route path="/" element={<Home />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/signup" element={<RegisterPage />} />
+              <Route path="/signin" element={<SignInPage />} />
+              <Route path="/login" element={<SignInPage />} />
               <Route path="/live" element={<LivePage />} />
               <Route path="/academy" element={<Academy />} />
               <Route path="/dashboard" element={<Dashboard />} />

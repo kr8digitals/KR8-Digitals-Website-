@@ -319,19 +319,12 @@ export function normalizePhone(value: string): string {
   return `+234${compact}`;
 }
 
-export const COUNTRIES = [
-  { code: "NG", name: "Nigeria", dial: "+234" },
-  { code: "GH", name: "Ghana", dial: "+233" },
-  { code: "KE", name: "Kenya", dial: "+254" },
-  { code: "ZA", name: "South Africa", dial: "+27" },
-  { code: "GB", name: "United Kingdom", dial: "+44" },
-  { code: "US", name: "United States", dial: "+1" },
-  { code: "CA", name: "Canada", dial: "+1" },
-  { code: "AU", name: "Australia", dial: "+61" },
-];
+import { ALL_COUNTRIES, findCountry } from "./countries";
+
+export const COUNTRIES = ALL_COUNTRIES;
 
 export function countryByCode(code: string) {
-  return COUNTRIES.find((country) => country.code === code) ?? COUNTRIES[0];
+  return findCountry(code);
 }
 
 export function buildPhone(dial: string, local: string): string {
@@ -343,10 +336,13 @@ export async function detectCountryCode(): Promise<string> {
   try {
     const response = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(2500) });
     const data = await response.json() as { country_code?: string };
-    return COUNTRIES.some((country) => country.code === data.country_code) ? data.country_code! : "NG";
+    if (data.country_code && COUNTRIES.some((country) => country.code === data.country_code)) {
+      return data.country_code;
+    }
   } catch {
-    return "NG";
+    /* fallback */
   }
+  return "NG";
 }
 
 /* ---------------- Accounts ---------------- */
