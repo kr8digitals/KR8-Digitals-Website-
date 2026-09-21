@@ -60,6 +60,7 @@ export function GradientButton({
   onClick,
   className = "",
   type,
+  disabled,
 }: {
   children: ReactNode;
   to?: string;
@@ -67,11 +68,12 @@ export function GradientButton({
   onClick?: () => void;
   className?: string;
   type?: "button" | "submit";
+  disabled?: boolean;
 }) {
   const cls = `inline-flex items-center justify-center gap-2 rounded-full bg-gradient-pink px-7 py-3.5 text-sm font-bold text-white glow-pink-sm transition-transform hover:-translate-y-0.5 active:translate-y-0 ${className}`;
   if (to) return <Link to={to} className={cls}>{children}</Link>;
   if (href) return <a href={href} target="_blank" rel="noreferrer" className={cls}>{children}</a>;
-  return <button type={type || "button"} onClick={onClick} className={cls}>{children}</button>;
+  return <button type={type || "button"} disabled={disabled} onClick={onClick} className={cls}>{children}</button>;
 }
 
 export function GhostButton({

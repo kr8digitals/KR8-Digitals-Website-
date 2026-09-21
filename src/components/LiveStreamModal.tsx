@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
-import { type StreamReplay, type LiveStreamTask } from "../data/store";
+import { type StreamRole } from "../data/store";
 import Icon from "./Icon";
 
 export default function LiveStreamModal() {
@@ -12,15 +12,49 @@ export default function LiveStreamModal() {
     isLive,
     isStageOpen,
     canHost,
+    currentRole,
+    isPrivateAuthorized,
+    audioOnly,
+    toggleAudioOnly,
+    spotlightId,
+    setSpotlight,
+    pinnedParticipantId,
+    setPinParticipant,
     chatMessages,
-    replays,
+    chatPermission,
+    updateChatPermission,
     reactions,
+    sendReaction,
+    raisedHands,
+    raiseHand,
+    lowerHand,
+    questions,
+    submitQuestion,
+    upvoteQuestion,
+    answerQuestion,
+    dismissQuestion,
+    polls,
+    createPoll,
+    votePoll,
+    closePoll,
+    requests,
+    requestAccess,
+    respondRequest,
+    createInvite,
+    recordings,
+    isRecording,
+    startRecording,
+    stopRecording,
+    isLocked,
+    toggleLock,
+    isSuspended,
+    suspendActivities,
+    replays,
     activeReplay,
     localStream,
     cameraActive,
     micActive,
     isScreenSharing,
-    isPrivateAuthorized,
     closeStage,
     openMiniPlayer,
     startCameraStream,
@@ -30,73 +64,65 @@ export default function LiveStreamModal() {
     startStream,
     endStream,
     sendMessage,
-    pinMessage,
-    deleteMessage,
-    promoteMod,
-    promoteSpeaker,
-    demote,
-    assignTask,
-    markTaskDone,
-    awardPoints,
+    promoteRole,
     muteListener,
     muteAll,
-    sendReaction,
     unlockPrivateStream,
-    closeReplay,
     openStage,
   } = useLiveStream();
 
   // Host Pre-flight Form State
   const [streamTitle, setStreamTitle] = useState("");
   const [streamCategory, setStreamCategory] = useState("Creative Tech & Strategy");
-  const [streamDesc, setStreamDesc] = useState("");
-  const [streamQuality, setStreamQuality] = useState<"1080p60" | "720p" | "audio-only">("1080p60");
+  const [streamDesc] = useState("");
+  const [streamQuality] = useState<"1080p60" | "720p" | "audio-only">("1080p60");
   const [streamVisibility, setStreamVisibility] = useState<"public" | "private">("public");
   const [customAccessKey, setCustomAccessKey] = useState("");
 
   // Private Access Input State
   const [enteredKey, setEnteredKey] = useState("");
+  const [accessRequested, setAccessRequested] = useState(false);
 
-  // Viewer State
+  // Viewer & Chat State
   const [chatInput, setChatInput] = useState("");
-  const [guestName, setGuestName] = useState(student?.name || "");
-  const [activeTab, setActiveTab] = useState<"chat" | "audience" | "replays">("chat");
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [authPromptOpen, setAuthPromptOpen] = useState(false);
+  const [dmRecipient, setDmRecipient] = useState<{ id: string; name: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<"chat" | "qa" | "polls" | "audience" | "invites" | "replays">("chat");
+  const [copiedInviteKey, setCopiedInviteKey] = useState<string | null>(null);
 
-  // Task assignment form modal
-  const [taskAssigneeId, setTaskAssigneeId] = useState("");
-  const [taskAssigneeName, setTaskAssigneeName] = useState("");
-  const [taskText, setTaskText] = useState("");
-  const [taskPoints, setTaskPoints] = useState(50);
-  const [showTaskModal, setShowTaskModal] = useState(false);
+  // Q&A Form State
+  const [newQuestionText, setNewQuestionText] = useState("");
+  const [askAnonymously, setAskAnonymously] = useState(false);
+  const [answeringQId, setAnsweringQId] = useState<string | null>(null);
+  const [answerText, setAnswerText] = useState("");
+  const [answerVisibility, setAnswerVisibility] = useState<"public" | "private">("public");
 
-  // Award XP modal
-  const [showAwardModal, setShowAwardModal] = useState(false);
-  const [awardeeId, setAwardeeId] = useState("");
-  const [awardeeName, setAwardeeName] = useState("");
-  const [awardReason, setAwardReason] = useState("");
-  const [awardPointsVal, setAwardPointsVal] = useState(50);
+  // Poll Creation Form State
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["Option 1", "Option 2"]);
+  const [pollIsAnon, setPollIsAnon] = useState(false);
+  const [pollIsQuiz, setPollIsQuiz] = useState(false);
+  const [quizCorrectOption] = useState(0);
+
+  // New Invite Generator State
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteTargetUserId] = useState("");
+  const [inviteTargetRole, setInviteTargetRole] = useState<"attendee" | "co-host" | "panelist" | "moderator">("attendee");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
+  // Role permissions
   const isHost = Boolean(
     activeStream &&
       (student?.id === activeStream.hostId ||
-        canHost ||
         student?.type === "founder" ||
         student?.type === "co-founder")
   );
 
-  const canEndStream = Boolean(
-    isHost ||
-      canHost ||
-      student?.admin ||
-      student?.type === "founder" ||
-      student?.type === "co-founder" ||
-      (activeStream && !student)
-  );
+  const isCoHost = currentRole === "co-host";
+  const isPresenter = isHost || isCoHost || currentRole === "panelist";
+  const isModerator = isPresenter || currentRole === "moderator";
 
   const isPrivateLocked = Boolean(
     activeStream &&
@@ -105,22 +131,28 @@ export default function LiveStreamModal() {
       !isHost
   );
 
-  // Attach MediaStream or Replay to Video element
+  // Auto-mute listeners on join:
+  // Live stream listener microphones must be automatically muted upon joining.
+  // Listeners must be able to unmute their own microphone.
+  useEffect(() => {
+    if (isStageOpen && !isPresenter && !isHost && localStream) {
+      localStream.getAudioTracks().forEach((t) => (t.enabled = false));
+    }
+  }, [isStageOpen, isPresenter, isHost, localStream]);
+
+  // Video element attachment
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     if (activeReplay) {
-      if (video.srcObject) {
-        video.srcObject = null;
-      }
+      if (video.srcObject) video.srcObject = null;
       if (video.src !== activeReplay.videoUrl) {
         video.src = activeReplay.videoUrl;
         video.load();
         video.play().catch(() => {});
       }
-    } else if (localStream) {
-      // Live stage: host or presenter camera / screen / virtual studio
+    } else if (localStream && !audioOnly) {
       if (video.src) {
         video.pause();
         video.removeAttribute("src");
@@ -132,7 +164,6 @@ export default function LiveStreamModal() {
         video.play().catch(() => {});
       }
     } else {
-      // Live stage without localStream yet
       if (video.src) {
         video.pause();
         video.removeAttribute("src");
@@ -141,1030 +172,1335 @@ export default function LiveStreamModal() {
       }
       video.srcObject = null;
 
-      // Automatically launch camera for host if not active
-      if (isHost && isLive && isStageOpen) {
-        startCameraStream();
+      if (isHost && isLive && isStageOpen && !audioOnly) {
+        void startCameraStream();
       }
     }
-  }, [localStream, activeReplay, isLive, isStageOpen, isHost, startCameraStream]);
+  }, [localStream, activeReplay, isLive, isStageOpen, isHost, audioOnly, startCameraStream]);
 
-  // Auto-scroll chat
+  // Scroll chat to bottom
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    if (activeTab === "chat") {
+      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, activeTab]);
 
-  if (!isStageOpen) {
-    return null;
-  }
+  if (!isStageOpen) return null;
 
-  const handleStartStreamSubmit = async (e: React.FormEvent) => {
+  // Handlers
+  const handleStartBroadcast = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!streamTitle.trim()) return;
+
     await startStream({
-      title: streamTitle,
+      title: streamTitle.trim(),
       category: streamCategory,
-      description: streamDesc,
+      description: streamDesc.trim(),
       quality: streamQuality,
       visibility: streamVisibility,
-      accessKey: streamVisibility === "private" ? customAccessKey : undefined,
+      accessKey: streamVisibility === "private" ? customAccessKey.trim() : undefined,
     });
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    sendMessage(chatInput, guestName);
+    sendMessage(chatInput.trim(), dmRecipient?.id, dmRecipient?.name);
     setChatInput("");
-  };
-
-  const handleCopyInvite = () => {
-    if (!activeStream) return;
-    const keyQuery = activeStream.visibility === "private" ? `&key=${activeStream.accessKey}` : "";
-    const inviteUrl = `${window.location.origin}/?live=${activeStream.id}${keyQuery}`;
-    navigator.clipboard?.writeText(inviteUrl);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 3000);
   };
 
   const handleUnlockPrivate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!enteredKey.trim()) return;
-    unlockPrivateStream(enteredKey);
+    const ok = unlockPrivateStream(enteredKey.trim());
+    if (!ok) {
+      alert("Invalid invitation key. Please check the code or request access from the host.");
+    }
   };
 
-  const openTaskModalForUser = (userId: string, userName: string) => {
-    setTaskAssigneeId(userId);
-    setTaskAssigneeName(userName);
-    setTaskText("");
-    setTaskPoints(50);
-    setShowTaskModal(true);
+  const handleRequestAccess = () => {
+    if (!activeStream) return;
+    requestAccess(activeStream.id);
+    setAccessRequested(true);
   };
 
-  const handleAssignTaskSubmit = (e: React.FormEvent) => {
+  const handleAskQuestion = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!taskText.trim() || !taskAssigneeId) return;
-    assignTask(taskAssigneeId, taskAssigneeName, taskText, taskPoints);
-    setShowTaskModal(false);
+    if (!newQuestionText.trim()) return;
+    submitQuestion(newQuestionText.trim(), askAnonymously);
+    setNewQuestionText("");
+    setAskAnonymously(false);
   };
 
-  const openAwardModalForUser = (userId: string, userName: string) => {
-    setAwardeeId(userId);
-    setAwardeeName(userName);
-    setAwardReason("Brilliant contribution in live Q&A");
-    setAwardPointsVal(50);
-    setShowAwardModal(true);
+  const handleAnswerSubmit = (qId: string) => {
+    if (!answerText.trim()) return;
+    answerQuestion(qId, answerText.trim(), answerVisibility);
+    setAnsweringQId(null);
+    setAnswerText("");
   };
 
-  const handleAwardPointsSubmit = (e: React.FormEvent) => {
+  const handleCreatePollSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!awardReason.trim() || !awardeeId) return;
-    awardPoints(awardeeId, awardeeName, awardPointsVal, awardReason);
-    setShowAwardModal(false);
+    const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
+    if (!pollQuestion.trim() || cleanOptions.length < 2) return;
+    createPoll(pollQuestion.trim(), cleanOptions, pollIsAnon, pollIsQuiz, quizCorrectOption);
+    setShowPollModal(false);
+    setPollQuestion("");
+    setPollOptions(["Option 1", "Option 2"]);
+    setPollIsQuiz(false);
   };
 
-  // Find tasks assigned to current viewer
-  const myPendingTask = activeStream?.assignedTasks?.find(
-    (t) => t.targetUserId === (student?.id || guestName) && t.status === "pending"
-  );
+  const handleCreateInviteSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const inv = createInvite(inviteTargetUserId || undefined, undefined, inviteTargetRole);
+    if (inv) {
+      setCopiedInviteKey(inv.inviteKey);
+      setShowInviteModal(false);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4 backdrop-blur-xl overflow-y-auto">
-      <div className="relative flex h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-3xl border border-white/15 bg-[#120824] shadow-2xl">
-        {/* TOP BAR / STUDIO HEADER */}
-        <div className="flex items-center justify-between border-b border-white/10 bg-black/40 px-4 sm:px-6 py-3.5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4">
+      <div className="relative flex h-full max-h-[96vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e0419] shadow-2xl">
+        {/* TOP BAR / HEADER */}
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#160824]/90 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3 overflow-hidden">
-            {isLive ? (
-              <span className="flex items-center gap-1.5 rounded-full bg-red-600/90 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow glow-pink-sm animate-pulse">
+            {isLive && (
+              <span className="flex items-center gap-1.5 rounded-full bg-red-600/90 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-white shadow-lg animate-pulse">
                 <span className="h-2 w-2 rounded-full bg-white" />
-                <span>LIVE</span>
+                LIVE
               </span>
-            ) : (
-              <span className="rounded-full bg-purple-500/20 border border-purple-500/30 px-3 py-1 text-xs font-bold text-purple-300">
-                Broadcasting Studio
+            )}
+
+            {isRecording && (
+              <span className="flex items-center gap-1 rounded-full bg-rose-500/20 border border-rose-500/50 px-2 py-0.5 text-[10px] font-bold text-rose-300 animate-pulse">
+                🔴 REC
               </span>
             )}
 
             {activeStream?.visibility === "private" && (
-              <span className="flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
-                <span>🔒 Private Session</span>
-                {isHost && activeStream.accessKey && (
-                  <span className="font-mono text-white/90">({activeStream.accessKey})</span>
-                )}
+              <span className="flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">
+                🔒 By Invitation Only
+              </span>
+            )}
+
+            {isLocked && (
+              <span className="flex items-center gap-1 rounded-full bg-blue-500/20 border border-blue-500/40 px-2 py-0.5 text-[10px] font-bold text-blue-300">
+                🔒 Stage Locked
+              </span>
+            )}
+
+            {isSuspended && (
+              <span className="flex items-center gap-1 rounded-full bg-red-500/30 border border-red-500 px-2 py-0.5 text-[10px] font-bold text-red-200">
+                ⚠️ Activities Suspended
               </span>
             )}
 
             <div className="overflow-hidden truncate">
-              <h2 className="text-sm sm:text-base font-bold text-white truncate">
-                {activeReplay
-                  ? `Replay: ${activeReplay.title}`
-                  : activeStream
-                  ? activeStream.title
-                  : "KR8 Digitals Live Stream"}
+              <h2 className="truncate text-base font-bold text-white sm:text-lg">
+                {activeReplay ? `[Replay] ${activeReplay.title}` : activeStream ? activeStream.title : "Live Studio Broadcast Stage"}
               </h2>
-              <p className="text-[11px] text-[#b8aecf] truncate">
-                {activeReplay
-                  ? `Recorded masterclass · Hosted by ${activeReplay.hostName}`
-                  : activeStream
-                  ? `Broadcasting with ${activeStream.hostName} · ${activeStream.category}`
-                  : "Start a live broadcast with camera & mic or watch replays"}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-[#cabfe0]">
+                <span>{activeStream?.category || "Live Production & Masterclasses"}</span>
+                {activeStream && (
+                  <>
+                    <span>·</span>
+                    <span className="font-semibold text-pink-400">Host: {activeStream.hostName}</span>
+                    <span>·</span>
+                    <span className="text-emerald-400 font-mono">
+                      👥 {activeStream.viewers?.length || activeStream.viewerCount || 1} online
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* Tab switch between Live & Replays */}
-            <div className="hidden md:flex rounded-xl bg-white/5 p-1 border border-white/10 text-xs">
-              <button
-                onClick={() => {
-                  setActiveTab("chat");
-                  closeReplay();
-                }}
-                className={`rounded-lg px-3 py-1 font-semibold transition-all ${
-                  activeTab === "chat" && !activeReplay
-                    ? "bg-gradient-pink text-white shadow"
-                    : "text-[#b8aecf] hover:text-white"
-                }`}
-              >
-                Live Chat
-              </button>
-              <button
-                onClick={() => setActiveTab("audience")}
-                className={`rounded-lg px-3 py-1 font-semibold transition-all ${
-                  activeTab === "audience"
-                    ? "bg-gradient-pink text-white shadow"
-                    : "text-[#b8aecf] hover:text-white"
-                }`}
-              >
-                Audience & Tasks ({activeStream?.viewers?.length || 1})
-              </button>
-              <button
-                onClick={() => setActiveTab("replays")}
-                className={`rounded-lg px-3 py-1 font-semibold transition-all ${
-                  activeTab === "replays" || activeReplay
-                    ? "bg-gradient-pink text-white shadow"
-                    : "text-[#b8aecf] hover:text-white"
-                }`}
-              >
-                Replay Vault ({replays.length})
-              </button>
-            </div>
+          {/* Quick Header Actions */}
+          <div className="flex items-center gap-2">
+            {/* Audio-only toggle */}
+            <button
+              onClick={toggleAudioOnly}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
+                audioOnly
+                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                  : "border-white/10 bg-white/5 text-[#cabfe0] hover:bg-white/10 hover:text-white"
+              }`}
+              title="Toggle Low-Bandwidth Audio Only mode"
+            >
+              <span>{audioOnly ? "🎧 Audio Only ON" : "📶 Low-Bandwidth Mode"}</span>
+            </button>
 
-            {/* Invite Button */}
-            {isLive && activeStream && (
-              <button
-                onClick={handleCopyInvite}
-                className="flex items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 transition-all shadow-sm"
-                title="Copy stream invite link"
-              >
-                <Icon name="share" size={13} />
-                <span>{copiedLink ? "Link Copied!" : "Share Link"}</span>
-              </button>
-            )}
+            {/* Minimize / Floating mini-player */}
+            <button
+              onClick={openMiniPlayer}
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[#cabfe0] hover:bg-white/10 hover:text-white transition-all"
+              title="Minimize to Floating Mini Player"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+              </svg>
+            </button>
 
-            {/* Minimize to PIP */}
-            {isLive && !activeReplay && (
-              <button
-                onClick={openMiniPlayer}
-                className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all text-xs"
-                title="Minimize to Picture-in-Picture"
-              >
-                ⤓
-              </button>
-            )}
-
-            {/* End Broadcast CTA in top bar */}
-            {isLive && canEndStream && !activeReplay && (
-              <button
-                onClick={endStream}
-                className="rounded-xl border border-red-500/50 bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-red-700 active:scale-95 transition-all flex items-center gap-1.5"
-                title="Stop and terminate the live broadcast"
-              >
-                <span>🛑</span>
-                <span className="hidden sm:inline">End Broadcast</span>
-              </button>
-            )}
-
-            {/* Close */}
+            {/* Close stage */}
             <button
               onClick={closeStage}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all text-sm font-bold"
-              title="Close stage"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-[#cabfe0] hover:bg-white/10 hover:text-white transition-all"
+              title="Close Broadcast Stage"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* MAIN STAGE CONTENT */}
-        <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
-          {/* LEFT: VIDEO PLAYER / STUDIO CANVAS */}
-          <div className="relative flex-1 flex flex-col bg-black overflow-hidden justify-between">
-            {/* FLOATING REACTION BUBBLES */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden z-20">
+        {/* MAIN BODY: STAGE & SIDEBAR */}
+        <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-3">
+          {/* LEFT 2 COLUMNS: VIDEO STAGE & TOOLBAR */}
+          <div className="relative flex flex-col justify-between overflow-hidden bg-black lg:col-span-2">
+            {/* FLOATING REACTIONS CONTAINER */}
+            <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
               {reactions.map((r) => (
                 <div
                   key={r.id}
-                  className="absolute bottom-8 text-3xl animate-float-up pointer-events-none transition-all"
                   style={{ left: `${r.left}%` }}
+                  className="animate-float-reaction absolute bottom-16 text-3xl sm:text-4xl select-none"
                 >
                   {r.emoji}
                 </div>
               ))}
             </div>
 
-            {/* PRIVATE LOCKED ACCESS OVERLAY */}
+            {/* STAGE SCREEN / VIDEO FEED */}
             {isPrivateLocked ? (
+              /* PRIVATE STREAM ACCESS GATE */
               <div className="relative h-full w-full flex flex-col items-center justify-center bg-gradient-to-b from-[#180a2c] to-[#090314] p-6 text-center">
                 <div className="flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 text-3xl mb-4 shadow-xl">
                   🔒
                 </div>
+                <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/30 uppercase tracking-wider mb-2">
+                  By Invitation Only
+                </span>
                 <h3 className="font-display text-2xl font-bold text-white sm:text-3xl">
-                  Private Broadcast Session
+                  {activeStream?.title || "Private Broadcast Session"}
                 </h3>
                 <p className="mt-2 text-sm text-[#cabfe0] max-w-md leading-relaxed">
-                  This live stream is locked to invited participants only. If you received an invitation key from the host, enter it below to join the stage.
+                  This live stream is locked to invited participants. Registered Students and Tribe Members can unlock with an access key or send an immediate join request to the host.
                 </p>
 
+                {/* Key Entry Form */}
                 <form onSubmit={handleUnlockPrivate} className="mt-6 flex w-full max-w-sm gap-2">
                   <input
                     value={enteredKey}
                     onChange={(e) => setEnteredKey(e.target.value)}
-                    placeholder="Enter Invitation Key (e.g. KR8-XXXX)"
+                    placeholder="Enter Invitation / Access Key"
                     className="flex-1 rounded-xl border border-white/20 bg-black/40 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
                   />
                   <button
                     type="submit"
-                    className="rounded-xl bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white shadow-lg"
+                    className="rounded-xl bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white shadow-lg hover:opacity-90"
                   >
-                    Unlock →
+                    Unlock Stage →
                   </button>
                 </form>
-              </div>
-            ) : activeReplay ? (
-              /* ACTIVE REPLAY PLAYBACK MODE */
-              <div className="relative h-full w-full flex items-center justify-center bg-black">
-                <video
-                  ref={videoRef}
-                  src={activeReplay.videoUrl}
-                  poster={activeReplay.thumbnail}
-                  controls
-                  autoPlay
-                  className="h-full w-full object-contain"
-                />
-                <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
-                  <button
-                    onClick={closeReplay}
-                    className="flex items-center gap-1.5 rounded-xl bg-black/80 px-3 py-1.5 text-xs font-bold text-white border border-white/20 hover:bg-black backdrop-blur-md"
-                  >
-                    ← Exit Replay
-                  </button>
-                  <span className="rounded-full bg-purple-500/30 px-3 py-1 text-xs font-bold text-purple-200 border border-purple-400/30 backdrop-blur-md">
-                    ↺ Session Restream
-                  </span>
-                </div>
-              </div>
-            ) : isLive && activeStream ? (
-              /* LIVE BROADCAST STAGE */
-              <div className="relative flex-1 w-full bg-black flex items-center justify-center overflow-hidden">
-                {/* VIDEO ELEMENT (ATTACHED TO REAL CAMERA OR SCREEN SHARE OR VIEWER FEED) */}
-                <video
-                  ref={(el) => {
-                    videoRef.current = el;
-                    if (el) {
-                      if (localStream && el.srcObject !== localStream) {
-                        if (el.src) {
-                          el.pause();
-                          el.removeAttribute("src");
-                          el.src = "";
-                          el.load();
-                        }
-                        el.srcObject = localStream;
-                        el.play().catch(() => {});
-                      }
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted={isHost}
-                  className="h-full w-full object-contain block"
-                />
 
-                {/* If no localStream yet, show connecting studio overlay */}
-                {!localStream && (
-                  <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#1d0b36] via-[#100320] to-black p-8 text-center z-10">
-                    <div className="relative mb-6">
-                      <div className="absolute -inset-4 rounded-full bg-gradient-pink opacity-40 blur-xl animate-pulse" />
-                      <div className="relative flex h-28 w-28 items-center justify-center rounded-full border-2 border-pink-400 bg-black/60 shadow-2xl">
-                        {activeStream.hostAvatar ? (
-                          <img
-                            src={activeStream.hostAvatar}
-                            alt={activeStream.hostName}
-                            className="h-full w-full rounded-full object-cover"
-                          />
-                        ) : (
-                          <span className="font-display text-4xl font-bold text-white">
-                            {activeStream.hostName.charAt(0)}
-                          </span>
-                        )}
-                      </div>
-                      <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-black text-xs text-white">
-                        🎙️
-                      </span>
-                    </div>
-
-                    <div className="inline-flex items-center gap-2 rounded-full bg-red-600/30 border border-red-500/50 px-3.5 py-1 text-xs font-bold text-red-300 mb-3">
-                      <span className="h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                      LIVE ON AIR
-                    </div>
-
-                    <h3 className="text-xl font-bold text-white">{activeStream.hostName}</h3>
-                    <p className="mt-1 text-xs text-pink-300 font-semibold">{activeStream.category}</p>
-                    <p className="mt-3 text-xs text-[#a594c7]">
-                      {isHost ? "Connecting Live Camera / Studio Feed..." : "Live broadcast active • Audio on air"}
-                    </p>
-
-                    {isHost && (
-                      <button
-                        onClick={() => startCameraStream()}
-                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:scale-105 active:scale-95 transition-all"
-                      >
-                        <span>🎥</span>
-                        <span>Start Camera / Virtual Studio Feed</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* AUDIO-ONLY / CAMERA OFF VISUALIZER FOR HOST ONLY */}
-                {isHost && !cameraActive && !isScreenSharing && (
-                  <div className="absolute inset-0 flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-[#1d0b36] via-[#100320] to-black p-8 text-center z-10">
-                    <div className="relative mb-6">
-                      <div className="absolute -inset-4 rounded-full bg-gradient-pink opacity-40 blur-xl animate-pulse" />
-                      <div className="relative flex h-28 w-28 items-center justify-center rounded-full border-2 border-pink-400 bg-black/60 shadow-2xl">
-                        {activeStream.hostAvatar ? (
-                          <img
-                            src={activeStream.hostAvatar}
-                            alt={activeStream.hostName}
-                            className="h-full w-full rounded-full object-cover"
-                          />
-                        ) : (
-                          <span className="font-display text-4xl font-bold text-white">
-                            {activeStream.hostName.charAt(0)}
-                          </span>
-                        )}
-                      </div>
-                      <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 ring-2 ring-black text-xs text-white">
-                        🎙️
-                      </span>
-                    </div>
-
-                    <h3 className="text-xl font-bold text-white">{activeStream.hostName}</h3>
-                    <p className="mt-1 text-xs text-pink-300 font-semibold">{activeStream.category}</p>
-                    <p className="mt-3 text-xs text-[#a594c7]">Studio Audio Broadcast Active (Camera Muted)</p>
-                  </div>
-                )}
-
-                {/* Ambient dynamic vignette */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
-
-                {/* Quality & Live Indicators Overlay */}
-                <div className="absolute top-4 left-4 flex items-center gap-2 z-10 flex-wrap">
-                  <div className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-xs font-mono font-bold text-pink-300 border border-white/10 backdrop-blur-md">
-                    <span>{isScreenSharing ? "Screen Share" : activeStream.quality}</span>
-                    <span className="text-[10px] text-emerald-400">● Live Audio</span>
-                  </div>
-
-                  {activeStream.visibility === "private" && (
-                    <div className="flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold text-amber-300 border border-amber-500/40 backdrop-blur-md">
-                      <span>🔒 Private</span>
-                      {activeStream.accessKey && <span>· Key: {activeStream.accessKey}</span>}
-                    </div>
+                {/* Request Access Button */}
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <span className="text-xs text-[#8e82a8]">Don't have a personal key?</span>
+                  {accessRequested ? (
+                    <span className="rounded-lg bg-emerald-500/20 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold text-emerald-300">
+                      ✓ Request sent to host! You will be notified once accepted.
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleRequestAccess}
+                      className="rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/20 transition-all"
+                    >
+                      Request Access from Host
+                    </button>
                   )}
                 </div>
 
-                {/* Real Viewer Counter Overlay (NO FAKE VIEWS) */}
-                <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-                  <div className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-xs font-bold text-white border border-white/10 backdrop-blur-md shadow">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{activeStream.viewers?.length || activeStream.viewerCount || 1} Connected</span>
-                  </div>
-                </div>
-
-                {/* MY PENDING TASK FLOATING PROMPT (IF ASSIGNED TO CURRENT VIEWER) */}
-                {myPendingTask && (
-                  <div className="absolute bottom-20 left-4 right-4 z-20 sm:left-6 sm:right-auto sm:max-w-md rounded-2xl border border-yellow-400/50 bg-yellow-500/20 p-4 backdrop-blur-xl shadow-2xl animate-bounce">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-yellow-300">
-                          ⚡ Task Assigned to You by Host
-                        </span>
-                        <h4 className="mt-1 text-sm font-bold text-white">{myPendingTask.task}</h4>
-                        <p className="mt-1 text-xs text-yellow-200">
-                          Reward: +{myPendingTask.points} Community XP
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => markTaskDone(myPendingTask.id)}
-                        className="rounded-xl bg-gradient-pink px-3.5 py-1.5 text-xs font-bold text-white shadow hover:scale-105 active:scale-95 transition-all shrink-0"
+                {!student && (
+                  <div className="mt-6 rounded-xl border border-white/10 bg-white/5 p-4 max-w-sm text-xs text-[#cabfe0]">
+                    <p className="mb-2 font-semibold text-white">Join Choices for Visitors:</p>
+                    <div className="flex justify-center gap-2">
+                      <Link
+                        to="/login"
+                        onClick={closeStage}
+                        className="rounded-lg bg-white/10 px-3 py-1.5 font-bold text-white hover:bg-white/20"
                       >
-                        Mark Done ✓
-                      </button>
+                        Log In
+                      </Link>
+                      <Link
+                        to="/register"
+                        onClick={closeStage}
+                        className="rounded-lg bg-gradient-pink px-3 py-1.5 font-bold text-white hover:opacity-90"
+                      >
+                        Register Account
+                      </Link>
                     </div>
                   </div>
                 )}
               </div>
-            ) : (
-              /* PRE-BROADCAST HOST SETUP STAGE */
-              <div className="relative flex-1 w-full bg-gradient-to-br from-[#1a0c30] to-[#0c0418] flex items-center justify-center p-6 sm:p-10">
+            ) : !isLive && !activeReplay ? (
+              /* GO LIVE STUDIO PRE-FLIGHT (Only for Eligible Hosts!) */
+              <div className="relative h-full w-full flex flex-col items-center justify-center bg-gradient-to-b from-[#180a2c] to-[#090314] p-6 text-center overflow-y-auto">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-pink text-white text-2xl shadow-xl shadow-pink-500/30 mb-4">
+                  <Icon name="video" size={28} />
+                </div>
+                <h3 className="font-display text-2xl font-bold text-white sm:text-3xl">
+                  LiveKit Broadcaster Studio
+                </h3>
+                <p className="mt-1 text-sm text-[#cabfe0] max-w-md">
+                  Broadcast live masterclasses with WebRTC SFU relay, cloud recording, Q&A, and interactive audience participation.
+                </p>
+
                 {canHost ? (
-                  <form
-                    onSubmit={handleStartStreamSubmit}
-                    className="w-full max-w-lg rounded-3xl border border-white/15 bg-black/40 p-6 sm:p-8 backdrop-blur-xl shadow-2xl"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white text-xl">
-                        🎥
-                      </div>
+                  <form onSubmit={handleStartBroadcast} className="mt-6 w-full max-w-md space-y-3.5 text-left">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-1">
+                        Broadcast Title *
+                      </label>
+                      <input
+                        required
+                        value={streamTitle}
+                        onChange={(e) => setStreamTitle(e.target.value)}
+                        placeholder="e.g. Creative AI Film Production Mastery"
+                        className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <h3 className="font-display text-xl font-bold text-white">Go Live on KR8 Stage</h3>
-                        <p className="text-xs text-[#a594c7]">Real camera, microphone & task management</p>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-1">
+                          Category
+                        </label>
+                        <select
+                          value={streamCategory}
+                          onChange={(e) => setStreamCategory(e.target.value)}
+                          className="w-full rounded-xl border border-white/15 bg-[#1a0c2e] px-3 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                        >
+                          <option>Creative Tech & Strategy</option>
+                          <option>AI Motion & Animation</option>
+                          <option>Brand Identity & Design</option>
+                          <option>WebRTC & Architecture</option>
+                          <option>Live Workshop & Review</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-1">
+                          Visibility
+                        </label>
+                        <select
+                          value={streamVisibility}
+                          onChange={(e) => setStreamVisibility(e.target.value as any)}
+                          className="w-full rounded-xl border border-white/15 bg-[#1a0c2e] px-3 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                        >
+                          <option value="public">Public (Open to All)</option>
+                          <option value="private">Private (Invitation Only)</option>
+                        </select>
                       </div>
                     </div>
 
-                    <div className="mt-6 space-y-4">
+                    {streamVisibility === "private" && (
                       <div>
-                        <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                          Stream Title *
+                        <label className="block text-xs font-bold uppercase tracking-wider text-amber-300 mb-1">
+                          Private Access Key (Optional Custom Key)
                         </label>
                         <input
-                          value={streamTitle}
-                          onChange={(e) => setStreamTitle(e.target.value)}
-                          placeholder="e.g. Live Client Design Critique & Speed Drill"
-                          className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
-                          required
+                          value={customAccessKey}
+                          onChange={(e) => setCustomAccessKey(e.target.value)}
+                          placeholder="Leave blank for auto-generated key"
+                          className="w-full rounded-xl border border-amber-500/30 bg-black/40 px-4 py-2 text-xs text-white placeholder:text-gray-500 focus:border-amber-400 focus:outline-none"
                         />
                       </div>
+                    )}
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                            Category
-                          </label>
-                          <select
-                            value={streamCategory}
-                            onChange={(e) => setStreamCategory(e.target.value)}
-                            className="w-full rounded-xl border border-white/15 bg-[#1a0e30] px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
-                          >
-                            <option>Graphic Design</option>
-                            <option>Video Editing & Motion</option>
-                            <option>Web Development</option>
-                            <option>Creative Tech & Strategy</option>
-                            <option>Mindset Shift & Q&A</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                            Visibility
-                          </label>
-                          <select
-                            value={streamVisibility}
-                            onChange={(e) => setStreamVisibility(e.target.value as "public" | "private")}
-                            className="w-full rounded-xl border border-white/15 bg-[#1a0e30] px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
-                          >
-                            <option value="public">🌐 Public (All Visitors)</option>
-                            <option value="private">🔒 Private (Invite Only)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {streamVisibility === "private" && (
-                        <div>
-                          <label className="block text-xs font-semibold text-amber-300 mb-1">
-                            Custom Access Key (Optional)
-                          </label>
-                          <input
-                            value={customAccessKey}
-                            onChange={(e) => setCustomAccessKey(e.target.value)}
-                            placeholder="Leave empty for auto-generated key (e.g. KR8-4921)"
-                            className="w-full rounded-xl border border-amber-500/30 bg-black/30 px-4 py-2 text-xs text-white placeholder:text-gray-500 focus:border-amber-400 focus:outline-none"
-                          />
-                        </div>
-                      )}
-
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-xs text-[#b8aecf] space-y-1">
-                        <p className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                          <span>✓</span> Camera & Microphone will be requested on launch
-                        </p>
-                        <p className="flex items-center gap-1.5 text-pink-300 font-semibold">
-                          <span>✓</span> Automatically recorded for Restream Vault
-                        </p>
-                      </div>
-
+                    <div className="flex items-center gap-3 pt-2">
                       <button
                         type="submit"
-                        className="w-full rounded-xl bg-gradient-pink py-3 text-sm font-bold text-white shadow-xl shadow-pink-500/25 hover:brightness-110 active:scale-95 transition-all"
+                        className="flex-1 rounded-xl bg-gradient-pink py-3 text-sm font-black text-white shadow-lg glow-pink-sm hover:opacity-90 transition-all flex items-center justify-center gap-2"
                       >
-                        Launch Live Broadcast 🚀
+                        <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+                        Go Live Now
                       </button>
                     </div>
                   </form>
                 ) : (
-                  <div className="text-center max-w-md">
-                    <span className="text-4xl">🎙️</span>
-                    <h3 className="font-display text-2xl font-bold text-white mt-4">
-                      No Active Broadcast Right Now
-                    </h3>
-                    <p className="mt-2 text-sm text-[#cabfe0] leading-relaxed">
-                      Check out past recorded masterclasses in the Replay Vault below, or stay tuned for our next bi-weekly Mindset Shift broadcast!
+                  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6 max-w-md">
+                    <p className="text-sm font-semibold text-white">No active live broadcast at the moment.</p>
+                    <p className="mt-1 text-xs text-[#cabfe0]">
+                      Broadcasting is reserved for Founders, Admins, and Coaches. Explore past recordings below!
                     </p>
-                    <div className="mt-6 flex justify-center gap-3">
-                      <button
-                        onClick={() => setActiveTab("replays")}
-                        className="rounded-full bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white shadow-lg"
-                      >
-                        Explore Replay Vault ({replays.length}) →
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => setActiveTab("replays")}
+                      className="mt-4 rounded-xl bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20 transition-all"
+                    >
+                      Browse Recordings Replays →
+                    </button>
                   </div>
                 )}
               </div>
-            )}
-
-            {/* BROADCAST CONTROL DECK BAR (BOTTOM OF VIDEO) */}
-            <div className="border-t border-white/10 bg-black/80 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 backdrop-blur-md z-10">
-              {/* Media Controls for Host, Speaker & Viewers */}
-              <div className="flex items-center gap-2">
-                {isLive && (
-                  <>
-                    {(isHost || canHost) && (
-                      <button
-                        onClick={toggleCamera}
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl border text-sm transition-all ${
-                          cameraActive
-                            ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
-                            : "border-red-500/50 bg-red-500/20 text-red-300"
-                        }`}
-                        title={cameraActive ? "Turn Camera Off" : "Turn Camera On"}
-                      >
-                        {cameraActive ? "📹" : "🚫"}
-                      </button>
-                    )}
-
-                    {/* Microphone Mute/Unmute Toggle for All Participants */}
-                    <button
-                      onClick={toggleMic}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
-                        micActive
-                          ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300 shadow-sm"
-                          : "border-red-500/50 bg-red-500/20 text-red-300 shadow-sm"
-                      }`}
-                      title={micActive ? "Mute Microphone" : "Unmute Microphone"}
-                    >
-                      <span>{micActive ? "🎙️" : "🔇"}</span>
-                      <span>{micActive ? "Mic On" : "Muted (Tap to speak)"}</span>
-                    </button>
-
-                    {(isHost || canHost) && (
-                      <button
-                        onClick={isScreenSharing ? startCameraStream : startScreenShare}
-                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-all ${
-                          isScreenSharing
-                            ? "border-pink-500/50 bg-gradient-pink text-white shadow"
-                            : "border-white/15 bg-white/5 text-white hover:bg-white/10"
-                        }`}
-                      >
-                        <span>💻</span>
-                        <span className="hidden sm:inline">
-                          {isScreenSharing ? "Stop Sharing" : "Share Screen"}
-                        </span>
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Floating Reaction Emojis for Viewers */}
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                {["🔥", "❤️", "👏", "💡", "🚀"].map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => sendReaction(emoji)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-sm hover:scale-125 hover:bg-white/15 active:scale-95 transition-all"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-
-              {/* End Stream CTA for Host / Staff / Presenter */}
-              {canEndStream && isLive && (
-                <button
-                  onClick={endStream}
-                  className="rounded-xl border border-red-500/40 bg-red-600/80 px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-600 active:scale-95 transition-all flex items-center gap-1.5"
-                >
-                  <span>🛑</span>
-                  <span>End Broadcast</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT PANEL: CHAT, AUDIENCE & TASKS, OR REPLAYS */}
-          <div className="flex w-full flex-col border-t lg:border-t-0 lg:border-l border-white/10 bg-[#160d2b] lg:w-96 shrink-0 h-80 lg:h-auto">
-            {/* Panel Tab Switcher */}
-            <div className="flex border-b border-white/10 bg-black/30 p-2 gap-1 text-xs">
-              <button
-                onClick={() => setActiveTab("chat")}
-                className={`flex-1 rounded-lg py-2 font-semibold transition-all ${
-                  activeTab === "chat"
-                    ? "bg-gradient-pink text-white shadow"
-                    : "text-[#b8aecf] hover:text-white"
-                }`}
-              >
-                Chat ({chatMessages.length})
-              </button>
-              <button
-                onClick={() => setActiveTab("audience")}
-                className={`flex-1 rounded-lg py-2 font-semibold transition-all ${
-                  activeTab === "audience"
-                    ? "bg-gradient-pink text-white shadow"
-                    : "text-[#b8aecf] hover:text-white"
-                }`}
-              >
-                Audience ({activeStream?.viewers?.length || 1})
-              </button>
-              <button
-                onClick={() => setActiveTab("replays")}
-                className={`flex-1 rounded-lg py-2 font-semibold transition-all ${
-                  activeTab === "replays"
-                    ? "bg-gradient-pink text-white shadow"
-                    : "text-[#b8aecf] hover:text-white"
-                }`}
-              >
-                Vault ({replays.length})
-              </button>
-            </div>
-
-            {/* TAB 1: LIVE CHAT */}
-            {activeTab === "chat" && (
-              <div className="flex flex-1 flex-col overflow-hidden">
-                {/* Chat Message Stream */}
-                <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                  {chatMessages.length === 0 ? (
-                    <div className="text-center py-10 text-xs text-[#8a7ba8]">
-                      No chat messages yet. Be the first to say hello!
+            ) : (
+              /* ACTIVE LIVE STAGE FEED */
+              <div className="relative h-full w-full flex items-center justify-center bg-black overflow-hidden">
+                {audioOnly ? (
+                  /* Audio-only Mode Visualizer */
+                  <div className="flex flex-col items-center justify-center p-8 text-center">
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-purple-900/40 border border-purple-500/50 shadow-2xl mb-4 animate-pulse">
+                      <svg className="w-10 h-10 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
+                      </svg>
                     </div>
-                  ) : (
-                    chatMessages.map((m) => (
-                      <div
-                        key={m.id}
-                        className={`rounded-2xl p-3 text-xs ${
-                          m.isPinned
-                            ? "border border-yellow-500/50 bg-yellow-500/10"
-                            : m.senderId === "system"
-                            ? "border border-pink-500/40 bg-pink-500/10"
-                            : "border border-white/5 bg-white/[0.03]"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-white">{m.senderName}</span>
-                            {m.senderBadge && (
-                              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-pink-300 font-semibold">
-                                {m.senderBadge}
-                              </span>
-                            )}
-                          </div>
-                          {isHost && (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => pinMessage(m.id)}
-                                className="text-[10px] text-[#8a7ba8] hover:text-white"
-                                title="Pin message"
-                              >
-                                📌
-                              </button>
-                              <button
-                                onClick={() => deleteMessage(m.id)}
-                                className="text-[10px] text-[#8a7ba8] hover:text-red-400"
-                                title="Delete"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        <p className="mt-1 text-[#cabfe0] break-words">{m.text}</p>
-                      </div>
-                    ))
-                  )}
-                  <div ref={chatBottomRef} />
-                </div>
-
-                {/* Chat Input Bar */}
-                <form
-                  onSubmit={handleSendMessage}
-                  className="border-t border-white/10 bg-black/40 p-3 flex gap-2 items-center"
-                >
-                  <input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Send a question or comment..."
-                    className="flex-1 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
+                    <h4 className="text-lg font-bold text-white">{activeStream?.title}</h4>
+                    <p className="text-xs text-emerald-400 font-semibold mt-1">
+                      🎧 Audio-Only Low-Bandwidth Mode Active
+                    </p>
+                    <p className="text-xs text-[#8e82a8] max-w-sm mt-2">
+                      Conserving bandwidth and mobile data. Incoming video relays are paused.
+                    </p>
+                  </div>
+                ) : (
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted={isHost}
+                    className="h-full w-full object-contain"
                   />
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-gradient-pink px-3.5 py-2 text-xs font-bold text-white shadow hover:scale-105 active:scale-95 transition-all"
-                  >
-                    Send
-                  </button>
-                </form>
+                )}
+
+                {/* Spotlight / Pin Badges */}
+                {spotlightId && (
+                  <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5 rounded-full bg-amber-500/90 px-3 py-1 text-xs font-bold text-black shadow-lg">
+                    <span>⭐ Host Spotlight Active</span>
+                  </div>
+                )}
+
+                {pinnedParticipantId && !spotlightId && (
+                  <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5 rounded-full bg-blue-500/90 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                    <span>📌 Locally Pinned</span>
+                  </div>
+                )}
+
+                {/* Emergency Suspension Banner */}
+                {isSuspended && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm p-6 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600/30 border border-red-500 text-red-400 text-3xl mb-3">
+                      ⚠️
+                    </div>
+                    <h3 className="text-xl font-bold text-white">Activities Suspended</h3>
+                    <p className="text-xs text-red-200 mt-1 max-w-md">
+                      The host has temporarily paused participant audio, video, and chat activities for moderation review.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* TAB 2: AUDIENCE & TASK PROMOTION */}
-            {activeTab === "audience" && (
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400">
-                      Connected Viewers ({activeStream?.viewers?.length || 1})
-                    </h4>
-                    <p className="text-[11px] text-[#a594c7] mt-0.5">
-                      Real community members on stage.
-                    </p>
-                  </div>
+            {/* STAGE BOTTOM TOOLBAR */}
+            {isLive && !isPrivateLocked && (
+              <div className="z-20 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-[#12071f]/95 px-4 py-2.5">
+                {/* Media Toggles (Mic, Camera, Screen) */}
+                <div className="flex items-center gap-2">
+                  {/* Mic Toggle */}
+                  <button
+                    onClick={() => {
+                      const enabled = toggleMic();
+                      if (!enabled && isPresenter) toggleMic();
+                    }}
+                    className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all ${
+                      micActive
+                        ? "border-white/10 bg-white/10 text-white hover:bg-white/20"
+                        : "border-red-500/40 bg-red-500/20 text-red-300"
+                    }`}
+                    title={micActive ? "Mute Microphone" : "Unmute Microphone"}
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" />
+                    </svg>
+                    <span>{micActive ? "Mic On" : "Muted"}</span>
+                  </button>
 
-                  {/* Mute All Listeners Button (Host, Speakers & Admins) */}
-                  {(isHost || student?.admin || student?.type === "founder" || student?.type === "co-founder") && (
+                  {/* Camera Toggle (Presenters/Host only) */}
+                  {isPresenter && (
                     <button
-                      onClick={muteAll}
-                      className="rounded-xl border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-bold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all shadow-sm flex items-center gap-1"
-                      title="Mute all listeners"
+                      onClick={toggleCamera}
+                      className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all ${
+                        cameraActive
+                          ? "border-white/10 bg-white/10 text-white hover:bg-white/20"
+                          : "border-red-500/40 bg-red-500/20 text-red-300"
+                      }`}
+                      title={cameraActive ? "Stop Camera" : "Start Camera"}
                     >
-                      <span>🔇</span>
-                      <span>Mute All</span>
+                      <Icon name="video" size={14} />
+                      <span className="hidden sm:inline">{cameraActive ? "Camera On" : "Camera Off"}</span>
+                    </button>
+                  )}
+
+                  {/* Screen Share (Presenters/Host only) */}
+                  {isPresenter && (
+                    <button
+                      onClick={startScreenShare}
+                      className={`hidden sm:flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all ${
+                        isScreenSharing
+                          ? "border-emerald-500/50 bg-emerald-500/20 text-emerald-300"
+                          : "border-white/10 bg-white/10 text-white hover:bg-white/20"
+                      }`}
+                      title="Share Screen"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect width="20" height="14" x="2" y="3" rx="2" />
+                        <line x1="8" x2="16" y1="21" y2="21" />
+                        <line x1="12" x2="12" y1="17" y2="21" />
+                      </svg>
+                      <span>{isScreenSharing ? "Sharing Screen" : "Share Screen"}</span>
+                    </button>
+                  )}
+
+                  {/* Raise Hand (for Audience) */}
+                  {!isPresenter && (
+                    <button
+                      onClick={() => {
+                        const isRaised = student ? raisedHands.includes(student.id) : false;
+                        if (isRaised) lowerHand();
+                        else raiseHand();
+                      }}
+                      className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all ${
+                        student && raisedHands.includes(student.id)
+                          ? "border-amber-500 bg-amber-500/30 text-amber-200 animate-pulse"
+                          : "border-white/10 bg-white/10 text-white hover:bg-white/20"
+                      }`}
+                    >
+                      <span>✋</span>
+                      <span>{student && raisedHands.includes(student.id) ? "Hand Raised" : "Raise Hand"}</span>
                     </button>
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  {(activeStream?.viewers || []).map((v) => (
-                    <div
-                      key={v.id}
-                      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] p-2.5 text-xs"
+                {/* Quick Emoji Reactions */}
+                <div className="flex items-center gap-1">
+                  {["👍", "❤️", "🔥", "👏", "💡", "🚀"].map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => sendReaction(emoji)}
+                      className="rounded-lg p-1.5 text-base hover:bg-white/15 active:scale-125 transition-all"
+                      title={`Send ${emoji}`}
                     >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-pink text-white font-bold text-xs shrink-0">
-                          {v.avatar ? (
-                            <img src={v.avatar} alt={v.name} className="h-full w-full rounded-lg object-cover" />
-                          ) : (
-                            v.name.charAt(0).toUpperCase()
-                          )}
-                        </div>
-                        <div className="overflow-hidden truncate">
-                          <p className="font-semibold text-white truncate flex items-center gap-1.5">
-                            <span>{v.name}</span>
-                            <span className={`text-[10px] ${v.isMuted ? "text-red-400" : "text-emerald-400"}`}>
-                              {v.isMuted ? "🔇" : "🎙️"}
-                            </span>
-                          </p>
-                          <span className="text-[10px] text-pink-300 capitalize">{v.role}</span>
-                        </div>
-                      </div>
-
-                      {/* Host / Speaker / Admin Actions on Viewers */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Mute / Unmute Listener Toggle */}
-                        {(isHost || student?.admin || student?.type === "founder" || student?.type === "co-founder") && v.id !== student?.id && (
-                          <button
-                            onClick={() => muteListener(v.id)}
-                            className={`rounded-lg border px-2 py-1 text-[10px] font-bold transition-all ${
-                              v.isMuted
-                                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                                : "border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                            }`}
-                            title={v.isMuted ? "Unmute Listener" : "Mute Listener"}
-                          >
-                            {v.isMuted ? "Unmute" : "Mute"}
-                          </button>
-                        )}
-
-                        {isHost && v.id !== student?.id && (
-                          <>
-                            <button
-                              onClick={() => openTaskModalForUser(v.id, v.name)}
-                              className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-[10px] font-bold text-yellow-300 hover:bg-yellow-500/20"
-                              title="Assign a speed task / drill"
-                            >
-                              ⚡ Task
-                            </button>
-                            <button
-                              onClick={() => openAwardModalForUser(v.id, v.name)}
-                              className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2 py-1 text-[10px] font-bold text-pink-300 hover:bg-pink-500/20"
-                              title="Award XP Points"
-                            >
-                              ⭐ XP
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                      {emoji}
+                    </button>
                   ))}
                 </div>
 
-                {/* Active Tasks In Room */}
-                <div className="border-t border-white/10 pt-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-300">
-                    Live Stream Drills & Tasks ({activeStream?.assignedTasks?.length || 0})
-                  </h4>
-                  <div className="mt-2 space-y-2">
-                    {(activeStream?.assignedTasks || []).length === 0 ? (
-                      <p className="text-[11px] text-[#8a7ba8]">No tasks assigned in this session yet.</p>
+                {/* Host Moderation & Emergency Actions */}
+                <div className="flex items-center gap-2">
+                  {isModerator && (
+                    <button
+                      onClick={muteAll}
+                      className="hidden sm:flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-[#cabfe0] hover:bg-white/10 hover:text-white"
+                      title="Mute All Listeners"
+                    >
+                      Mute All
+                    </button>
+                  )}
+
+                  {isHost && (
+                    <>
+                      {/* Record Toggle */}
+                      <button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={`flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-all ${
+                          isRecording
+                            ? "border-rose-500 bg-rose-500/30 text-rose-200"
+                            : "border-white/10 bg-white/5 text-[#cabfe0] hover:bg-white/10"
+                        }`}
+                        title={isRecording ? "Stop Recording" : "Start Cloud Recording"}
+                      >
+                        <span className={`h-2 w-2 rounded-full ${isRecording ? "bg-rose-500 animate-pulse" : "bg-white/40"}`} />
+                        <span className="hidden md:inline">{isRecording ? "Recording" : "Record"}</span>
+                      </button>
+
+                      {/* Lock Stream */}
+                      <button
+                        onClick={toggleLock}
+                        className={`flex items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition-all ${
+                          isLocked
+                            ? "border-blue-500 bg-blue-500/30 text-blue-200"
+                            : "border-white/10 bg-white/5 text-[#cabfe0] hover:bg-white/10"
+                        }`}
+                        title={isLocked ? "Unlock Stage" : "Lock Stage"}
+                      >
+                        <span>{isLocked ? "🔒 Locked" : "🔓 Lock"}</span>
+                      </button>
+
+                      {/* EMERGENCY: Suspend Activities */}
+                      <button
+                        onClick={suspendActivities}
+                        className="flex items-center gap-1 rounded-xl border border-red-500/60 bg-red-600/30 px-2.5 py-1.5 text-xs font-black text-red-200 hover:bg-red-600/50 transition-all shadow-sm"
+                        title="EMERGENCY: Instantly pause all participant audio, video, chat"
+                      >
+                        ⚠️ Suspend
+                      </button>
+
+                      {/* End Stream */}
+                      <button
+                        onClick={endStream}
+                        className="rounded-xl bg-red-600 px-3 py-1.5 text-xs font-black text-white hover:bg-red-700 shadow-md active:scale-95 transition-all"
+                      >
+                        End Stream
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT 1 COLUMN: INTERACTIVE TABS & AUDIENCE */}
+          <div className="flex flex-col border-t border-white/10 bg-[#130722] lg:border-t-0 lg:border-l lg:border-white/10">
+            {/* TABS NAVIGATION */}
+            <div className="flex overflow-x-auto border-b border-white/10 bg-[#170a29] px-2 text-xs font-bold text-[#cabfe0] scrollbar-none">
+              <button
+                onClick={() => setActiveTab("chat")}
+                className={`flex shrink-0 items-center gap-1 px-3 py-3 border-b-2 transition-all ${
+                  activeTab === "chat" ? "border-pink-500 text-white" : "border-transparent hover:text-white"
+                }`}
+              >
+                💬 Chat {chatMessages.length > 0 && `(${chatMessages.length})`}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("qa")}
+                className={`flex shrink-0 items-center gap-1 px-3 py-3 border-b-2 transition-all ${
+                  activeTab === "qa" ? "border-pink-500 text-white" : "border-transparent hover:text-white"
+                }`}
+              >
+                ❓ Q&A {questions.length > 0 && `(${questions.length})`}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("polls")}
+                className={`flex shrink-0 items-center gap-1 px-3 py-3 border-b-2 transition-all ${
+                  activeTab === "polls" ? "border-pink-500 text-white" : "border-transparent hover:text-white"
+                }`}
+              >
+                📊 Polls {polls.length > 0 && `(${polls.length})`}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("audience")}
+                className={`flex shrink-0 items-center gap-1 px-3 py-3 border-b-2 transition-all ${
+                  activeTab === "audience" ? "border-pink-500 text-white" : "border-transparent hover:text-white"
+                }`}
+              >
+                👥 Roles {raisedHands.length > 0 && <span className="text-amber-400">✋({raisedHands.length})</span>}
+              </button>
+
+              {activeStream?.visibility === "private" && (
+                <button
+                  onClick={() => setActiveTab("invites")}
+                  className={`flex shrink-0 items-center gap-1 px-3 py-3 border-b-2 transition-all ${
+                    activeTab === "invites" ? "border-pink-500 text-white" : "border-transparent hover:text-white"
+                  }`}
+                >
+                  🔑 Access {requests.length > 0 && `(${requests.length})`}
+                </button>
+              )}
+
+              <button
+                onClick={() => setActiveTab("replays")}
+                className={`flex shrink-0 items-center gap-1 px-3 py-3 border-b-2 transition-all ${
+                  activeTab === "replays" ? "border-pink-500 text-white" : "border-transparent hover:text-white"
+                }`}
+              >
+                📼 Replays
+              </button>
+            </div>
+
+            {/* TAB CONTENTS */}
+            <div className="flex flex-1 flex-col overflow-hidden">
+              {/* TAB 1: LIVE CHAT */}
+              {activeTab === "chat" && (
+                <div className="flex flex-1 flex-col justify-between overflow-hidden">
+                  {/* Chat Permission Notice / Host Selector */}
+                  {isHost && (
+                    <div className="flex items-center justify-between border-b border-white/5 bg-black/20 px-3 py-1.5 text-[11px] text-[#8e82a8]">
+                      <span>Chat Mode:</span>
+                      <select
+                        value={chatPermission}
+                        onChange={(e) => updateChatPermission(e.target.value as any)}
+                        className="rounded border border-white/10 bg-[#160729] px-2 py-0.5 text-[11px] text-white"
+                      >
+                        <option value="everyone">Everyone</option>
+                        <option value="presenters_only">Presenters Only</option>
+                        <option value="disabled">Disabled</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Messages Feed */}
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+                    {chatMessages.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-[#8e82a8]">
+                        No messages yet. Say hello to the room!
+                      </div>
                     ) : (
-                      activeStream?.assignedTasks?.map((t) => (
-                        <div
-                          key={t.id}
-                          className={`rounded-xl p-2.5 text-xs border ${
-                            t.status === "completed"
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                              : "border-yellow-500/40 bg-yellow-500/10 text-yellow-200"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-white">{t.targetUserName}</span>
-                            <span className="text-[10px] font-semibold">
-                              {t.status === "completed" ? "✓ Done" : "⏳ In Progress"}
-                            </span>
+                      chatMessages
+                        .filter((msg) => {
+                          // Private DM filter: only show to sender and recipient
+                          if (msg.recipientId) {
+                            return student?.id === msg.senderId || student?.id === msg.recipientId;
+                          }
+                          return true;
+                        })
+                        .map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`rounded-xl p-2.5 text-xs transition-all ${
+                              msg.recipientId
+                                ? "border border-purple-500/40 bg-purple-900/30"
+                                : msg.isPinned
+                                ? "border border-amber-500/40 bg-amber-950/20"
+                                : "bg-white/5 hover:bg-white/[0.08]"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-white">{msg.senderName}</span>
+                                {msg.senderRole === "host" && (
+                                  <span className="rounded bg-pink-500/20 px-1.5 py-0.2 text-[9px] font-bold text-pink-300">
+                                    👑 Host
+                                  </span>
+                                )}
+                                {msg.senderRole === "co-host" && (
+                                  <span className="rounded bg-purple-500/20 px-1.5 py-0.2 text-[9px] font-bold text-purple-300">
+                                    ⭐ Co-Host
+                                  </span>
+                                )}
+                                {msg.senderRole === "panelist" && (
+                                  <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-bold text-blue-300">
+                                    🎙️ Speaker
+                                  </span>
+                                )}
+                                {msg.senderRole === "moderator" && (
+                                  <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-300">
+                                    🛡️ Mod
+                                  </span>
+                                )}
+                                {msg.recipientId && (
+                                  <span className="rounded bg-purple-500/30 px-1.5 py-0.2 text-[9px] font-semibold text-purple-200">
+                                    🔒 DM to {msg.recipientName || "You"}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-[#8e82a8]">
+                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <p className="text-[#cabfe0] break-words">{msg.text}</p>
                           </div>
-                          <p className="mt-1 text-xs text-[#cabfe0]">{t.task}</p>
-                          <div className="mt-2 flex items-center justify-between text-[10px]">
-                            <span>Reward: +{t.points} XP</span>
-                            {isHost && t.status === "pending" && (
-                              <button
-                                onClick={() => markTaskDone(t.id)}
-                                className="text-emerald-400 font-bold underline"
-                              >
-                                Approve as Done ✓
-                              </button>
-                            )}
+                        ))
+                    )}
+                    <div ref={chatBottomRef} />
+                  </div>
+
+                  {/* Message Input & DM selector */}
+                  <form onSubmit={handleSendMessage} className="border-t border-white/10 bg-[#160829] p-3">
+                    {dmRecipient && (
+                      <div className="flex items-center justify-between rounded bg-purple-900/40 px-2 py-1 text-[11px] text-purple-200 mb-2 border border-purple-500/40">
+                        <span>🔒 Direct Message to: <strong>{dmRecipient.name}</strong></span>
+                        <button type="button" onClick={() => setDmRecipient(null)} className="text-white hover:text-red-400">
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder={dmRecipient ? `Send private message to ${dmRecipient.name}...` : "Send a message to everyone..."}
+                        className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-xl bg-pink-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-pink-500 transition-all"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* TAB 2: Q&A QUEUE */}
+              {activeTab === "qa" && (
+                <div className="flex flex-1 flex-col justify-between overflow-hidden p-3">
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                    {questions.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-[#8e82a8]">
+                        No questions in queue yet. Be the first to ask!
+                      </div>
+                    ) : (
+                      questions.map((q) => (
+                        <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="font-bold text-white">
+                                {q.isAnonymous ? "🎭 Anonymous" : q.submitterName}
+                              </span>
+                              <p className="mt-1 font-medium text-pink-200">{q.question}</p>
+                            </div>
+                            <button
+                              onClick={() => upvoteQuestion(q.id)}
+                              className="flex items-center gap-1 rounded-lg border border-pink-500/30 bg-pink-500/10 px-2 py-1 font-bold text-pink-300 hover:bg-pink-500/20"
+                            >
+                              <span>▲</span>
+                              <span>{q.upvotes}</span>
+                            </button>
                           </div>
+
+                          {/* Existing Answer */}
+                          {q.answered && q.answerText && (
+                            <div className="mt-2.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-2 text-[11px] text-emerald-200">
+                              <span className="font-bold text-emerald-300">Answered by {q.answeredBy}: </span>
+                              {q.answerText}
+                            </div>
+                          )}
+
+                          {/* Presenter / Host Controls to Answer or Dismiss */}
+                          {isPresenter && !q.answered && (
+                            <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-wrap gap-2">
+                              {answeringQId === q.id ? (
+                                <div className="w-full space-y-2">
+                                  <textarea
+                                    value={answerText}
+                                    onChange={(e) => setAnswerText(e.target.value)}
+                                    placeholder="Type your answer..."
+                                    className="w-full rounded-lg border border-white/15 bg-black/40 p-2 text-xs text-white"
+                                    rows={2}
+                                  />
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex gap-2">
+                                      <label className="flex items-center gap-1 text-[11px] text-[#cabfe0]">
+                                        <input
+                                          type="radio"
+                                          checked={answerVisibility === "public"}
+                                          onChange={() => setAnswerVisibility("public")}
+                                        />
+                                        Public
+                                      </label>
+                                      <label className="flex items-center gap-1 text-[11px] text-[#cabfe0]">
+                                        <input
+                                          type="radio"
+                                          checked={answerVisibility === "private"}
+                                          onChange={() => setAnswerVisibility("private")}
+                                        />
+                                        Private DM
+                                      </label>
+                                    </div>
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={() => setAnsweringQId(null)}
+                                        className="rounded px-2 py-1 text-[10px] text-gray-400"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        onClick={() => handleAnswerSubmit(q.id)}
+                                        className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-500"
+                                      >
+                                        Submit Answer
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => setAnsweringQId(q.id)}
+                                    className="rounded bg-white/10 px-2 py-1 text-[10px] font-bold text-white hover:bg-white/20"
+                                  >
+                                    Answer
+                                  </button>
+                                  <button
+                                    onClick={() => dismissQuestion(q.id)}
+                                    className="rounded bg-red-500/20 px-2 py-1 text-[10px] text-red-300 hover:bg-red-500/30"
+                                  >
+                                    Dismiss
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
                   </div>
-                </div>
-              </div>
-            )}
 
-            {/* TAB 3: REPLAY VAULT */}
-            {activeTab === "replays" && (
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400">
-                    Recorded Sessions
-                  </h4>
-                  <p className="text-[11px] text-[#a594c7] mt-0.5">
-                    Watch past live masterclasses with full community discussion.
-                  </p>
-                </div>
-
-                {replays.map((r) => (
-                  <div
-                    key={r.id}
-                    className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-3 hover:border-pink-500/40 transition-all cursor-pointer"
-                    onClick={() => openStage(r)}
-                  >
-                    <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black/40 mb-2">
-                      <img src={r.thumbnail} alt={r.title} className="h-full w-full object-cover" />
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-pink text-white text-xs shadow-lg">
-                          ▶
-                        </span>
-                      </div>
-                      <span className="absolute bottom-1 right-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] text-white font-mono">
-                        {r.durationMinutes}m
-                      </span>
+                  {/* Ask Question Form */}
+                  <form onSubmit={handleAskQuestion} className="mt-3 border-t border-white/10 pt-3">
+                    <input
+                      value={newQuestionText}
+                      onChange={(e) => setNewQuestionText(e.target.value)}
+                      placeholder="Ask the speaker a question..."
+                      className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none mb-2"
+                    />
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1.5 text-xs text-[#cabfe0] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={askAnonymously}
+                          onChange={(e) => setAskAnonymously(e.target.checked)}
+                          className="rounded text-pink-600 focus:ring-0"
+                        />
+                        Ask Anonymously
+                      </label>
+                      <button
+                        type="submit"
+                        className="rounded-xl bg-pink-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-pink-500 transition-all"
+                      >
+                        Submit Question
+                      </button>
                     </div>
+                  </form>
+                </div>
+              )}
 
-                    <h5 className="font-bold text-white text-xs line-clamp-1">{r.title}</h5>
-                    <p className="text-[10px] text-[#a594c7] mt-1">{r.hostName} · {r.date}</p>
+              {/* TAB 3: POLLS & QUIZZES */}
+              {activeTab === "polls" && (
+                <div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-4">
+                  {isPresenter && (
+                    <button
+                      onClick={() => setShowPollModal(true)}
+                      className="w-full rounded-xl border border-dashed border-pink-500/50 bg-pink-500/10 py-2 text-xs font-bold text-pink-300 hover:bg-pink-500/20 transition-all"
+                    >
+                      + Create New Poll or Quiz
+                    </button>
+                  )}
+
+                  {polls.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-[#8e82a8]">
+                      No polls active. The host will launch interactive polls during the session!
+                    </div>
+                  ) : (
+                    polls.map((poll) => {
+                      const totalVotes = poll.options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+                      return (
+                        <div key={poll.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-bold text-white">{poll.question}</span>
+                            {poll.isQuiz && (
+                              <span className="rounded bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                                🧠 Quiz
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-2 mt-3">
+                            {poll.options.map((opt, idx) => {
+                              const count = opt.votes || 0;
+                              const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => votePoll(poll.id, idx)}
+                                  className="w-full relative overflow-hidden rounded-lg border border-white/10 bg-black/40 p-2 text-left hover:border-pink-500/50 transition-all"
+                                >
+                                  <div
+                                    className="absolute inset-y-0 left-0 bg-pink-500/20 transition-all"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                  <div className="relative z-10 flex items-center justify-between text-xs">
+                                    <span className="font-medium text-white">{opt.text}</span>
+                                    <span className="font-bold text-pink-300 font-mono">
+                                      {count} ({pct}%)
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {isPresenter && poll.isActive && (
+                            <button
+                              onClick={() => closePoll(poll.id)}
+                              className="mt-3 rounded bg-red-500/20 px-2.5 py-1 text-[10px] font-bold text-red-300 hover:bg-red-500/30"
+                            >
+                              Close Poll
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: AUDIENCE & ROLE MANAGEMENT */}
+              {activeTab === "audience" && (
+                <div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-4">
+                  {/* Raised Hands Queue */}
+                  {raisedHands.length > 0 && (
+                    <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-3">
+                      <h4 className="text-xs font-bold text-amber-300 mb-2">
+                        ✋ Raised Hands Queue ({raisedHands.length})
+                      </h4>
+                      <div className="space-y-1.5">
+                        {raisedHands.map((uid) => {
+                          const viewer = (activeStream?.viewers || []).find((v) => v.id === uid);
+                          const name = viewer?.name || "Participant";
+                          return (
+                            <div key={uid} className="flex items-center justify-between text-xs text-white">
+                              <span>{name}</span>
+                              <div className="flex gap-1.5">
+                                {isPresenter && (
+                                  <button
+                                    onClick={() => promoteRole(uid, "panelist")}
+                                    className="rounded bg-pink-600 px-2 py-0.5 text-[10px] font-bold text-white hover:bg-pink-500"
+                                  >
+                                    Promote to Speaker
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => lowerHand(uid)}
+                                  className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-gray-300 hover:bg-white/20"
+                                >
+                                  Lower Hand
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Connected Participants List */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-2">
+                      Connected Participants ({activeStream?.viewers?.length || 1})
+                    </h4>
+                    <div className="space-y-2">
+                      {(activeStream?.viewers || []).map((viewer) => {
+                        const isSelf = viewer.id === student?.id;
+                        return (
+                          <div
+                            key={viewer.id}
+                            className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-2.5 text-xs"
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-white">{viewer.name}</span>
+                                {isSelf && <span className="text-[10px] text-pink-400 font-semibold">(You)</span>}
+                                <span className="rounded bg-black/40 px-1.5 py-0.2 text-[9px] uppercase font-bold text-[#cabfe0]">
+                                  {viewer.role}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              {/* Send DM button */}
+                              {!isSelf && (
+                                <button
+                                  onClick={() => {
+                                    setDmRecipient({ id: viewer.id, name: viewer.name });
+                                    setActiveTab("chat");
+                                  }}
+                                  className="rounded bg-white/10 p-1 text-[10px] text-white hover:bg-white/20"
+                                  title="Send Private Direct Message"
+                                >
+                                  ✉️ DM
+                                </button>
+                              )}
+
+                              {/* Spotlight / Pin */}
+                              {isHost ? (
+                                <button
+                                  onClick={() => setSpotlight(spotlightId === viewer.id ? null : viewer.id)}
+                                  className={`rounded p-1 text-[10px] ${
+                                    spotlightId === viewer.id ? "bg-amber-500 text-black font-bold" : "bg-white/10 text-white"
+                                  }`}
+                                  title="Spotlight participant to everyone"
+                                >
+                                  ⭐
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setPinParticipant(pinnedParticipantId === viewer.id ? null : viewer.id)}
+                                  className={`rounded p-1 text-[10px] ${
+                                    pinnedParticipantId === viewer.id ? "bg-blue-500 text-white font-bold" : "bg-white/10 text-white"
+                                  }`}
+                                  title="Pin locally"
+                                >
+                                  📌
+                                </button>
+                              )}
+
+                              {/* Host / Co-host Moderation dropdown for this participant */}
+                              {isHost && !isSelf && (
+                                <select
+                                  value={viewer.role}
+                                  onChange={(e) => promoteRole(viewer.id, e.target.value as StreamRole)}
+                                  className="rounded border border-white/15 bg-black/40 px-1.5 py-0.5 text-[10px] text-white"
+                                >
+                                  <option value="attendee">Attendee</option>
+                                  <option value="panelist">Panelist</option>
+                                  <option value="moderator">Moderator</option>
+                                  <option value="co-host">Co-Host</option>
+                                </select>
+                              )}
+
+                              {isModerator && !isSelf && (
+                                <button
+                                  onClick={() => muteListener(viewer.id)}
+                                  className="rounded bg-white/10 p-1 text-[10px] text-white hover:bg-white/20"
+                                  title="Toggle participant microphone"
+                                >
+                                  🔇
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
+
+              {/* TAB 5: ACCESS REQUESTS & INVITES (Private Streams) */}
+              {activeTab === "invites" && (
+                <div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-4">
+                  {isHost && (
+                    <div>
+                      <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="w-full rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow-md hover:opacity-90 transition-all"
+                      >
+                        + Generate Elevated Role Invite Key
+                      </button>
+                    </div>
+                  )}
+
+                  {copiedInviteKey && (
+                    <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/30 p-3 text-xs text-white">
+                      <span className="font-bold text-emerald-400">Invite Key Generated: </span>
+                      <code className="rounded bg-black/50 px-2 py-0.5 font-mono text-emerald-200">
+                        {copiedInviteKey}
+                      </code>
+                      <p className="mt-1 text-[11px] text-[#cabfe0]">
+                        Share this key with the guest. They can use it to join with elevated permissions!
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Incoming Access Requests */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-2">
+                      Access Requests ({requests.length})
+                    </h4>
+                    {requests.length === 0 ? (
+                      <p className="text-xs text-[#8e82a8]">No pending requests.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {requests.map((req) => (
+                          <div
+                            key={req.id}
+                            className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 p-2.5 text-xs text-white"
+                          >
+                            <div>
+                              <span className="font-bold">{req.requesterName}</span>
+                              <span className="block text-[10px] text-[#8e82a8]">Status: {req.status}</span>
+                            </div>
+
+                            {isHost && req.status === "pending" && (
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => respondRequest(req.id, "accepted")}
+                                  className="rounded bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white hover:bg-emerald-500"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => respondRequest(req.id, "rejected")}
+                                  className="rounded bg-red-600 px-2 py-1 text-[10px] text-white hover:bg-red-500"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 6: REPLAYS & RECORDINGS */}
+              {activeTab === "replays" && (
+                <div className="flex flex-1 flex-col overflow-y-auto p-3 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#cabfe0]">
+                    Stream Recordings & Replay Vault
+                  </h4>
+                  {recordings.length === 0 && replays.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-[#8e82a8]">
+                      No recorded replays available yet.
+                    </div>
+                  ) : (
+                    [...recordings, ...replays].map((item: any, idx) => (
+                      <div
+                        key={item.id || idx}
+                        onClick={() => openStage(item)}
+                        className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-white/5 p-2.5 hover:bg-white/10 transition-all"
+                      >
+                        <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg bg-black">
+                          <img
+                            src={item.thumbnail || "/founder_timfire_wide.jpg"}
+                            alt={item.title}
+                            className="h-full w-full object-cover"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                            <span className="text-white text-base">▶</span>
+                          </div>
+                        </div>
+                        <div className="overflow-hidden">
+                          <h5 className="truncate text-xs font-bold text-white">{item.title}</h5>
+                          <p className="text-[11px] text-pink-400 font-medium">Host: {item.hostName}</p>
+                          <span className="text-[10px] text-[#8e82a8]">
+                            {item.durationMinutes ? `${item.durationMinutes} mins · ` : ""}
+                            {item.recordedAt || "Past Session"}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* TASK ASSIGNMENT MODAL (HOST ONLY) */}
-      {showTaskModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
-          <form
-            onSubmit={handleAssignTaskSubmit}
-            className="w-full max-w-md rounded-2xl border border-yellow-500/40 bg-[#1e0e38] p-6 shadow-2xl"
-          >
-            <h4 className="font-bold text-white text-base">
-              Assign Live Drill to {taskAssigneeName}
-            </h4>
-            <p className="text-xs text-[#a594c7] mt-1">
-              Give this creator a prompt or assignment to complete during the broadcast.
-            </p>
+      {/* CREATE POLL MODAL */}
+      {showPollModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#160829] p-6 shadow-2xl">
+            <h3 className="font-display text-lg font-bold text-white">Create Real-Time Poll / Quiz</h3>
+            <form onSubmit={handleCreatePollSubmit} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-1">
+                  Question *
+                </label>
+                <input
+                  required
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value)}
+                  placeholder="e.g. Which rendering engine is best for VR?"
+                  className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white"
+                />
+              </div>
 
-            <textarea
-              value={taskText}
-              onChange={(e) => setTaskText(e.target.value)}
-              placeholder="e.g. Design a high-contrast typography poster in 15 mins..."
-              rows={3}
-              className="mt-4 w-full rounded-xl border border-white/20 bg-black/40 p-3 text-xs text-white placeholder:text-gray-500 focus:border-yellow-400 focus:outline-none"
-              required
-            />
+              {pollOptions.map((opt, idx) => (
+                <div key={idx}>
+                  <label className="block text-xs text-[#cabfe0] mb-1">Option {idx + 1}</label>
+                  <input
+                    required
+                    value={opt}
+                    onChange={(e) => {
+                      const next = [...pollOptions];
+                      next[idx] = e.target.value;
+                      setPollOptions(next);
+                    }}
+                    className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white"
+                  />
+                </div>
+              ))}
 
-            <div className="mt-3 flex items-center justify-between">
-              <label className="text-xs text-[#cabfe0]">Award Points on Completion:</label>
-              <select
-                value={taskPoints}
-                onChange={(e) => setTaskPoints(Number(e.target.value))}
-                className="rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 text-xs text-white"
-              >
-                <option value={25}>+25 XP</option>
-                <option value={50}>+50 XP</option>
-                <option value={100}>+100 XP</option>
-              </select>
-            </div>
+              <div className="flex gap-4 pt-2">
+                <label className="flex items-center gap-1.5 text-xs text-[#cabfe0]">
+                  <input
+                    type="checkbox"
+                    checked={pollIsQuiz}
+                    onChange={(e) => setPollIsQuiz(e.target.checked)}
+                  />
+                  Quiz Mode (One correct answer)
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-[#cabfe0]">
+                  <input
+                    type="checkbox"
+                    checked={pollIsAnon}
+                    onChange={(e) => setPollIsAnon(e.target.checked)}
+                  />
+                  Anonymous
+                </label>
+              </div>
 
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTaskModal(false)}
-                className="flex-1 rounded-xl border border-white/10 py-2 text-xs text-[#b8aecf]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow"
-              >
-                Assign Task ⚡
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowPollModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs text-gray-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:opacity-90"
+                >
+                  Launch to Audience
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* AWARD XP POINTS MODAL (HOST ONLY) */}
-      {showAwardModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
-          <form
-            onSubmit={handleAwardPointsSubmit}
-            className="w-full max-w-md rounded-2xl border border-pink-500/40 bg-[#1e0e38] p-6 shadow-2xl"
-          >
-            <h4 className="font-bold text-white text-base">
-              Award XP Points to {awardeeName}
-            </h4>
-            <p className="text-xs text-[#a594c7] mt-1">
-              Recognize active participation with instant points added to their student account.
+      {/* CREATE ELEVATED INVITE MODAL */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#160829] p-6 shadow-2xl">
+            <h3 className="font-display text-lg font-bold text-white">Generate Invite Key</h3>
+            <p className="mt-1 text-xs text-[#cabfe0]">
+              Create a personalized access key that grants elevated role access upon entry.
             </p>
+            <form onSubmit={handleCreateInviteSubmit} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#cabfe0] mb-1">
+                  Elevated Role Granted
+                </label>
+                <select
+                  value={inviteTargetRole}
+                  onChange={(e) => setInviteTargetRole(e.target.value as any)}
+                  className="w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white"
+                >
+                  <option value="attendee">Attendee (Standard Viewer)</option>
+                  <option value="panelist">Panelist / Speaker</option>
+                  <option value="moderator">Moderator</option>
+                  <option value="co-host">Co-Host</option>
+                </select>
+              </div>
 
-            <input
-              value={awardReason}
-              onChange={(e) => setAwardReason(e.target.value)}
-              placeholder="Reason (e.g. Excellent critique in chat)"
-              className="mt-4 w-full rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
-              required
-            />
-
-            <div className="mt-3 flex items-center justify-between">
-              <label className="text-xs text-[#cabfe0]">XP to Award:</label>
-              <select
-                value={awardPointsVal}
-                onChange={(e) => setAwardPointsVal(Number(e.target.value))}
-                className="rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 text-xs text-white"
-              >
-                <option value={25}>+25 XP</option>
-                <option value={50}>+50 XP</option>
-                <option value={100}>+100 XP</option>
-                <option value={200}>+200 XP (Star Contributor)</option>
-              </select>
-            </div>
-
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAwardModal(false)}
-                className="flex-1 rounded-xl border border-white/10 py-2 text-xs text-[#b8aecf]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow"
-              >
-                Award Points ⭐
-              </button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs text-gray-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:opacity-90"
+                >
+                  Generate Key
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

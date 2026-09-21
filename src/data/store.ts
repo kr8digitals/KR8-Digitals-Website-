@@ -1511,7 +1511,7 @@ export function archiveAnnouncementToGallery(announcementId: string): boolean {
 
   addGalleryItem({
     title: target.title,
-    description: target.type === "text" ? target.body : target.caption,
+    description: (target.type === "text" ? target.body : target.caption) || "",
     category: "Flyers & Posters",
     mediaType: "image",
     url: target.type === "flyer" && target.image ? target.image : "/founder_timfire_wide.jpg",
@@ -2280,7 +2280,7 @@ export function studentCount(): number {
 // LIVE STREAMING & BROADCAST SYSTEM
 // ==========================================
 
-export type StreamRole = "host" | "co-host" | "moderator" | "speaker" | "viewer";
+export type StreamRole = "host" | "co-host" | "panelist" | "moderator" | "attendee" | "speaker" | "viewer";
 
 export type LiveStreamParticipant = {
   id: string;
@@ -2289,6 +2289,9 @@ export type LiveStreamParticipant = {
   role: StreamRole;
   isMuted?: boolean;
   isVideoOn?: boolean;
+  isScreenSharing?: boolean;
+  handRaised?: boolean;
+  isAudioOnly?: boolean;
   joinedAt: number;
 };
 
@@ -2301,6 +2304,8 @@ export type LiveChatMessage = {
   senderBadge?: string;
   text: string;
   createdAt: number;
+  recipientId?: string; // Private participant-to-participant DM
+  recipientName?: string;
   isPinned?: boolean;
   isDeleted?: boolean;
 };
@@ -2313,6 +2318,79 @@ export type LiveStreamTask = {
   points: number;
   status: "pending" | "completed";
   assignedAt: number;
+};
+
+export type StreamQuestion = {
+  id: string;
+  streamId: string;
+  submitterId?: string;
+  submitterName: string;
+  question: string;
+  isAnonymous: boolean;
+  upvotes: number;
+  upvoters: string[];
+  answered: boolean;
+  answerText?: string;
+  answerVisibility?: "public" | "private";
+  answeredBy?: string;
+  createdAt: number;
+};
+
+export type StreamPoll = {
+  id: string;
+  streamId: string;
+  createdBy: string;
+  question: string;
+  options: { text: string; votes: number }[];
+  isAnonymous: boolean;
+  isQuiz: boolean;
+  correctOption?: number;
+  votedUserIds: string[];
+  launchedAt: number;
+  closedAt?: number;
+  isActive: boolean;
+};
+
+export type StreamAccessRequest = {
+  id: string;
+  streamId: string;
+  requesterId: string;
+  requesterName: string;
+  status: "pending" | "accepted" | "rejected" | "conditional";
+  hostResponseMessage?: string;
+  createdAt: number;
+};
+
+export type StreamInvite = {
+  id: string;
+  streamId: string;
+  invitedBy: string;
+  inviteeUserId?: string;
+  inviteeName?: string;
+  inviteKey: string;
+  roleGranted: "attendee" | "co-host" | "panelist" | "moderator";
+  createdAt: number;
+  usedAt?: number;
+};
+
+export type StreamRecordingItem = {
+  id: string;
+  streamId: string;
+  title: string;
+  hostName: string;
+  category: string;
+  durationMinutes: number;
+  videoUrl: string;
+  thumbnail: string;
+  recordedAt: string;
+  isPublic: boolean;
+  sizeMb?: number;
+};
+
+export type BreakoutRoom = {
+  id: string;
+  name: string;
+  assignedParticipantIds: string[];
 };
 
 export type LiveStream = {
@@ -2331,12 +2409,21 @@ export type LiveStream = {
   viewerCount: number;
   peakViewers: number;
   quality: "1080p60" | "720p" | "audio-only";
+  livekitRoomName?: string;
   videoUrl?: string;
   posterUrl?: string;
   pinnedNotice?: string;
+  chatPermission?: "everyone" | "presenters_only" | "disabled";
+  isLocked?: boolean;
+  isSuspended?: boolean;
+  isRecording?: boolean;
+  recordingUrl?: string;
+  spotlightParticipantId?: string | null;
   promotedModerators: string[];
   promotedSpeakers: string[];
+  coHosts?: string[];
   viewers: LiveStreamParticipant[];
+  raisedHands?: string[];
   assignedTasks: LiveStreamTask[];
   recognizedParticipants: {
     userId: string;
@@ -2344,6 +2431,7 @@ export type LiveStream = {
     reason: string;
     points: number;
   }[];
+  breakouts?: BreakoutRoom[];
 };
 
 export type StreamReplay = {
@@ -2383,12 +2471,20 @@ export function getLastEndedStream(): StreamReplay | null {
 
 export function canUserHostStream(account: Account | null | undefined): boolean {
   if (!account) return false;
+  // 1. Founders and Co-Founders
   if (account.type === "founder" || account.type === "co-founder") return true;
+  // 2. Admins with granular permissions or Coach with attendance review access
   if (account.admin) {
     const role = account.admin.role;
-    return role === "ultimate" || role === "admin" || role === "coach";
+    if (role === "ultimate" || role === "admin" || role === "coach") return true;
+    if (account.admin.permissions && account.admin.permissions.length > 0) return true;
   }
   return false;
+}
+
+export function getEligibleStreamHosts(): Account[] {
+  const all = getAccounts();
+  return all.filter((a) => canUserHostStream(a));
 }
 
 export const INITIAL_STREAM_REPLAYS: StreamReplay[] = [
@@ -2514,13 +2610,21 @@ export function startLiveStream(input: {
     viewerCount: 1, // Real viewers count only: starts at 1 (the host)
     peakViewers: 1,
     quality: input.quality || "1080p60",
+    livekitRoomName: `kr8-room-${Date.now()}`,
     videoUrl: "",
     posterUrl: "/founder_timfire_wide.jpg",
     pinnedNotice: isPrivate
-      ? "🔒 Private Broadcast Session. Only invited participants with the key have access."
-      : "Welcome to the KR8 Live Stream! Engage in chat to receive tasks and earn XP.",
+      ? "🔒 Private Broadcast Session. By Invitation Only."
+      : "Welcome to the KR8 Live Stream! Engage in chat, Q&A, and interactive drills.",
+    chatPermission: "everyone",
+    isLocked: false,
+    isSuspended: false,
+    isRecording: false,
+    spotlightParticipantId: null,
     promotedModerators: [],
     promotedSpeakers: [],
+    coHosts: [],
+    raisedHands: [],
     viewers: [
       {
         id: host.id,
@@ -2541,7 +2645,7 @@ export function startLiveStream(input: {
   const initMsg: LiveChatMessage = {
     id: `msg-${Date.now()}`,
     streamId: newStream.id,
-    senderId: input.host.id,
+    senderId: host.id,
     senderName: hostName,
     senderRole: "host",
     senderBadge: "👑 Host & Founder",
@@ -2953,4 +3057,391 @@ export function saveStreamReplays(replays: StreamReplay[]): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:replays-updated"));
   }
+}
+
+/* ---------------- Live Stream Q&A, Polls, Requests, Invites & Recordings ---------------- */
+
+const STREAM_QA_KEY = "kr8_stream_qa_v2";
+const STREAM_POLLS_KEY = "kr8_stream_polls_v2";
+const STREAM_REQUESTS_KEY = "kr8_stream_requests_v2";
+const STREAM_INVITES_KEY = "kr8_stream_invites_v2";
+const STREAM_RECORDINGS_KEY = "kr8_stream_recordings_v2";
+
+export function getStreamQuestions(streamId: string): StreamQuestion[] {
+  const all = load<Record<string, StreamQuestion[]>>(STREAM_QA_KEY, {});
+  return (all[streamId] || []).sort((a, b) => b.upvotes - a.upvotes || b.createdAt - a.createdAt);
+}
+
+export function saveStreamQuestions(streamId: string, questions: StreamQuestion[]): void {
+  const all = load<Record<string, StreamQuestion[]>>(STREAM_QA_KEY, {});
+  all[streamId] = questions;
+  save(STREAM_QA_KEY, all);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-qa-updated"));
+  }
+}
+
+export function submitStreamQuestion(input: {
+  streamId: string;
+  submitterId?: string;
+  submitterName: string;
+  question: string;
+  isAnonymous: boolean;
+}): StreamQuestion {
+  const questions = getStreamQuestions(input.streamId);
+  const newQ: StreamQuestion = {
+    id: `qa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    streamId: input.streamId,
+    submitterId: input.isAnonymous ? undefined : input.submitterId,
+    submitterName: input.isAnonymous ? "Anonymous Creator" : input.submitterName,
+    question: input.question.trim(),
+    isAnonymous: input.isAnonymous,
+    upvotes: 1,
+    upvoters: input.submitterId ? [input.submitterId] : [],
+    answered: false,
+    createdAt: Date.now(),
+  };
+  saveStreamQuestions(input.streamId, [newQ, ...questions]);
+  return newQ;
+}
+
+export function upvoteStreamQuestion(streamId: string, questionId: string, userId: string): void {
+  const questions = getStreamQuestions(streamId);
+  const updated = questions.map((q) => {
+    if (q.id === questionId) {
+      const already = q.upvoters.includes(userId);
+      const nextUpvoters = already ? q.upvoters.filter((u) => u !== userId) : [...q.upvoters, userId];
+      return { ...q, upvotes: Math.max(0, nextUpvoters.length), upvoters: nextUpvoters };
+    }
+    return q;
+  });
+  saveStreamQuestions(streamId, updated);
+}
+
+export function answerStreamQuestion(
+  streamId: string,
+  questionId: string,
+  answerText: string,
+  visibility: "public" | "private",
+  answeredBy: string
+): void {
+  const questions = getStreamQuestions(streamId);
+  const updated = questions.map((q) =>
+    q.id === questionId
+      ? {
+          ...q,
+          answered: true,
+          answerText: answerText.trim(),
+          answerVisibility: visibility,
+          answeredBy,
+        }
+      : q
+  );
+  saveStreamQuestions(streamId, updated);
+}
+
+export function dismissStreamQuestion(streamId: string, questionId: string): void {
+  const questions = getStreamQuestions(streamId);
+  const updated = questions.filter((q) => q.id !== questionId);
+  saveStreamQuestions(streamId, updated);
+}
+
+/* ---------------- Stream Polls & Quizzes ---------------- */
+export function getStreamPolls(streamId: string): StreamPoll[] {
+  const all = load<Record<string, StreamPoll[]>>(STREAM_POLLS_KEY, {});
+  return all[streamId] || [];
+}
+
+export function saveStreamPolls(streamId: string, polls: StreamPoll[]): void {
+  const all = load<Record<string, StreamPoll[]>>(STREAM_POLLS_KEY, {});
+  all[streamId] = polls;
+  save(STREAM_POLLS_KEY, all);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-polls-updated"));
+  }
+}
+
+export function createStreamPoll(input: {
+  streamId: string;
+  createdBy: string;
+  question: string;
+  options: string[];
+  isAnonymous?: boolean;
+  isQuiz?: boolean;
+  correctOption?: number;
+}): StreamPoll {
+  const polls = getStreamPolls(input.streamId);
+  const newPoll: StreamPoll = {
+    id: `poll-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    streamId: input.streamId,
+    createdBy: input.createdBy,
+    question: input.question.trim(),
+    options: input.options.map((t) => ({ text: t.trim(), votes: 0 })),
+    isAnonymous: !!input.isAnonymous,
+    isQuiz: !!input.isQuiz,
+    correctOption: input.correctOption,
+    votedUserIds: [],
+    launchedAt: Date.now(),
+    isActive: true,
+  };
+  saveStreamPolls(input.streamId, [newPoll, ...polls]);
+  return newPoll;
+}
+
+export function voteStreamPoll(streamId: string, pollId: string, optionIndex: number, respondentId: string): boolean {
+  const polls = getStreamPolls(streamId);
+  const poll = polls.find((p) => p.id === pollId);
+  if (!poll || !poll.isActive || poll.votedUserIds.includes(respondentId)) return false;
+
+  const updated = polls.map((p) => {
+    if (p.id === pollId) {
+      const nextOptions = [...p.options];
+      if (nextOptions[optionIndex]) {
+        nextOptions[optionIndex] = {
+          ...nextOptions[optionIndex],
+          votes: nextOptions[optionIndex].votes + 1,
+        };
+      }
+      return {
+        ...p,
+        options: nextOptions,
+        votedUserIds: [...p.votedUserIds, respondentId],
+      };
+    }
+    return p;
+  });
+  saveStreamPolls(streamId, updated);
+  return true;
+}
+
+export function closeStreamPoll(streamId: string, pollId: string): void {
+  const polls = getStreamPolls(streamId);
+  const updated = polls.map((p) => (p.id === pollId ? { ...p, isActive: false, closedAt: Date.now() } : p));
+  saveStreamPolls(streamId, updated);
+}
+
+/* ---------------- Stream Access Requests ---------------- */
+export function getStreamAccessRequests(streamId?: string): StreamAccessRequest[] {
+  const all = load<StreamAccessRequest[]>(STREAM_REQUESTS_KEY, []);
+  return streamId ? all.filter((r) => r.streamId === streamId) : all;
+}
+
+export function requestStreamAccess(input: {
+  streamId: string;
+  requesterId: string;
+  requesterName: string;
+}): StreamAccessRequest {
+  const all = getStreamAccessRequests();
+  const existing = all.find((r) => r.streamId === input.streamId && r.requesterId === input.requesterId);
+  if (existing) return existing;
+
+  const newReq: StreamAccessRequest = {
+    id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    streamId: input.streamId,
+    requesterId: input.requesterId,
+    requesterName: input.requesterName,
+    status: "pending",
+    createdAt: Date.now(),
+  };
+  const updated = [newReq, ...all];
+  save(STREAM_REQUESTS_KEY, updated);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-requests-updated"));
+  }
+  return newReq;
+}
+
+export function respondStreamAccessRequest(
+  requestId: string,
+  status: "accepted" | "rejected" | "conditional",
+  responseMessage?: string
+): void {
+  const all = getStreamAccessRequests();
+  const updated = all.map((r) =>
+    r.id === requestId ? { ...r, status, hostResponseMessage: responseMessage } : r
+  );
+  save(STREAM_REQUESTS_KEY, updated);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-requests-updated"));
+  }
+}
+
+/* ---------------- Stream Invites ---------------- */
+export function getStreamInvites(streamId?: string): StreamInvite[] {
+  const all = load<StreamInvite[]>(STREAM_INVITES_KEY, []);
+  return streamId ? all.filter((i) => i.streamId === streamId) : all;
+}
+
+export function createStreamInvite(input: {
+  streamId: string;
+  invitedBy: string;
+  inviteeUserId?: string;
+  inviteeName?: string;
+  roleGranted?: "attendee" | "co-host" | "panelist" | "moderator";
+}): StreamInvite {
+  const all = getStreamInvites();
+  const inviteKey = `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  const newInvite: StreamInvite = {
+    id: `inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    streamId: input.streamId,
+    invitedBy: input.invitedBy,
+    inviteeUserId: input.inviteeUserId,
+    inviteeName: input.inviteeName,
+    inviteKey,
+    roleGranted: input.roleGranted || "attendee",
+    createdAt: Date.now(),
+  };
+  const updated = [newInvite, ...all];
+  save(STREAM_INVITES_KEY, updated);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-invites-updated"));
+  }
+  return newInvite;
+}
+
+/* ---------------- Stream Recordings Library ---------------- */
+export const INITIAL_STREAM_RECORDINGS: StreamRecordingItem[] = [
+  {
+    id: "rec-1",
+    streamId: "stream-prev-01",
+    title: "Masterclass: High-Income Graphic Design & Brand Identity in 2026",
+    hostName: "Timfire (Founder & CEO)",
+    category: "Graphic Design",
+    durationMinutes: 54,
+    videoUrl: "/videos/testimonial_grant_gideon.mp4",
+    thumbnail: "/founder_timfire_wide.jpg",
+    recordedAt: "Sep 14, 2026",
+    isPublic: true,
+    sizeMb: 245,
+  },
+  {
+    id: "rec-2",
+    streamId: "stream-prev-02",
+    title: "Live Creative Jam: Motion Editing & Narrative Storytelling",
+    hostName: "Stevenson Uche (Co-Founder)",
+    category: "Video Editing",
+    durationMinutes: 48,
+    videoUrl: "/videos/testimonial_bio_nicz.mp4",
+    thumbnail: "/videos/testimonial_bio_nicz_poster.jpg",
+    recordedAt: "Sep 08, 2026",
+    isPublic: true,
+    sizeMb: 198,
+  },
+];
+
+export function getStreamRecordings(): StreamRecordingItem[] {
+  return load<StreamRecordingItem[]>(STREAM_RECORDINGS_KEY, INITIAL_STREAM_RECORDINGS);
+}
+
+export function saveStreamRecordings(recordings: StreamRecordingItem[]): void {
+  save(STREAM_RECORDINGS_KEY, recordings);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-recordings-updated"));
+  }
+}
+
+export function addStreamRecording(rec: StreamRecordingItem): void {
+  const existing = getStreamRecordings();
+  const next = [rec, ...existing.filter((r) => r.id !== rec.id)];
+  saveStreamRecordings(next);
+}
+
+export function deleteStreamRecording(id: string): void {
+  const existing = getStreamRecordings();
+  const next = existing.filter((r) => r.id !== id);
+  saveStreamRecordings(next);
+}
+
+export function toggleStreamRecordingPublic(id: string): void {
+  const existing = getStreamRecordings();
+  const next = existing.map((r) => (r.id === id ? { ...r, isPublic: !r.isPublic } : r));
+  saveStreamRecordings(next);
+}
+
+/* ---------------- Participant Role & Stream Controls ---------------- */
+export function promoteParticipantRole(
+  streamId: string,
+  participantId: string,
+  newRole: StreamRole
+): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+
+  const viewers = (stream.viewers || []).map((v) =>
+    v.id === participantId ? { ...v, role: newRole } : v
+  );
+
+  const coHosts = newRole === "co-host"
+    ? [...new Set([...(stream.coHosts || []), participantId])]
+    : (stream.coHosts || []).filter((id) => id !== participantId);
+
+  const speakers = (newRole === "panelist" || newRole === "speaker")
+    ? [...new Set([...(stream.promotedSpeakers || []), participantId])]
+    : (stream.promotedSpeakers || []).filter((id) => id !== participantId);
+
+  const mods = newRole === "moderator"
+    ? [...new Set([...(stream.promotedModerators || []), participantId])]
+    : (stream.promotedModerators || []).filter((id) => id !== participantId);
+
+  updateLiveStream({
+    viewers,
+    coHosts,
+    promotedSpeakers: speakers,
+    promotedModerators: mods,
+  });
+}
+
+export function toggleRaiseHand(streamId: string, participantId: string, raised: boolean): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+
+  const hands = stream.raisedHands || [];
+  const nextHands = raised
+    ? [...new Set([...hands, participantId])]
+    : hands.filter((id) => id !== participantId);
+
+  const viewers = (stream.viewers || []).map((v) =>
+    v.id === participantId ? { ...v, handRaised: raised } : v
+  );
+
+  updateLiveStream({ raisedHands: nextHands, viewers });
+}
+
+export function setSpotlightParticipant(_streamId: string, participantId: string | null): void {
+  updateLiveStream({ spotlightParticipantId: participantId });
+}
+
+export function setChatPermission(
+  _streamId: string,
+  permission: "everyone" | "presenters_only" | "disabled"
+): void {
+  updateLiveStream({ chatPermission: permission });
+}
+
+export function toggleStreamLock(_streamId: string, locked: boolean): void {
+  updateLiveStream({ isLocked: locked });
+}
+
+export function suspendStreamActivities(streamId: string): void {
+  const stream = getActiveLiveStream();
+  if (!stream || stream.id !== streamId) return;
+
+  // Suspend immediately: mute all listeners, turn off attendee cameras & screen shares, restrict chat
+  const viewers = (stream.viewers || []).map((v) =>
+    v.role === "host" ? v : { ...v, isMuted: true, isVideoOn: false, isScreenSharing: false }
+  );
+
+  updateLiveStream({
+    isSuspended: true,
+    chatPermission: "disabled",
+    viewers,
+  });
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:stream-suspended"));
+  }
+}
+
+export function setBreakoutRooms(_streamId: string, breakouts: BreakoutRoom[]): void {
+  updateLiveStream({ breakouts });
 }

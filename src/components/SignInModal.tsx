@@ -6,11 +6,10 @@ import {
   completePasswordReset,
   getAccounts,
   MAIN_ADMIN_PASSWORD,
-  type Account,
+  normalizeEmail,
 } from "../data/store";
 import {
   authenticateWithBiometrics,
-  getRegisteredBiometrics,
 } from "../utils/biometrics";
 import Icon from "./Icon";
 
@@ -39,7 +38,6 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
 
   // Biometrics
   const [bioLoading, setBioLoading] = useState(false);
-  const registeredBios = getRegisteredBiometrics();
 
   useEffect(() => {
     setMode(initialMode);

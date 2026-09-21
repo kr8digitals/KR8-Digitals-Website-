@@ -93,13 +93,25 @@ export default function Navbar() {
             {isLive ? (
               <button
                 onClick={() => openStage()}
-                className="flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-xs font-black text-white shadow-lg glow-pink-sm animate-pulse hover:bg-red-500 active:scale-95 transition-all"
-                title="Active Live Broadcast in progress — Click to Join"
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black text-white shadow-lg glow-pink-sm transition-all active:scale-95 ${
+                  activeStream?.visibility === "private"
+                    ? "bg-gradient-to-r from-amber-600 to-purple-700 border border-amber-400/40"
+                    : "bg-red-600 hover:bg-red-500 animate-pulse"
+                }`}
+                title={
+                  activeStream?.visibility === "private"
+                    ? "Active Private Live Broadcast (By Invitation Only)"
+                    : "Live Broadcast Active — Click to Join"
+                }
               >
-                <span className="h-2 w-2 rounded-full bg-white" />
-                <span>LIVE</span>
-                {activeStream?.visibility === "private" && <span>🔒</span>}
-                <span className="hidden sm:inline font-mono">
+                <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+                <span>LIVE NOW</span>
+                {activeStream?.visibility === "private" && (
+                  <span className="hidden md:inline rounded bg-black/40 px-1.5 py-0.2 text-[10px] font-bold text-amber-200">
+                    By Invitation Only
+                  </span>
+                )}
+                <span className="font-mono text-[11px] opacity-90">
                   ({activeStream?.viewers?.length || activeStream?.viewerCount || 1})
                 </span>
               </button>

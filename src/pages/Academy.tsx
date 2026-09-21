@@ -30,7 +30,7 @@ function GuestAcademy() {
   const { signIn, addNotification } = useAuth();
   const [view, setView] = useState<"skills" | "auth">("skills");
   const [curriculum, setCurriculum] = useState<Skill | null>(null);
-  const [preSkill, setPreSkill] = useState<string>("");
+  const [preSkill] = useState<string>("");
 
   useEffect(() => {
     if (searchParams.get("auth") === "true" || searchParams.get("register") === "true" || window.location.hash === "#auth") {
@@ -386,7 +386,7 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   const [value, setValue] = useState("");
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
-  const [resetId, setResetId] = useState("");
+  const [resetId] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [demoCode, setDemoCode] = useState("");

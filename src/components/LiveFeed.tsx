@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getFeed, feedAction, timeAgo, type FeedItem, type LiveStream, type StreamReplay, getActiveLiveStream, getLastEndedStream, getLiveChatMessages } from "../data/store";
+import { getFeed, feedAction, timeAgo, type FeedItem, getLiveChatMessages } from "../data/store";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
 import { Avatar } from "./ui";
@@ -185,7 +185,7 @@ export default function LiveFeed({ compact }: { compact?: boolean }) {
                 ⭐ Recognized Participants:
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {lastEndedStream.recognizedEngagers.slice(0, 4).map((engager, idx) => (
+                {(lastEndedStream.recognizedEngagers || []).slice(0, 4).map((engager, idx) => (
                   <span
                     key={idx}
                     className="rounded-full bg-pink-500/10 border border-pink-500/20 px-2.5 py-0.5 text-[10px] text-pink-200"

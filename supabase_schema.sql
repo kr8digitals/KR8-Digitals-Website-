@@ -147,3 +147,151 @@ create policy "Allow public insert stream_replays" on public.stream_replays for 
 
 create policy "Allow public read feed_items" on public.feed_items for select using (true);
 create policy "Allow public insert feed_items" on public.feed_items for insert with check (true);
+
+-- ========================================================
+-- 7. LIVEKIT REALTIME STREAMS & ADVANCED WEBRTC TABLES
+-- ========================================================
+
+-- Streams Master Table
+create table if not exists public.streams (
+  id text primary key,
+  host_id text references public.accounts(id) on delete set null,
+  title text not null,
+  visibility text not null default 'public', -- 'public' | 'private'
+  status text not null default 'live', -- 'scheduled' | 'live' | 'ended'
+  livekit_room_name text not null,
+  started_at bigint not null,
+  ended_at bigint,
+  recording_url text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Stream Roles
+create table if not exists public.stream_roles (
+  id text primary key,
+  stream_id text references public.streams(id) on delete cascade not null,
+  user_id_or_guest_name text not null,
+  role text not null default 'attendee', -- 'host' | 'co-host' | 'panelist' | 'moderator' | 'attendee'
+  assigned_at bigint not null
+);
+
+-- Stream Invites (Host-initiated direct invites)
+create table if not exists public.stream_invites (
+  id text primary key,
+  stream_id text references public.streams(id) on delete cascade not null,
+  invited_by text references public.accounts(id) on delete cascade not null,
+  invitee_user_id_or_null text,
+  invite_key text not null,
+  role_granted text not null default 'attendee', -- 'attendee' | 'co-host' | 'panelist' | 'moderator'
+  created_at bigint not null,
+  used_at bigint
+);
+
+-- Stream Access Requests (Viewer-initiated requests for private streams)
+create table if not exists public.stream_access_requests (
+  id text primary key,
+  stream_id text references public.streams(id) on delete cascade not null,
+  requester_id text not null,
+  requester_name text not null,
+  status text not null default 'pending', -- 'pending' | 'accepted' | 'rejected' | 'conditional'
+  host_response_message text,
+  created_at bigint not null
+);
+
+-- Stream Chat Messages (with private DM support)
+create table if not exists public.stream_chat_messages (
+  id text primary key,
+  stream_id text references public.streams(id) on delete cascade not null,
+  sender_id_or_guest_name text not null,
+  sender_name text not null,
+  message text not null,
+  visibility text not null default 'public', -- 'public' or 'private_<recipientId>'
+  created_at bigint not null
+);
+
+-- Stream Q&A Queue
+create table if not exists public.stream_qa (
+  id text primary key,
+  stream_id text references public.streams(id) on delete cascade not null,
+  submitter_id_or_null text,
+  submitter_name text not null,
+  question text not null,
+  is_anonymous boolean default false,
+  upvotes integer default 0,
+  answered boolean default false,
+  answer_text text,
+  answer_visibility text default 'public', -- 'public' | 'private'
+  created_at bigint not null
+);
+
+-- Stream Polls & Quizzes
+create table if not exists public.stream_polls (
+  id text primary key,
+  stream_id text references public.streams(id) on delete cascade not null,
+  created_by text not null,
+  question text not null,
+  options jsonb not null default '[]'::jsonb,
+  is_anonymous boolean default false,
+  is_quiz boolean default false,
+  correct_option integer,
+  launched_at bigint not null,
+  closed_at bigint
+);
+
+-- Stream Poll Responses
+create table if not exists public.stream_poll_responses (
+  id text primary key,
+  poll_id text references public.stream_polls(id) on delete cascade not null,
+  respondent_id_or_null text,
+  selected_option integer not null,
+  created_at bigint not null
+);
+
+-- Enable RLS and Realtime
+alter publication supabase_realtime add table public.streams;
+alter publication supabase_realtime add table public.stream_roles;
+alter publication supabase_realtime add table public.stream_invites;
+alter publication supabase_realtime add table public.stream_access_requests;
+alter publication supabase_realtime add table public.stream_chat_messages;
+alter publication supabase_realtime add table public.stream_qa;
+alter publication supabase_realtime add table public.stream_polls;
+alter publication supabase_realtime add table public.stream_poll_responses;
+
+alter table public.streams enable row level security;
+alter table public.stream_roles enable row level security;
+alter table public.stream_invites enable row level security;
+alter table public.stream_access_requests enable row level security;
+alter table public.stream_chat_messages enable row level security;
+alter table public.stream_qa enable row level security;
+alter table public.stream_polls enable row level security;
+alter table public.stream_poll_responses enable row level security;
+
+create policy "Allow public read streams" on public.streams for select using (true);
+create policy "Allow public insert streams" on public.streams for insert with check (true);
+create policy "Allow public update streams" on public.streams for update using (true);
+
+create policy "Allow public read stream_roles" on public.stream_roles for select using (true);
+create policy "Allow public insert stream_roles" on public.stream_roles for insert with check (true);
+create policy "Allow public update stream_roles" on public.stream_roles for update using (true);
+
+create policy "Allow public read stream_invites" on public.stream_invites for select using (true);
+create policy "Allow public insert stream_invites" on public.stream_invites for insert with check (true);
+create policy "Allow public update stream_invites" on public.stream_invites for update using (true);
+
+create policy "Allow public read stream_access_requests" on public.stream_access_requests for select using (true);
+create policy "Allow public insert stream_access_requests" on public.stream_access_requests for insert with check (true);
+create policy "Allow public update stream_access_requests" on public.stream_access_requests for update using (true);
+
+create policy "Allow public read stream_chat_messages" on public.stream_chat_messages for select using (true);
+create policy "Allow public insert stream_chat_messages" on public.stream_chat_messages for insert with check (true);
+
+create policy "Allow public read stream_qa" on public.stream_qa for select using (true);
+create policy "Allow public insert stream_qa" on public.stream_qa for insert with check (true);
+create policy "Allow public update stream_qa" on public.stream_qa for update using (true);
+
+create policy "Allow public read stream_polls" on public.stream_polls for select using (true);
+create policy "Allow public insert stream_polls" on public.stream_polls for insert with check (true);
+create policy "Allow public update stream_polls" on public.stream_polls for update using (true);
+
+create policy "Allow public read stream_poll_responses" on public.stream_poll_responses for select using (true);
+create policy "Allow public insert stream_poll_responses" on public.stream_poll_responses for insert with check (true);

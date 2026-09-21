@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   getGalleryItems,
   addGalleryItem,
   type GalleryItem,
 } from "../data/store";
-import { Pill, GradientButton, GhostButton, Card, SectionHead } from "../components/ui";
-import Icon from "../components/Icon";
+import { Pill, GhostButton } from "../components/ui";
 
 const CATEGORIES = [
   "All",

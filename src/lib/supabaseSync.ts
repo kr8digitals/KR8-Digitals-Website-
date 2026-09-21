@@ -5,15 +5,11 @@ import {
   getActiveLiveStream,
   saveActiveLiveStream,
   isStreamTerminated,
-  markStreamTerminated,
   getLiveChatMessages,
   saveLiveChatMessages,
-  getFeed,
-  addFeed,
   type Account,
   type LiveStream,
   type LiveChatMessage,
-  type FeedItem,
 } from "../data/store";
 
 let isInitialized = false;
@@ -45,7 +41,7 @@ export function initSupabaseSync() {
 
   // 3. Realtime Subscriptions
   try {
-    const streamChannel = supabase
+    supabase
       .channel("public:live_streams")
       .on(
         "postgres_changes",
@@ -93,7 +89,7 @@ export function initSupabaseSync() {
       )
       .subscribe();
 
-    const chatChannel = supabase
+    supabase
       .channel("public:live_chat")
       .on(
         "postgres_changes",
@@ -156,6 +152,7 @@ async function hydrateAccountsFromSupabase() {
           graduated: !!row.graduated,
           avatar: row.avatar || "/founder_timfire.jpg",
           executiveRole: row.executive_role,
+          joined: row.created_at || row.joined || new Date().toISOString(),
         };
         localMap.set(acc.id, acc);
       });
@@ -258,6 +255,7 @@ export async function syncLiveStreamToSupabase(stream: LiveStream | null) {
   try {
     if (!stream) {
       await supabase.from("live_streams").update({ is_live: false }).neq("id", "none");
+      await supabase.from("streams").update({ is_live: false }).neq("id", "none");
     } else {
       await supabase.from("live_streams").upsert({
         id: stream.id,
@@ -278,6 +276,29 @@ export async function syncLiveStreamToSupabase(stream: LiveStream | null) {
         assigned_tasks: stream.assignedTasks || [],
         recognized_participants: stream.recognizedParticipants || [],
       });
+
+      // Also upsert to new LiveKit streams table if present
+      await supabase.from("streams").upsert({
+        id: stream.id,
+        title: stream.title,
+        category: stream.category,
+        description: stream.description,
+        host_id: stream.hostId,
+        host_name: stream.hostName,
+        host_avatar: stream.hostAvatar,
+        visibility: stream.visibility,
+        access_key: stream.accessKey,
+        is_live: stream.isLive,
+        started_at: stream.startedAt,
+        viewer_count: stream.viewerCount,
+        livekit_room_name: stream.livekitRoomName || stream.id,
+        chat_permission: stream.chatPermission || "everyone",
+        is_locked: !!stream.isLocked,
+        is_suspended: !!stream.isSuspended,
+        spotlight_participant_id: stream.spotlightParticipantId || null,
+        is_recording: !!stream.isRecording,
+        viewers: stream.viewers || [],
+      });
     }
   } catch (err) {
     console.warn("Could not sync live stream to Supabase:", err);
@@ -296,6 +317,20 @@ export async function syncLiveChatMessageToSupabase(msg: LiveChatMessage) {
       sender_name: msg.senderName,
       sender_role: msg.senderRole,
       sender_badge: msg.senderBadge || null,
+      text: msg.text,
+      is_pinned: !!msg.isPinned,
+      created_at: msg.createdAt,
+    });
+
+    await supabase.from("stream_chat_messages").insert({
+      id: msg.id,
+      stream_id: msg.streamId,
+      sender_id: msg.senderId,
+      sender_name: msg.senderName,
+      sender_role: msg.senderRole,
+      recipient_id: msg.recipientId || null,
+      recipient_name: msg.recipientName || null,
+      is_private: !!msg.recipientId,
       text: msg.text,
       is_pinned: !!msg.isPinned,
       created_at: msg.createdAt,

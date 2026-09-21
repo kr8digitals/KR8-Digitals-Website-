@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   SKILLS,
@@ -11,15 +11,13 @@ import {
   getSkillWhatsApp,
   getReferralUrl,
   type Account,
-  type Skill,
 } from "../data/store";
-import { Card, GradientButton, GhostButton, Pill, SectionHead } from "../components/ui";
+import { Card, GradientButton, GhostButton, Pill } from "../components/ui";
 import CountryPhone from "../components/CountryPhone";
 import Icon from "../components/Icon";
 
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { user, signIn, addNotification } = useAuth();
 
   const initialSkill = searchParams.get("skill") || "";

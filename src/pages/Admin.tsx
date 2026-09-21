@@ -12,7 +12,8 @@ import {
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
   addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
   getStreamReplays, saveStreamReplays,
-  getGalleryItems, saveGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, deleteGalleryItem, archiveAnnouncementToGallery,
+  canUserHostStream, deleteStreamRecording,
+  getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, archiveAnnouncementToGallery,
   type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
@@ -2555,9 +2556,19 @@ function HomeManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
 }
 
 function LiveStreamsManager() {
-  const { isLive, activeStream, openStage, endStream } = useLiveStream();
+  const {
+    isLive,
+    activeStream,
+    openStage,
+    endStream,
+    recordings,
+  } = useLiveStream();
+  const accounts: Account[] = getAccounts();
   const [replays, setReplays] = useState<StreamReplay[]>(getStreamReplays());
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Eligible Broadcasters list
+  const eligibleUsers = accounts.filter((acc: Account) => canUserHostStream(acc));
 
   const handleDeleteReplay = (id: string, title: string) => {
     if (!confirm(`Delete replay "${title}" from the archives?`)) return;
@@ -2568,58 +2579,202 @@ function LiveStreamsManager() {
     setTimeout(() => setStatusMsg(null), 3000);
   };
 
+  const handleDeleteRecording = (id: string, title: string) => {
+    if (!confirm(`Delete cloud recording "${title}"?`)) return;
+    deleteStreamRecording(id);
+    setStatusMsg(`Deleted recording "${title}".`);
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Active Broadcast Status Panel */}
+      {/* Active Broadcasts Control & Table */}
       <Card>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <div className="flex items-center gap-2">
               <Icon name="video" size={20} className="text-pink-400" />
-              <h3 className="font-bold text-white text-lg">Live Broadcasting Studio Control</h3>
+              <h3 className="font-bold text-white text-lg">Active Live Broadcasts & WebRTC Stage</h3>
             </div>
             <p className="mt-1 text-xs text-[#b8aecf]">
-              Streams reflect instantly across the entire website with site-wide banner and interactive chat.
+              Monitor running broadcasts, viewer counts, LiveKit SFU relay state, and enforce broadcast termination.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            {isLive ? (
-              <button
-                onClick={endStream}
-                className="rounded-xl border border-red-500/50 bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 active:scale-95 transition-all shadow-lg"
-              >
-                End Active Broadcast
-              </button>
-            ) : null}
             <button
               onClick={() => openStage()}
-              className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+              className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
             >
-              {isLive ? "Open Live Stage →" : "Launch Broadcast Studio (Go Live) →"}
+              {isLive ? "Open Live Stage →" : "Launch Studio (Go Live) →"}
             </button>
           </div>
         </div>
 
         {isLive && activeStream ? (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-ping" />
-              <h4 className="font-bold text-white text-sm">CURRENTLY BROADCASTING: {activeStream.title}</h4>
-            </div>
-            <p className="text-xs text-[#d8cde8] mt-1.5">{activeStream.description}</p>
-            <div className="mt-3 flex items-center gap-4 text-xs font-mono text-pink-300">
-              <span>Host: {activeStream.hostName}</span>
-              <span>Audience: 👥 {activeStream.viewerCount} watching</span>
-              <span>Peak: {activeStream.peakViewers}</span>
-              <span>Quality: {activeStream.quality}</span>
-            </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-xs text-[#cabfe0]">
+              <thead className="border-b border-white/10 bg-white/5 uppercase tracking-wider text-[10px] text-pink-300">
+                <tr>
+                  <th className="py-2.5 px-3">Title & Host</th>
+                  <th className="py-2.5 px-3">Category</th>
+                  <th className="py-2.5 px-3">Visibility</th>
+                  <th className="py-2.5 px-3">Started</th>
+                  <th className="py-2.5 px-3">Viewers</th>
+                  <th className="py-2.5 px-3">LiveKit Room</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                <tr>
+                  <td className="py-3 px-3">
+                    <span className="font-bold text-white block">{activeStream.title}</span>
+                    <span className="text-[11px] text-pink-400">Host: {activeStream.hostName}</span>
+                  </td>
+                  <td className="py-3 px-3">{activeStream.category}</td>
+                  <td className="py-3 px-3">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      activeStream.visibility === "private"
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    }`}>
+                      {activeStream.visibility === "private" ? "🔒 Private" : "Public"}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 font-mono text-[11px]">
+                    {new Date(activeStream.startedAt).toLocaleTimeString()}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-emerald-400 font-bold">
+                    👥 {activeStream.viewers?.length || activeStream.viewerCount || 1}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-[11px] text-gray-400">
+                    {activeStream.livekitRoomName || activeStream.id}
+                  </td>
+                  <td className="py-3 px-3 text-right space-x-2">
+                    <button
+                      onClick={() => openStage()}
+                      className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-white/20"
+                    >
+                      Stage
+                    </button>
+                    <button
+                      onClick={endStream}
+                      className="rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-700"
+                    >
+                      Force End
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         ) : (
           <div className="mt-4 rounded-2xl border border-white/5 bg-black/25 p-4 text-xs text-[#b8aecf]">
-            Status: <span className="font-semibold text-white">Studio Idle</span>. Click "Launch Broadcast Studio" above to configure and start your live broadcast to the entire community.
+            Status: <span className="font-semibold text-white">Studio Idle</span>. No live streams currently running.
           </div>
         )}
+      </Card>
+
+      {/* Cloud Recordings Manager */}
+      <Card>
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h3 className="font-bold text-white text-lg">LiveKit Cloud Stream Recordings Library</h3>
+            <p className="text-xs text-[#8a7ba8]">
+              Manage egress cloud-recorded broadcast sessions, duration, storage footprint, and playback visibility.
+            </p>
+          </div>
+          {statusMsg && <span className="text-xs text-pink-300 font-semibold">{statusMsg}</span>}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {recordings.length === 0 ? (
+            <p className="text-xs text-[#8a7ba8] py-4 text-center">No cloud recordings generated yet.</p>
+          ) : (
+            recordings.map((rec) => (
+              <div
+                key={rec.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-white/20"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="relative h-14 w-20 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/15">
+                    <img src={rec.thumbnail || "/founder_timfire_wide.jpg"} alt={rec.title} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.2 text-[9px] font-mono text-white">
+                      {rec.durationMinutes}m
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-sm">{rec.title}</h4>
+                    <p className="text-xs text-pink-300">{rec.category} · Host: {rec.hostName}</p>
+                    <p className="text-xs text-[#8a7ba8] mt-0.5">
+                      {rec.recordedAt} · {rec.sizeMb ? `${rec.sizeMb} MB` : "48 MB"} · {rec.isPublic ? "🌐 Public" : "🔒 Private"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => openStage(rec as any)}
+                    className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15"
+                  >
+                    Play
+                  </button>
+                  <a
+                    href={rec.videoUrl}
+                    download
+                    className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15"
+                  >
+                    Download
+                  </a>
+                  <button
+                    onClick={() => handleDeleteRecording(rec.id, rec.title)}
+                    className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+
+      {/* Stream Eligibility Manager */}
+      <Card>
+        <div className="border-b border-white/10 pb-3">
+          <h3 className="font-bold text-white text-lg">Live Streaming Eligibility Directory ({eligibleUsers.length})</h3>
+          <p className="text-xs text-[#8a7ba8]">
+            Only Founders, Co-Founders, Admins with permissions, and Coaches can launch live streams. Unregistered visitors, students, and tribe members cannot stream.
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {eligibleUsers.map((user: Account) => (
+            <div
+              key={user.id}
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
+            >
+              <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-pink flex items-center justify-center text-white font-bold text-sm">
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.name} className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  user.name.charAt(0)
+                )}
+              </div>
+              <div className="overflow-hidden">
+                <p className="font-bold text-white text-xs truncate">{user.name}</p>
+                <p className="text-[11px] text-[#cabfe0] truncate">{user.email}</p>
+                <span className="mt-1 inline-block rounded bg-pink-500/20 px-1.5 py-0.2 text-[9px] font-bold uppercase text-pink-300">
+                  {user.type === "founder" || user.type === "co-founder"
+                    ? user.type
+                    : user.admin
+                    ? "Admin"
+                    : "Coach"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </Card>
 
       {/* Recorded Replays Vault */}

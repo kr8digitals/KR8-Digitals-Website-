@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -8,7 +8,6 @@ import {
   requestPasswordReset,
   completePasswordReset,
   MAIN_ADMIN_PASSWORD,
-  type Account,
 } from "../data/store";
 import { Card, GradientButton, GhostButton, Pill } from "../components/ui";
 import Icon from "../components/Icon";

@@ -20,7 +20,7 @@ export default function LiveStreamBanner() {
           </span>
 
           <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
-            {activeStream.visibility === "private" ? "🔒 PRIVATE STREAM" : "LIVE BROADCAST"}
+            {activeStream.visibility === "private" ? "🔒 BY INVITATION ONLY" : "LIVE BROADCAST"}
           </span>
 
           <div className="flex items-center gap-2 overflow-hidden truncate">
@@ -40,7 +40,7 @@ export default function LiveStreamBanner() {
             onClick={() => openStage()}
             className="flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1 text-xs font-black text-pink-700 shadow-md hover:bg-white/90 active:scale-95 transition-all glow-pink-sm whitespace-nowrap"
           >
-            <span>{activeStream.visibility === "private" ? "Enter Key" : "Join Stream"}</span>
+            <span>{activeStream.visibility === "private" ? "By Invitation Only" : "Join Stream"}</span>
             <span>→</span>
           </button>
 
