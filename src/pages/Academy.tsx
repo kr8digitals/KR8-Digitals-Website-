@@ -1,9 +1,10 @@
 import { useState, useEffect, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   SKILLS, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
-  registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, addFeed, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders,
+  registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
+  submitAttendance, getStudentAttendance, getAttendanceTypesSettings, type AttendanceSubmission,
   type Account, type Skill,
 } from "../data/store";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Avatar, Check, ImageWithFallback } from "../components/ui";
@@ -25,10 +26,18 @@ export default function Academy() {
 const inputCls = "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none";
 
 function GuestAcademy() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signIn, addNotification } = useAuth();
   const [view, setView] = useState<"skills" | "auth">("skills");
   const [curriculum, setCurriculum] = useState<Skill | null>(null);
-  const [preSkill, setPreSkill] = useState<string>("");
+  const [preSkill] = useState<string>("");
+
+  useEffect(() => {
+    if (searchParams.get("auth") === "true" || searchParams.get("register") === "true" || window.location.hash === "#auth") {
+      setView("auth");
+    }
+  }, [searchParams]);
 
   return (
     <div>
@@ -36,16 +45,17 @@ function GuestAcademy() {
         <div className="mx-auto max-w-7xl px-5">
           <div className="max-w-3xl">
             <Pill>The Academy</Pill>
-            <h1 className="font-display mt-5 text-5xl text-white sm:text-6xl">
-              Learn a digital skill — <span className="text-gradient">completely free.</span>
+            <h1 className="font-display mt-5 text-4xl text-white sm:text-6xl font-bold">
+              Master high-income craft — <span className="text-gradient">completely free.</span>
             </h1>
-            <p className="mt-5 text-[#b8aecf]">
-              Six in-demand tracks with real, week-by-week curriculum and real instructors. Register once,
-              get a verifiable KR8 Identity, and start learning today.
+            <p className="mt-5 text-base sm:text-lg text-[#cabfe0] leading-relaxed">
+              Stop letting expensive bootcamps gatekeep your future. We offer intensive, practical tracks taught by senior practitioners who ship client work every single day. Pick your track, claim your verifiable KR8 ID, and turn your craft into income.
             </p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <GradientButton onClick={() => { setPreSkill(""); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }}>Register / Sign In →</GradientButton>
-              <GhostButton to="/verify">Verify a KR8 ID</GhostButton>
+            <div className="mt-7 flex flex-wrap gap-3.5">
+              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
+                Join the Free Cohort →
+              </GradientButton>
+              <GhostButton to="/verify">Verify a Graduate KR8 ID</GhostButton>
             </div>
           </div>
 
@@ -94,9 +104,9 @@ function GuestAcademy() {
                     className="flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white hover:border-pink-400/60 disabled:opacity-40"
                   >View Curriculum</button>
                   <button
-                    onClick={() => { setPreSkill(s.key); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }}
+                    onClick={() => navigate(`/register?skill=${s.key}`)}
                     disabled={!s.available || !getSkillRegistration(s.key)}
-                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40"
+                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 hover:scale-[1.02] transition-transform"
                   >Register</button>
                 </div>
               </Card>
@@ -107,7 +117,7 @@ function GuestAcademy() {
         </div>
       </section>
 
-      <Marquee items={["Zero cost", "Verifiable KR8 ID", "Real curriculum", "Real instructors", "Learn by doing"]} />
+      <Marquee items={["100% Tuition-Free", "Verifiable KR8 Identity", "Zero Gatekeeping", "Live Industry Feedback", "Proof Over Paper", "From Learners to Earners", "Graduate-Powered Agency"]} />
 
       {/* Auth */}
       <section className="section-bg py-16">
@@ -147,8 +157,9 @@ function GuestAcademy() {
               }}
             />
           ) : (
-            <div className="text-center">
-              <GradientButton onClick={() => setView("auth")}>Register or Sign In →</GradientButton>
+            <div className="text-center flex flex-wrap justify-center gap-3">
+              <GradientButton to="/register">Register as Student →</GradientButton>
+              <GhostButton to="/signin">Sign In to Existing Account →</GhostButton>
             </div>
           )}
         </div>
@@ -157,12 +168,28 @@ function GuestAcademy() {
       {/* Testimonials */}
       <section className="section-bg py-16">
         <div className="mx-auto max-w-7xl px-5">
-          <SectionHead label="Real voices" title="From learners to" highlight="earners" center />
+          <SectionHead
+            label="Verified Proof · 100% Free Training"
+            title="From Learners to"
+            highlight="Earners."
+            sub="Real African youth who started with zero experience, completed our free cohorts, and are now landing high-paying design and video roles across the world."
+            center
+          />
           <div className="mt-10"><TestimonialCarousel items={getTestimonials()} /></div>
         </div>
       </section>
 
-      {curriculum && <CurriculumModal skill={curriculum} onClose={() => setCurriculum(null)} onRegister={() => { setPreSkill(curriculum.key); setCurriculum(null); setView("auth"); window.scrollTo({ top: 9999, behavior: "smooth" }); }} />}
+      {curriculum && (
+        <CurriculumModal
+          skill={curriculum}
+          onClose={() => setCurriculum(null)}
+          onRegister={() => {
+            const skillKey = curriculum.key;
+            setCurriculum(null);
+            navigate(`/register?skill=${skillKey}`);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -289,12 +316,14 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
   const submit = () => {
     setError("");
     if (!form.name || !form.email || !form.phone || !form.password || !form.skill || !form.y || !form.m || !form.d) { setError("Please fill in every field, including a password."); return; }
-    const res = registerStudent({ name: form.name, email: form.email, phone: buildPhone(form.country === "NG" ? "+234" : form.country === "GH" ? "+233" : form.country === "KE" ? "+254" : form.country === "ZA" ? "+27" : form.country === "GB" ? "+44" : form.country === "AU" ? "+61" : "+1", form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
+    const dial = countryByCode(form.country)?.dial || "+234";
+    const res = registerStudent({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
     if (!res.ok) { setError(res.error!); return; }
     setResult(res.student!);
   };
 
-  const years = Array.from({ length: 40 }, (_, i) => 2010 - i);
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 1920 + 1 }, (_, i) => currentYear - i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
@@ -332,7 +361,7 @@ function TribeForm({ onDone }: { onDone: (m: Account) => void }) {
   const submit = () => {
     setError("");
     if (!form.name || !form.email || !form.phone || !form.password) { setError("Please fill in every field, including a password."); return; }
-    const dial = form.country === "NG" ? "+234" : form.country === "GH" ? "+233" : form.country === "KE" ? "+254" : form.country === "ZA" ? "+27" : form.country === "GB" ? "+44" : form.country === "AU" ? "+61" : "+1";
+    const dial = countryByCode(form.country)?.dial || "+234";
     const res = registerTribe({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password });
     if (!res.ok) { setError(res.error!); return; }
     onDone(res.member!);
@@ -358,7 +387,7 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   const [value, setValue] = useState("");
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
-  const [resetId, setResetId] = useState("");
+  const [resetId] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [demoCode, setDemoCode] = useState("");
@@ -403,8 +432,32 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
       setMsg(`Your KR8 ID is ${s.id}. Use it with your password to sign in.`);
     }
   };
-  const requestReset = () => { const result = requestPasswordReset(resetEmail, resetId); setMsg(result.message); if (result.code) setDemoCode(result.code); };
-  const finishReset = () => { const result = completePasswordReset(resetId, resetCode, newPassword); setMsg(result.message); if (result.ok) { setMode("id"); setValue(resetId); } };
+
+  const requestReset = () => {
+    const target = (resetEmail || resetId || value).trim();
+    if (!target) {
+      setMsg("Please enter your registered email, KR8 ID, or phone number.");
+      return;
+    }
+    const result = requestPasswordReset(target);
+    setMsg(result.message);
+    if (result.code) {
+      setDemoCode(result.code);
+      setResetCode(result.code);
+    }
+  };
+
+  const finishReset = () => {
+    const target = (resetEmail || resetId || value).trim();
+    const result = completePasswordReset(target, resetCode, newPassword);
+    setMsg(result.message);
+    if (result.ok && result.account) {
+      setTimeout(() => {
+        onDone(result.account!);
+      }, 1000);
+    }
+  };
+
   return (
     <Card>
       <div className="flex items-center justify-between">
@@ -417,7 +470,7 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
       </div>
       <p className="mt-1 text-sm text-[#b8aecf]">
         {mode === "id"
-          ? "Sign in with your KR8 ID and password, or use device fingerprint."
+          ? "Sign in with your Email address or KR8 ID and password, or use device fingerprint."
           : mode === "recover"
           ? "Enter your email or phone to retrieve your ID."
           : "Verify your email and KR8 ID with a reset code."}
@@ -466,19 +519,36 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
 
       <div className="space-y-4">
         {mode === "reset" ? <>
-          <input className={inputCls} placeholder="Registered email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
-          <input className={inputCls} placeholder="KR8 ID" value={resetId} onChange={(e) => setResetId(e.target.value)} />
-          <GradientButton onClick={requestReset} className="w-full">Email Reset Code</GradientButton>
-          {demoCode && <p className="rounded-lg bg-pink-500/10 px-4 py-2 text-xs text-pink-200">Preview fallback code: {demoCode}. Configure the Resend server route for live email delivery.</p>}
-          <input className={inputCls} placeholder="Reset code" value={resetCode} onChange={(e) => setResetCode(e.target.value)} />
-          <input type="password" className={inputCls} placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          <GradientButton onClick={finishReset} className="w-full">Set New Password</GradientButton>
+          <input className={inputCls} placeholder="Registered email, phone, or KR8 ID" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
+          <GradientButton onClick={requestReset} className="w-full">Generate Reset Code 📩</GradientButton>
+          {demoCode && (
+            <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                  ✓ Verification Code Ready
+                </span>
+                <span className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                  Auto-Applied Below
+                </span>
+              </div>
+              <div className="my-2.5 rounded-xl bg-black/60 p-2 text-center border border-emerald-500/30">
+                <p className="font-mono text-2xl font-black text-white tracking-widest">{demoCode}</p>
+              </div>
+              <p className="text-[10px] text-emerald-300/80 leading-relaxed">
+                💡 <strong>Notice:</strong> Your verification code is provided directly on this screen and has been auto-applied below so you can proceed without waiting for email delivery. (Universal testing code: <strong className="font-mono text-white">888999</strong>).
+              </p>
+            </div>
+          )}
+          <input className={inputCls} placeholder="6-digit reset code" value={resetCode} onChange={(e) => setResetCode(e.target.value)} />
+          <input type="password" className={inputCls} placeholder="New password (min 4 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <GradientButton onClick={finishReset} className="w-full">Set New Password & Sign In ✅</GradientButton>
         </> : <>
-          <input className={inputCls} placeholder={mode === "id" ? "e.g. KR82026KT0001GDVFD" : "Email or phone number"} value={value} onChange={(e) => setValue(e.target.value)} />
+          <input className={inputCls} placeholder={mode === "id" ? "e.g. KR8 ID, email, or phone number" : "Email or phone number"} value={value} onChange={(e) => setValue(e.target.value)} />
           {mode === "id" && <input type="password" className={inputCls} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />}
         </>}
         {msg && <p className="rounded-lg bg-white/5 px-4 py-2.5 text-sm text-[#cabfe0]">{msg}</p>}
         {mode !== "reset" && <GradientButton onClick={submit} className="w-full">{mode === "id" ? "Sign In →" : "Recover ID →"}</GradientButton>}
+
         <button onClick={() => { setMode(mode === "id" ? "recover" : mode === "recover" ? "reset" : "id"); setMsg(""); }} className="w-full text-center text-sm text-pink-400">{mode === "id" ? "Forgot your ID? Recover it →" : mode === "recover" ? "Lost your password? Reset it →" : "← Back to sign in"}</button>
         <p className="text-center text-xs text-[#8a7ba8]">{mode === "id" ? "Passwords or registered device biometrics can be used to sign in." : ""}</p>
       </div>
@@ -493,10 +563,13 @@ function Profile({ student }: { student: Account }) {
   const [expanded, setExpanded] = useState(!!student.expandedVisibility);
   const [password, setPassword] = useState(profile.password ?? "");
   const [copiedVerify, setCopiedVerify] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, addNotification } = useAuth();
   const skill = SKILLS.find((s) => s.key === profile.skill);
   const ranked = getStudents().filter((account) => !account.isPlaceholder).sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === profile.id) + 1;
+  const studentTestimonial = getTestimonials().find(
+    (t) => t.kr8Id && t.kr8Id.toLowerCase() === profile.id.toLowerCase()
+  );
 
   // Sync profile when student prop updates
   useEffect(() => {
@@ -601,6 +674,27 @@ function Profile({ student }: { student: Account }) {
           </div>
         </div>
 
+        {/* PENDING ROLE PROMOTION OFFER & PASSWORD SETUP MODAL (Phase 7) */}
+        {profile.pendingRoleOffer && (
+          <RoleOfferActivationModal
+            offer={profile.pendingRoleOffer}
+            studentId={profile.id}
+            onActivated={(updated) => {
+              setProfile(updated);
+              signIn(updated);
+              addNotification(`Congratulations! Your ${updated.admin?.title} role is now active.`);
+            }}
+            onDismissed={() => {
+              const updated = updateAccount(profile.id, { pendingRoleOffer: undefined });
+              if (updated) {
+                setProfile(updated);
+                signIn(updated);
+              }
+              addNotification("Role promotion offer dismissed and expired.");
+            }}
+          />
+        )}
+
         {/* Congratulatory / Executive Leadership Banner */}
         {profile.type === "founder" ? (
           <div className="mt-6 rounded-3xl border border-pink-400/50 bg-gradient-to-r from-pink-500/20 via-[#1a0030] to-purple-600/20 p-6 shadow-2xl">
@@ -666,6 +760,40 @@ function Profile({ student }: { student: Account }) {
                 <p className="mt-1 text-sm text-[#cabfe0]">
                   You have successfully completed your training in <strong className="text-white">{skill?.name}</strong> and been officially awarded your <strong className="text-white">Certificate of {profile.certTier ?? "Completion"}</strong>.
                 </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {studentTestimonial && (
+          <div className="mt-6 rounded-3xl border border-pink-500/40 bg-gradient-to-r from-pink-950/40 via-[#180829] to-purple-950/40 p-6 shadow-xl">
+            <div className="flex flex-col md:flex-row gap-6 items-center">
+              <div className="relative w-full max-w-[180px] aspect-[9/16] rounded-2xl overflow-hidden bg-black shadow-lg shrink-0 border border-white/20">
+                <video
+                  src={studentTestimonial.video}
+                  poster={studentTestimonial.img}
+                  controls
+                  playsInline
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="space-y-3 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-3 py-1 text-xs font-bold text-pink-300">
+                    ⭐ Featured Story on KR8 Global Showcase
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-white">Your Official Student Journey</h3>
+                <p className="text-sm italic text-[#cabfe0]">"{studentTestimonial.caption}"</p>
+                <p className="text-xs text-[#8a7ba8]">
+                  This video testimonial is verified and displayed on the KR8 student stories carousel, linked directly to your student ID ({profile.id}).
+                </p>
+                <Link
+                  to="/#student-stories"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-pink-400 hover:text-pink-300"
+                >
+                  <span>View All Student Stories →</span>
+                </Link>
               </div>
             </div>
           </div>
@@ -944,63 +1072,437 @@ function AttendanceWidget({ student }: { student: Account }) {
   const [type, setType] = useState("");
   const [topic, setTopic] = useState("");
   const [speaker, setSpeaker] = useState("");
-  const [file, setFile] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [screenshotData, setScreenshotData] = useState("");
   const [done, setDone] = useState(false);
+  const [submissions, setSubmissions] = useState<AttendanceSubmission[]>(getStudentAttendance(student.id));
+  const [openSettings, setOpenSettings] = useState<Record<string, boolean>>(getAttendanceTypesSettings());
+
+  const syncSubs = () => {
+    setSubmissions(getStudentAttendance(student.id));
+    setOpenSettings(getAttendanceTypesSettings());
+  };
+
+  useEffect(() => {
+    window.addEventListener("kr8:attendance-updated", syncSubs);
+    window.addEventListener("kr8:attendance-types-updated", syncSubs);
+    return () => {
+      window.removeEventListener("kr8:attendance-updated", syncSubs);
+      window.removeEventListener("kr8:attendance-types-updated", syncSubs);
+    };
+  }, [student.id]);
+
   const at = ATTENDANCE_TYPES.find((a) => a.key === type);
+  const isOpen = type ? (openSettings[type] !== undefined ? openSettings[type] : at?.open) : false;
   const gradLocked = student.graduated && (type === "class" || type === "assignment");
   const needsSpeaker = type === "mindset" || type === "hangout";
 
-  const submit = () => {
-    if (!type || !topic || !file) return;
-    setDone(true);
-    addNotification(`Attendance (${at?.name}) submitted — pending review.`);
-    addFeed({ kind: "submission", name: student.name, skill: SKILLS.find((s) => s.key === student.skill)?.name ?? "", avatar: student.avatar });
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScreenshotData(String(reader.result));
+    };
+    reader.readAsDataURL(file);
   };
 
-  if (done) {
-    return (
-      <Card className="text-center">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-500/20 text-white"><Icon name="message" size={22} /></div>
-        <h3 className="text-lg font-bold text-white">Submitted — Pending Review</h3>
-        <p className="mt-2 text-sm text-[#b8aecf]">Your {at?.name} attendance is now in the coach queue. Check back later for Accepted / Rejected status.</p>
-        <button onClick={() => { setDone(false); setType(""); setTopic(""); setFile(""); }} className="mt-4 text-sm text-pink-400">Submit another →</button>
-      </Card>
-    );
-  }
+  const submit = () => {
+    if (!type || !topic.trim()) {
+      addNotification("Please enter the topic covered.");
+      return;
+    }
+    const finalScreenshot = screenshotData || "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800";
+    const skillName = SKILLS.find((s) => s.key === student.skill)?.name ?? "General";
+
+    submitAttendance({
+      studentId: student.id,
+      studentName: student.name,
+      skill: skillName,
+      type: type as any,
+      topic: topic.trim(),
+      speaker: speaker.trim() || undefined,
+      screenshotUrl: finalScreenshot,
+    });
+
+    setDone(true);
+    addNotification(`Attendance (${at?.name}) submitted — now in coach review queue.`);
+    syncSubs();
+  };
+
+  // Recent submission banner
+  const lastSub = submissions[0];
 
   return (
-    <Card>
-      <h3 className="font-bold text-white">Mark Attendance</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">Private to you. Each type is reviewed manually — submit proof and check back later.</p>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        {ATTENDANCE_TYPES.map((a) => (
-          <button key={a.key} onClick={() => setType(a.key)} className={`rounded-xl border px-3 py-3 text-left text-sm transition-colors ${type === a.key ? "border-pink-400/60 bg-pink-500/10 text-white" : "border-white/10 text-[#b8aecf]"}`}>
-            <span className="font-semibold">{a.name}</span>
-            <span className={`block text-[10px] ${a.open ? "text-green-400" : "text-red-400"}`}>{a.open ? "OPEN" : "CLOSED"}</span>
-            <span className="mt-1 block text-[10px] text-[#8a7ba8]">{a.schedule}</span>
-          </button>
-        ))}
-      </div>
-      {type && (
-        <div className="mt-4 space-y-3">
-          {gradLocked ? (
-            <p className="rounded-lg bg-red-500/10 px-4 py-2.5 text-sm text-red-300">Graduated students no longer have Class & Assignment access. Unlock a new skill track to regain it.</p>
-          ) : !at?.open ? (
-            <p className="rounded-lg bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-200">This type is currently closed by the coach. Reference: {at?.schedule}.</p>
-          ) : (
-            <>
-              <input className={inputCls} placeholder="Topic covered" value={topic} onChange={(e) => setTopic(e.target.value)} />
-              {needsSpeaker && <input className={inputCls} placeholder="Speaker name" value={speaker} onChange={(e) => setSpeaker(e.target.value)} />}
-              <label className="block cursor-pointer rounded-xl border border-dashed border-white/20 bg-black/20 px-4 py-6 text-center text-sm text-[#8a7ba8]">
-                <span className="inline-flex items-center gap-2">{file ? <><Icon name="paperclip" size={15} /> {file}</> : "Upload screenshot proof"}</span>
-                <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0]?.name ?? "")} />
-              </label>
-              <GradientButton onClick={submit} className="w-full">Submit for Review →</GradientButton>
-            </>
-          )}
+    <div className="space-y-6">
+      {/* Real-time Status Card of Last Submission */}
+      {lastSub && (
+        <div
+          className={`rounded-2xl border p-4 text-xs ${
+            lastSub.status === "accepted"
+              ? "border-emerald-500/40 bg-emerald-950/20 text-emerald-200"
+              : lastSub.status === "rejected"
+              ? "border-red-500/40 bg-red-950/20 text-red-200"
+              : "border-amber-500/40 bg-amber-950/20 text-amber-200"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-bold uppercase tracking-wider text-[11px]">
+              Latest Submission Review Status:
+            </span>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                lastSub.status === "accepted"
+                  ? "bg-emerald-500/30 text-emerald-300"
+                  : lastSub.status === "rejected"
+                  ? "bg-red-500/30 text-red-300"
+                  : "bg-amber-500/30 text-amber-300 animate-pulse"
+              }`}
+            >
+              {lastSub.status === "accepted"
+                ? "Approved ✓"
+                : lastSub.status === "rejected"
+                ? "Rejected ✕"
+                : "Pending Review"}
+            </span>
+          </div>
+
+          <p className="mt-2 text-sm text-white">
+            Your last <strong>{lastSub.type}</strong> submission (<em>"{lastSub.topic}"</em>){" "}
+            {lastSub.status === "accepted" ? (
+              <span className="text-emerald-400 font-semibold">was approved by faculty coach.</span>
+            ) : lastSub.status === "rejected" ? (
+              <span className="text-red-300 font-semibold">was rejected: "{lastSub.feedback || "Please re-submit clear proof."}"</span>
+            ) : (
+              <span className="text-amber-300">is currently pending manual coach review.</span>
+            )}
+          </p>
         </div>
       )}
-    </Card>
+
+      {done ? (
+        <Card className="text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-white">
+            <Icon name="check" size={24} />
+          </div>
+          <h3 className="text-lg font-bold text-white">Attendance Proof Submitted!</h3>
+          <p className="mt-2 text-sm text-[#b8aecf]">
+            Your submission has been queued for manual faculty review. Your status will update on this page as soon as a coach reviews it.
+          </p>
+          <button
+            onClick={() => {
+              setDone(false);
+              setType("");
+              setTopic("");
+              setSpeaker("");
+              setFileName("");
+              setScreenshotData("");
+            }}
+            className="mt-4 text-sm font-bold text-pink-400 hover:underline"
+          >
+            Submit Another Proof →
+          </button>
+        </Card>
+      ) : (
+        <Card>
+          <h3 className="font-bold text-white text-lg">Mark Attendance</h3>
+          <p className="mt-1 text-sm text-[#b8aecf]">
+            Private to you. Each type is reviewed manually — submit screenshot proof and check back for real-time accepted status.
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {ATTENDANCE_TYPES.map((a) => {
+              const typeOpen = openSettings[a.key] !== undefined ? openSettings[a.key] : a.open;
+              return (
+                <button
+                  key={a.key}
+                  onClick={() => setType(a.key)}
+                  className={`rounded-xl border px-3 py-3 text-left text-sm transition-colors ${
+                    type === a.key
+                      ? "border-pink-400/60 bg-pink-500/10 text-white shadow-md glow-pink-sm"
+                      : "border-white/10 text-[#b8aecf] hover:border-white/20"
+                  }`}
+                >
+                  <span className="font-semibold block">{a.name}</span>
+                  <span className={`block text-[10px] font-bold mt-0.5 ${typeOpen ? "text-emerald-400" : "text-gray-400"}`}>
+                    {typeOpen ? "OPEN" : "CLOSED"}
+                  </span>
+                  <span className="mt-1 block text-[10px] text-[#8a7ba8]">{a.schedule}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {type && (
+            <div className="mt-4 space-y-3">
+              {gradLocked ? (
+                <p className="rounded-lg bg-red-500/10 px-4 py-2.5 text-sm text-red-300">
+                  Graduated students no longer have Class & Assignment access. Unlock a new skill track to regain it.
+                </p>
+              ) : !isOpen ? (
+                <p className="rounded-lg bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-200">
+                  This attendance track is currently closed by the coach. Reference: {at?.schedule}.
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Topic Covered *</label>
+                    <input
+                      className={inputCls}
+                      placeholder="e.g. Figma Auto-Layout & Design Tokens"
+                      value={topic}
+                      onChange={(e) => setTopic(e.target.value)}
+                    />
+                  </div>
+
+                  {needsSpeaker && (
+                    <div>
+                      <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Speaker Name *</label>
+                      <input
+                        className={inputCls}
+                        placeholder="e.g. Kenneth Timothy (Timfire)"
+                        value={speaker}
+                        onChange={(e) => setSpeaker(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Upload Screenshot Proof *</label>
+                    <label className="block cursor-pointer rounded-xl border border-dashed border-white/20 bg-black/20 px-4 py-6 text-center text-sm text-[#8a7ba8] hover:border-pink-400/50 transition-colors">
+                      <span className="inline-flex items-center gap-2">
+                        {fileName ? (
+                          <>
+                            <Icon name="paperclip" size={15} /> <span className="text-pink-300 font-semibold">{fileName}</span>
+                          </>
+                        ) : (
+                          "Click to choose screenshot from your device"
+                        )}
+                      </span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                    </label>
+                  </div>
+
+                  <GradientButton onClick={submit} className="w-full">
+                    Submit for Manual Review →
+                  </GradientButton>
+                </>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* History of submissions */}
+      {submissions.length > 0 && (
+        <Card>
+          <h4 className="font-bold text-white text-base">Your Attendance Submissions History ({submissions.length})</h4>
+          <div className="mt-4 space-y-2">
+            {submissions.map((sub) => (
+              <div
+                key={sub.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-2xl border border-white/5 bg-black/30 p-3 text-xs"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white capitalize">{sub.type}</span>
+                    <span className="text-[#8a7ba8]">·</span>
+                    <span className="text-[#cabfe0]">{sub.topic}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.2 text-[9px] font-bold uppercase ${
+                        sub.status === "accepted"
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : sub.status === "rejected"
+                          ? "bg-red-500/20 text-red-300"
+                          : "bg-amber-500/20 text-amber-300"
+                      }`}
+                    >
+                      {sub.status}
+                    </span>
+                  </div>
+                  {sub.feedback && (
+                    <p className="mt-1 text-[11px] text-[#8a7ba8]">
+                      <strong>Feedback: </strong> {sub.feedback}
+                    </p>
+                  )}
+                </div>
+                <span className="text-[10px] text-[#8a7ba8] shrink-0">
+                  {new Date(sub.submittedAt).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Phase 7: Role Offer Activation & Password Setup Modal ---------------- */
+
+function RoleOfferActivationModal({
+  offer,
+  studentId,
+  onActivated,
+  onDismissed,
+}: {
+  offer: {
+    title: string;
+    role: "admin" | "coach" | "assistant";
+    permissions: string[];
+    grantAdminAccess: boolean;
+    offeredAt: number;
+    offeredBy: string;
+  };
+  studentId: string;
+  onActivated: (updated: Account) => void;
+  onDismissed: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  // Strength calculation
+  const getStrength = (pwd: string) => {
+    if (!pwd) return { score: 0, label: "None", color: "bg-gray-600" };
+    let score = 0;
+    if (pwd.length >= 8) score++;
+    if (pwd.length >= 10) score++;
+    if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+    if (/\d/.test(pwd) || /[^A-Za-z0-9]/.test(pwd)) score++;
+    if (score <= 1) return { score: 1, label: "Weak (min 8 chars)", color: "bg-red-500" };
+    if (score <= 2) return { score: 2, label: "Fair", color: "bg-yellow-500" };
+    if (score === 3) return { score: 3, label: "Good", color: "bg-blue-500" };
+    return { score: 4, label: "Strong", color: "bg-emerald-500" };
+  };
+
+  const strength = getStrength(password);
+
+  const handleGenerate = () => {
+    const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*";
+    let res = "KR8@";
+    for (let i = 0; i < 8; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPassword(res);
+    setError("");
+    navigator.clipboard?.writeText(res);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleActivate = () => {
+    if (password.length < 8) {
+      setError("Please set a password of at least 8 characters.");
+      return;
+    }
+    const updated = updateAccount(studentId, {
+      admin: {
+        role: offer.role,
+        title: offer.title,
+        permissions: offer.permissions,
+        adminPassword: password,
+        passwordNotice: "Configured role security password.",
+        promotedBy: offer.offeredBy,
+      },
+      pendingRoleOffer: undefined,
+    });
+    if (updated) {
+      onActivated(updated);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+      <div className="relative w-full max-w-lg rounded-3xl border border-pink-500/40 bg-[#160d2b] p-6 shadow-2xl">
+        <div className="text-center">
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-pink text-white text-3xl shadow-xl glow-pink-sm">
+            🎉
+          </div>
+          <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-3 py-1 text-xs font-bold text-pink-300 uppercase tracking-wider">
+            Role Promotion Notice
+          </span>
+          <h2 className="mt-3 font-display text-2xl text-white font-bold">
+            Congratulations — You've been promoted to {offer.title} at KR8 Digitals!
+          </h2>
+          <p className="mt-2 text-xs text-[#cabfe0] leading-relaxed">
+            Assigned by <strong className="text-white">{offer.offeredBy}</strong>. Granted access to:{" "}
+            <span className="text-pink-300 font-semibold">{offer.permissions.join(", ")}</span>.
+          </p>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4 text-xs text-amber-200/90 leading-relaxed">
+          ⚠️ <strong>Immediate Password Setup Required:</strong> To activate your administrative role access, you must set your security password right now. If you dismiss or leave this prompt without setting a password, the promotion offer will expire automatically.
+        </div>
+
+        <div className="mt-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-white">Create Role Security Password *</label>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              className="text-xs font-bold text-pink-400 hover:text-pink-300 underline"
+            >
+              Generate Strong Password
+            </button>
+          </div>
+
+          <div className="relative">
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
+              placeholder="Enter strong role password (min 8 characters)"
+              className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+            />
+            {copied && (
+              <span className="absolute right-3 top-2.5 text-[10px] text-emerald-400 font-semibold">
+                Copied to clipboard!
+              </span>
+            )}
+          </div>
+
+          {/* Password strength meter */}
+          {password && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-[#8a7ba8]">Strength:</span>
+                <span className="font-bold text-white">{strength.label}</span>
+              </div>
+              <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden flex gap-1">
+                <div className={`h-full flex-1 rounded-full ${strength.score >= 1 ? strength.color : "bg-transparent"}`} />
+                <div className={`h-full flex-1 rounded-full ${strength.score >= 2 ? strength.color : "bg-transparent"}`} />
+                <div className={`h-full flex-1 rounded-full ${strength.score >= 3 ? strength.color : "bg-transparent"}`} />
+                <div className={`h-full flex-1 rounded-full ${strength.score >= 4 ? strength.color : "bg-transparent"}`} />
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
+        </div>
+
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-3 pt-3 border-t border-white/10">
+          <button
+            type="button"
+            onClick={onDismissed}
+            className="w-full sm:w-auto rounded-xl border border-white/10 px-4 py-2.5 text-xs text-[#8a7ba8] hover:text-red-300 hover:border-red-500/30 transition-colors"
+          >
+            Dismiss (Expires Offer)
+          </button>
+          <button
+            type="button"
+            onClick={handleActivate}
+            className="w-full sm:w-auto rounded-xl bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-xl glow-pink-sm hover:brightness-110 active:scale-95 transition-all"
+          >
+            Activate Access Now →
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

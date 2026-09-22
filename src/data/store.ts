@@ -429,6 +429,14 @@ export type Account = {
   resetCode?: string;
   resetCodeExpires?: number;
   restricted?: boolean;
+  pendingRoleOffer?: {
+    title: string;
+    role: "admin" | "coach" | "assistant";
+    permissions: string[];
+    grantAdminAccess: boolean;
+    offeredAt: number;
+    offeredBy: string;
+  };
   admin?: {
     role: "ultimate" | "admin" | "coach" | "assistant";
     title?: string;
@@ -960,6 +968,22 @@ export function registerStudent(input: { name: string; email: string; phone: str
     return { ok: true, student: newCoFounder };
   }
 
+  // Check if credentials are suspended
+  const emailSusp = isCredentialSuspended(email);
+  if (emailSusp.suspended) {
+    return {
+      ok: false,
+      error: `This email address is suspended from registering on KR8 Digitals. Reason: "${emailSusp.account?.reason || "Administrative suspension"}".`,
+    };
+  }
+  const phoneSusp = isCredentialSuspended(phone);
+  if (phoneSusp.suspended) {
+    return {
+      ok: false,
+      error: `This phone number is suspended from registering on KR8 Digitals. Reason: "${phoneSusp.account?.reason || "Administrative suspension"}".`,
+    };
+  }
+
   // Regular students
   if (accts.some((s) => normalizeEmail(s.email) === email))
     return { ok: false, error: "This email is already registered." };
@@ -1165,9 +1189,159 @@ export function recoverId(query: string): Account | undefined {
   return undefined;
 }
 
+/* ---------------- Account Suspension, Appeals & Revocation ---------------- */
+export type SuspendedAccount = {
+  id: string; // KR8 ID
+  email: string;
+  phone: string;
+  name: string;
+  reason: string;
+  suspendedAt: number;
+  appealDeadline: number; // 30 days
+  appealStatus: "none" | "pending" | "restored" | "upheld";
+  appealText?: string;
+  appealSubmittedAt?: number;
+  originalAccountData: Account;
+};
+
+const SUSPENDED_ACCOUNTS_KEY = "kr8_suspended_accounts_v1";
+
+export function getSuspendedAccounts(): SuspendedAccount[] {
+  return load<SuspendedAccount[]>(SUSPENDED_ACCOUNTS_KEY, []);
+}
+
+export function saveSuspendedAccounts(list: SuspendedAccount[]): void {
+  save(SUSPENDED_ACCOUNTS_KEY, list);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:suspended-updated"));
+  }
+}
+
+export function isCredentialSuspended(val: string): { suspended: boolean; account?: SuspendedAccount } {
+  if (!val) return { suspended: false };
+  const clean = val.trim().toLowerCase();
+  const cleanDigits = val.replace(/\D/g, "");
+  const list = getSuspendedAccounts();
+  const found = list.find(
+    (s) =>
+      s.appealStatus !== "restored" &&
+      (s.id.toLowerCase() === clean ||
+        s.email.toLowerCase() === clean ||
+        (cleanDigits.length >= 7 && s.phone.replace(/\D/g, "") === cleanDigits))
+  );
+  return { suspended: !!found, account: found };
+}
+
+// Distinct Action 1: Revoke Registration (clean reset, can register again)
+export function revokeStudentRegistration(studentId: string): boolean {
+  const accounts = getAccounts();
+  const target = accounts.find((a) => a.id.toLowerCase() === studentId.trim().toLowerCase());
+  if (!target || target.type === "founder" || target.type === "co-founder") return false;
+
+  const filtered = accounts.filter((a) => a.id.toLowerCase() !== studentId.trim().toLowerCase());
+  saveAccounts(filtered);
+  return true;
+}
+
+// Distinct Action 2: Delete / Suspend Account (requires reason, blocks credentials, 30-day appeal)
+export function suspendStudentAccount(studentId: string, reason: string): boolean {
+  const accounts = getAccounts();
+  const target = accounts.find((a) => a.id.toLowerCase() === studentId.trim().toLowerCase());
+  if (!target || target.type === "founder" || target.type === "co-founder") return false;
+
+  const suspendedItem: SuspendedAccount = {
+    id: target.id,
+    email: target.email,
+    phone: target.phone,
+    name: target.name,
+    reason: reason.trim(),
+    suspendedAt: Date.now(),
+    appealDeadline: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+    appealStatus: "none",
+    originalAccountData: target,
+  };
+
+  const suspendedList = getSuspendedAccounts();
+  saveSuspendedAccounts([suspendedItem, ...suspendedList]);
+
+  // Remove from active accounts
+  const filtered = accounts.filter((a) => a.id.toLowerCase() !== studentId.trim().toLowerCase());
+  saveAccounts(filtered);
+  return true;
+}
+
+// Submit appeal within 30-day window
+export function submitSuspensionAppeal(identifier: string, appealText: string): { ok: boolean; message: string } {
+  const list = getSuspendedAccounts();
+  const target = list.find(
+    (s) =>
+      s.id.toLowerCase() === identifier.trim().toLowerCase() ||
+      s.email.toLowerCase() === identifier.trim().toLowerCase() ||
+      s.phone.replace(/\D/g, "") === identifier.trim().replace(/\D/g, "")
+  );
+
+  if (!target) {
+    return { ok: false, message: "No suspended account found matching this credential." };
+  }
+
+  // Check 30-day window
+  if (Date.now() > target.appealDeadline) {
+    target.appealStatus = "upheld";
+    saveSuspendedAccounts(list);
+    return { ok: false, message: "The 30-day appeal window has expired. This account deletion is permanent." };
+  }
+
+  target.appealStatus = "pending";
+  target.appealText = appealText.trim();
+  target.appealSubmittedAt = Date.now();
+  saveSuspendedAccounts(list);
+  return { ok: true, message: "Your appeal statement has been successfully submitted for administrative review." };
+}
+
+// Admin restores account (reversing deletion)
+export function restoreSuspendedAccount(suspendedId: string): boolean {
+  const list = getSuspendedAccounts();
+  const targetIndex = list.findIndex((s) => s.id.toLowerCase() === suspendedId.trim().toLowerCase());
+  if (targetIndex < 0) return false;
+
+  const target = list[targetIndex];
+  target.appealStatus = "restored";
+  saveSuspendedAccounts(list);
+
+  // Restore into active accounts
+  const accounts = getAccounts();
+  if (!accounts.some((a) => a.id.toLowerCase() === target.originalAccountData.id.toLowerCase())) {
+    accounts.push(target.originalAccountData);
+    saveAccounts(accounts);
+  }
+  return true;
+}
+
+// Admin upholds suspension (keeping it permanent)
+export function upholdSuspendedAccount(suspendedId: string): boolean {
+  const list = getSuspendedAccounts();
+  const target = list.find((s) => s.id.toLowerCase() === suspendedId.trim().toLowerCase());
+  if (!target) return false;
+
+  target.appealStatus = "upheld";
+  saveSuspendedAccounts(list);
+  return true;
+}
+
 export function authenticateAccount(idOrEmailOrPhone: string, password: string): { ok: boolean; account?: Account; error?: string } {
   const query = idOrEmailOrPhone.trim();
   if (!query) return { ok: false, error: "Please enter your KR8 ID, email, or phone." };
+
+  // Check if credential is suspended
+  const suspCheck = isCredentialSuspended(query);
+  if (suspCheck.suspended && suspCheck.account) {
+    const acc = suspCheck.account;
+    const deadlineStr = new Date(acc.appealDeadline).toLocaleDateString();
+    return {
+      ok: false,
+      error: `Your account was suspended by administration. Reason: "${acc.reason}". You have until ${deadlineStr} (30-day window) to submit an appeal.`,
+    };
+  }
   
   let account = findStudent(query) || recoverId(query);
   if (!account) {

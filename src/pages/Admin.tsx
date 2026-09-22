@@ -15,7 +15,8 @@ import {
   canUserHostStream, deleteStreamRecording,
   getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, archiveAnnouncementToGallery,
   getHomepageSettings, saveHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES,
-  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep,
+  revokeStudentRegistration, suspendStudentAccount, getSuspendedAccounts, restoreSuspendedAccount, upholdSuspendedAccount,
+  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
@@ -207,9 +208,24 @@ export default function Admin() {
 /* ---------------- Student Management ---------------- */
 
 function StudentManager({ students }: { students: Account[] }) {
+  const { student: currentUser, addNotification } = useAuth();
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<"active" | "suspended">("active");
   const [graduatingStudent, setGraduatingStudent] = useState<Account | null>(null);
   const [manualRegisterOpen, setManualRegisterOpen] = useState(false);
+  const [assigningRoleStudent, setAssigningRoleStudent] = useState<Account | null>(null);
+  const [suspendingStudent, setSuspendingStudent] = useState<Account | null>(null);
+  const [revokeConfirmStudent, setRevokeConfirmStudent] = useState<Account | null>(null);
+  const [suspendedList, setSuspendedList] = useState<SuspendedAccount[]>(getSuspendedAccounts());
+
+  const refreshSuspended = () => {
+    setSuspendedList(getSuspendedAccounts());
+  };
+
+  useEffect(() => {
+    window.addEventListener("kr8:suspended-updated", refreshSuspended);
+    return () => window.removeEventListener("kr8:suspended-updated", refreshSuspended);
+  }, []);
 
   const filtered = students.filter(
     (s) =>
@@ -232,125 +248,321 @@ function StudentManager({ students }: { students: Account[] }) {
     if (id?.trim()) updateAccount(student.id, { id: id.trim().toUpperCase() });
   };
 
+  const handleConfirmRevoke = () => {
+    if (!revokeConfirmStudent) return;
+    const sName = revokeConfirmStudent.name;
+    const ok = revokeStudentRegistration(revokeConfirmStudent.id);
+    if (ok) {
+      addNotification(`Revoked registration for ${sName}. They can register again cleanly from scratch.`);
+    }
+    setRevokeConfirmStudent(null);
+  };
+
+  const handleRestoreAccount = (suspendedId: string, name: string) => {
+    const ok = restoreSuspendedAccount(suspendedId);
+    if (ok) {
+      refreshSuspended();
+      addNotification(`Restored account for ${name}. Deletion reversed and access granted.`);
+    }
+  };
+
+  const handleUpholdSuspension = (suspendedId: string, name: string) => {
+    const ok = upholdSuspendedAccount(suspendedId);
+    if (ok) {
+      refreshSuspended();
+      addNotification(`Upheld suspension for ${name}. Credentials permanently blocked.`);
+    }
+  };
+
   return (
     <>
       <Card className="!p-0 overflow-hidden">
+        {/* Header Tabs: Active vs. Suspended */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4">
           <div className="flex items-center gap-3">
-            <h3 className="font-bold text-white">Student Management</h3>
-            <span className="rounded-full bg-pink-500/10 px-2.5 py-0.5 text-xs font-semibold text-pink-300">
-              {students.length} Total
-            </span>
+            <h3 className="font-bold text-white text-base">Student Management</h3>
+            <div className="flex rounded-xl bg-black/40 p-1 border border-white/10 text-xs">
+              <button
+                onClick={() => setTab("active")}
+                className={`rounded-lg px-3 py-1 font-semibold transition-all ${
+                  tab === "active" ? "bg-gradient-pink text-white" : "text-[#b8aecf] hover:text-white"
+                }`}
+              >
+                Active Students ({students.length})
+              </button>
+              <button
+                onClick={() => setTab("suspended")}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1 font-semibold transition-all ${
+                  tab === "suspended" ? "bg-gradient-pink text-white" : "text-[#b8aecf] hover:text-white"
+                }`}
+              >
+                <span>Suspended / Appeals</span>
+                <span className="rounded-full bg-black/30 px-1.5 py-0.2 text-[10px] font-mono">
+                  {suspendedList.length}
+                </span>
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name, ID or skill…"
-              className="w-64 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
-            />
-            <button
-              onClick={() => setManualRegisterOpen(true)}
-              className="rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white glow-pink-sm"
-            >
-              + Manually Register Student
-            </button>
-          </div>
+
+          {tab === "active" && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search by name, ID or skill…"
+                className="w-64 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
+              />
+              <button
+                onClick={() => setManualRegisterOpen(true)}
+                className="rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white glow-pink-sm"
+              >
+                + Manually Register Student
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-white/5 text-[#8a7ba8]">
-              <tr>
-                <th className="p-3">KR8 ID</th>
-                <th className="p-3">Name</th>
-                <th className="p-3">Skill Track</th>
-                <th className="p-3">Points</th>
-                <th className="p-3">Status</th>
-                <th className="p-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
+        {tab === "active" ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-white/5 text-[#8a7ba8]">
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[#8a7ba8]">
-                    No students found matching your search.
-                  </td>
+                  <th className="p-3">KR8 ID</th>
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Skill Track</th>
+                  <th className="p-3">Role / Status</th>
+                  <th className="p-3 text-right">Actions</th>
                 </tr>
-              ) : (
-                filtered.map((s) => {
-                  const skill = SKILLS.find((k) => k.key === s.skill);
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-[#8a7ba8]">
+                      No students found matching your search.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((s) => {
+                    const skill = SKILLS.find((k) => k.key === s.skill);
+                    return (
+                      <tr key={s.id} className="border-t border-white/5 text-[#cabfe0] hover:bg-white/[0.02]">
+                        <td className="p-3 font-mono text-xs font-semibold text-pink-400">{s.id}</td>
+                        <td className="p-3">
+                          <div className="font-medium text-white">{s.name}</div>
+                          <div className="text-xs text-[#8a7ba8]">{s.email} · {s.phone}</div>
+                        </td>
+                        <td className="p-3">
+                          <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-[#cabfe0]">
+                            {skill?.name ?? s.skill ?? "—"}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {s.type === "founder" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-pink px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                              👑 Founder & CEO
+                            </span>
+                          ) : s.type === "co-founder" ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/30 border border-purple-400/40 px-2.5 py-1 text-xs font-bold text-purple-200 shadow-sm">
+                              ⭐ Co-Founder
+                            </span>
+                          ) : s.admin ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/20 border border-purple-400/30 px-2.5 py-0.5 text-xs font-bold text-purple-200">
+                              {s.admin.title || s.admin.role}
+                            </span>
+                          ) : s.pendingRoleOffer ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-xs font-bold text-amber-300 animate-pulse">
+                              Pending Password Setup ({s.pendingRoleOffer.title})
+                            </span>
+                          ) : s.restricted ? (
+                            <span className="rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-medium text-red-300">
+                              Restricted
+                            </span>
+                          ) : s.graduated ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-semibold text-green-300">
+                              <Icon name="certificate" size={13} /> {s.certTier ?? "Certified"}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-pink-500/10 px-2.5 py-1 text-xs text-pink-300">
+                              Active Student
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right text-xs">
+                          {s.type === "founder" || s.type === "co-founder" ? (
+                            <span className="mr-2 rounded-full border border-pink-400/50 bg-pink-500/10 px-3 py-1 text-xs font-bold text-pink-300">
+                              Executive
+                            </span>
+                          ) : (
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              {/* ASSIGN ROLE (Phase 7) */}
+                              <button
+                                onClick={() => setAssigningRoleStudent(s)}
+                                className="rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1 text-xs font-semibold text-purple-200 hover:bg-purple-500/20"
+                                title="Assign custom title and granular permissions"
+                              >
+                                {s.admin ? "Manage Role" : "Assign Role"}
+                              </button>
+
+                              {/* GRADUATE */}
+                              <button
+                                onClick={() => setGraduatingStudent(s)}
+                                className="rounded-lg bg-gradient-pink px-2.5 py-1 font-bold text-white hover:opacity-90"
+                              >
+                                {s.graduated ? "Cert" : "Graduate"}
+                              </button>
+
+                              {/* EDIT */}
+                              <button
+                                onClick={() => editName(s)}
+                                className="rounded-lg border border-white/10 px-2 py-1 text-xs text-pink-300 hover:bg-white/5"
+                              >
+                                Edit
+                              </button>
+
+                              {/* RESTRICT / UNRESTRICT */}
+                              <button
+                                onClick={() => toggleRestrict(s)}
+                                className={`rounded-lg border border-white/10 px-2 py-1 text-xs ${
+                                  s.restricted ? "text-emerald-300" : "text-yellow-400"
+                                } hover:bg-white/5`}
+                              >
+                                {s.restricted ? "Unrestrict" : "Restrict"}
+                              </button>
+
+                              {/* RESET ID */}
+                              <button
+                                onClick={() => resetId(s)}
+                                className="rounded-lg border border-white/10 px-2 py-1 text-xs text-[#8a7ba8] hover:text-white hover:bg-white/5"
+                              >
+                                ID
+                              </button>
+
+                              {/* REVOKE REGISTRATION (Phase 8: Clean reset) */}
+                              <button
+                                onClick={() => setRevokeConfirmStudent(s)}
+                                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20"
+                                title="Clean reset — cancels registration but allows them to re-register"
+                              >
+                                Revoke
+                              </button>
+
+                              {/* DELETE / SUSPEND ACCOUNT (Phase 8: Blocks credentials, 30-day appeal) */}
+                              <button
+                                onClick={() => setSuspendingStudent(s)}
+                                className="rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+                                title="Requires reason, blocks email/phone/ID, gives 30-day appeal"
+                              >
+                                Suspend
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* SUSPENDED ACCOUNTS & APPEALS QUEUE (Phase 8) */
+          <div className="p-4 space-y-4">
+            <p className="text-xs text-[#cabfe0]">
+              Suspended accounts have their credentials (email, phone, and KR8 ID) permanently blocked from re-registering, subject to a 30-day appeal review window.
+            </p>
+
+            {suspendedList.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] py-12 text-center text-xs text-[#8a7ba8]">
+                No suspended accounts. All active credentials are in good standing.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {suspendedList.map((item) => {
+                  const daysRemaining = Math.max(0, Math.ceil((item.appealDeadline - Date.now()) / (1000 * 60 * 60 * 24)));
+                  const isExpired = Date.now() > item.appealDeadline;
+
                   return (
-                    <tr key={s.id} className="border-t border-white/5 text-[#cabfe0] hover:bg-white/[0.02]">
-                      <td className="p-3 font-mono text-xs font-semibold text-pink-400">{s.id}</td>
-                      <td className="p-3">
-                        <div className="font-medium text-white">{s.name}</div>
-                        <div className="text-xs text-[#8a7ba8]">{s.email}</div>
-                      </td>
-                      <td className="p-3">
-                        <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs text-[#cabfe0]">
-                          {skill?.name ?? s.skill ?? "—"}
+                    <div
+                      key={item.id}
+                      className="rounded-2xl border border-red-500/30 bg-black/40 p-4 text-xs space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-white text-sm">{item.name}</span>
+                          <span className="font-mono text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded">
+                            {item.id}
+                          </span>
+                          <span className="text-[#8a7ba8]">· {item.email} · {item.phone}</span>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                            item.appealStatus === "restored"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : item.appealStatus === "pending"
+                              ? "bg-amber-500/20 text-amber-300 animate-pulse"
+                              : item.appealStatus === "upheld"
+                              ? "bg-red-500/20 text-red-300"
+                              : isExpired
+                              ? "bg-gray-500/20 text-gray-400"
+                              : "bg-red-500/10 text-red-300"
+                          }`}
+                        >
+                          {item.appealStatus === "pending"
+                            ? "Appeal Pending Review"
+                            : item.appealStatus === "restored"
+                            ? "Restored"
+                            : item.appealStatus === "upheld"
+                            ? "Deletion Permanent"
+                            : isExpired
+                            ? "Appeal Window Expired (Permanent)"
+                            : `${daysRemaining} Days Left to Appeal`}
                         </span>
-                      </td>
-                      <td className="p-3 font-medium">{s.points} pts</td>
-                      <td className="p-3">
-                        {s.type === "founder" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-gradient-pink px-2.5 py-1 text-xs font-bold text-white shadow-sm">
-                            👑 Founder & CEO
-                          </span>
-                        ) : s.type === "co-founder" ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/30 border border-purple-400/40 px-2.5 py-1 text-xs font-bold text-purple-200 shadow-sm">
-                            ⭐ Co-Founder
-                          </span>
-                        ) : s.restricted ? (
-                          <span className="rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-medium text-red-300">
-                            Restricted
-                          </span>
-                        ) : s.graduated ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-semibold text-green-300">
-                            <Icon name="certificate" size={13} /> {s.certTier ?? "Certified"}
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-pink-500/10 px-2.5 py-1 text-xs text-pink-300">
-                            Active Student
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right text-xs">
-                        {s.type === "founder" || s.type === "co-founder" ? (
-                          <span className="mr-2 rounded-full border border-pink-400/50 bg-pink-500/10 px-3 py-1 text-xs font-bold text-pink-300">
-                            Executive
-                          </span>
-                        ) : (
+                      </div>
+
+                      <div>
+                        <strong className="text-red-300">Admin Suspension Reason: </strong>
+                        <span className="text-[#cabfe0]">{item.reason}</span>
+                      </div>
+
+                      {/* Display appeal statement if student submitted one */}
+                      {item.appealText && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-[#e8ddf5]">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-amber-300 mb-1">
+                            <span>Student Appeal Statement:</span>
+                            <span>{item.appealSubmittedAt ? new Date(item.appealSubmittedAt).toLocaleString() : ""}</span>
+                          </div>
+                          <p className="italic leading-relaxed">"{item.appealText}"</p>
+                        </div>
+                      )}
+
+                      {/* Admin Appeal Decision Actions */}
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-[#8a7ba8]">
+                          Suspended on {new Date(item.suspendedAt).toLocaleDateString()} · 30-Day Deadline: {new Date(item.appealDeadline).toLocaleDateString()}
+                        </span>
+
+                        <div className="flex gap-2">
                           <button
-                            onClick={() => setGraduatingStudent(s)}
-                            className="mr-2 rounded-full bg-gradient-pink px-3 py-1 font-bold text-white hover:opacity-90"
+                            onClick={() => handleRestoreAccount(item.id, item.name)}
+                            className="rounded-xl bg-emerald-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
                           >
-                            {s.graduated ? "Update Cert" : "Graduate"}
+                            Restore Account
                           </button>
-                        )}
-                        <button onClick={() => editName(s)} className="mr-2 text-pink-300 hover:text-white">
-                          Edit
-                        </button>
-                        {s.type !== "founder" && s.type !== "co-founder" && (
                           <button
-                            onClick={() => toggleRestrict(s)}
-                            className={`mr-2 ${s.restricted ? "text-green-300" : "text-yellow-400"}`}
+                            onClick={() => handleUpholdSuspension(item.id, item.name)}
+                            className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/20 transition-colors"
                           >
-                            {s.restricted ? "Unrestrict" : "Restrict"}
+                            Uphold Deletion
                           </button>
-                        )}
-                        <button onClick={() => resetId(s)} className="text-[#8a7ba8] hover:text-white">
-                          Reset ID
-                        </button>
-                      </td>
-                    </tr>
+                        </div>
+                      </div>
+                    </div>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Manual Registration Modal */}
@@ -369,7 +581,391 @@ function StudentManager({ students }: { students: Account[] }) {
           onGraduated={() => setGraduatingStudent(null)}
         />
       )}
+
+      {/* ASSIGN ROLE MODAL (Phase 7) */}
+      {assigningRoleStudent && (
+        <AssignRoleModal
+          student={assigningRoleStudent}
+          adminUser={currentUser}
+          onClose={() => setAssigningRoleStudent(null)}
+          onAssigned={() => {
+            setAssigningRoleStudent(null);
+            addNotification(`Role offer created for ${assigningRoleStudent.name}. They will be prompted to set their password on their profile.`);
+          }}
+        />
+      )}
+
+      {/* REVOKE REGISTRATION CONFIRMATION MODAL (Phase 8) */}
+      {revokeConfirmStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+          <div className="w-full max-w-md rounded-3xl border border-amber-500/40 bg-[#160d2b] p-6 shadow-2xl">
+            <h3 className="font-bold text-white text-lg">Revoke Student Registration?</h3>
+            <p className="mt-2 text-xs leading-relaxed text-[#cabfe0]">
+              This will cancel <strong className="text-white">{revokeConfirmStudent.name}</strong>'s current registration and KR8 ID ({revokeConfirmStudent.id}).
+            </p>
+            <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">
+              ✓ <strong>Clean Reset:</strong> This is NOT a punishment. Their email ({revokeConfirmStudent.email}) and phone number remain completely unblocked and free to register again at any time.
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRevokeConfirmStudent(null)}
+                className="rounded-xl px-4 py-2 text-xs text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRevoke}
+                className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500"
+              >
+                Confirm Revoke
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUSPEND / DELETE ACCOUNT MODAL (Phase 8: Requires Reason) */}
+      {suspendingStudent && (
+        <SuspendStudentModal
+          student={suspendingStudent}
+          onClose={() => setSuspendingStudent(null)}
+          onSuspended={() => {
+            const name = suspendingStudent.name;
+            setSuspendingStudent(null);
+            refreshSuspended();
+            addNotification(`Account for ${name} has been suspended. A 30-day appeal notice is active.`);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+/* ---------------- Phase 7: Assign Role Modal ---------------- */
+
+function AssignRoleModal({
+  student,
+  adminUser,
+  onClose,
+  onAssigned,
+}: {
+  student: Account;
+  adminUser: Account | null;
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const [title, setTitle] = useState(student.admin?.title || student.pendingRoleOffer?.title || "Coach");
+  const [grantAdminAccess, setGrantAdminAccess] = useState(
+    student.pendingRoleOffer?.grantAdminAccess !== undefined ? student.pendingRoleOffer.grantAdminAccess : true
+  );
+  const [permissions, setPermissions] = useState<string[]>(
+    student.admin?.permissions || student.pendingRoleOffer?.permissions || [
+      "Academy",
+      "Attendance Review",
+      "Announcements",
+      "Graduation & Certificates",
+    ]
+  );
+  const [error, setError] = useState("");
+
+  const availableSections = [
+    "Overview",
+    "Home",
+    "Academy",
+    "Testimonial Videos",
+    "Live Streams & Replays",
+    "Agency",
+    "Gallery Archive",
+    "Student Management",
+    "Blog",
+    "Announcements",
+    "Graduation & Certificates",
+    "Leaderboard & XP",
+    "Links Manager",
+    "Verify Remarks",
+    "Payment Settings",
+    "Attendance Review",
+    "Moderation",
+  ];
+
+  const toggleSection = (section: string) => {
+    if (permissions.includes(section)) {
+      setPermissions(permissions.filter((p) => p !== section));
+    } else {
+      setPermissions([...permissions, section]);
+    }
+  };
+
+  const selectAll = () => setPermissions(availableSections);
+  const deselectAll = () => setPermissions([]);
+
+  const applyPreset = (presetName: string) => {
+    if (presetName === "Coach") {
+      setTitle("Faculty Coach");
+      setPermissions(["Academy", "Attendance Review", "Announcements", "Graduation & Certificates"]);
+    } else if (presetName === "Attendance Reviewer") {
+      setTitle("Attendance Reviewer");
+      setPermissions(["Attendance Review", "Academy"]);
+    } else if (presetName === "Content & Media") {
+      setTitle("Content & Media Lead");
+      setPermissions(["Home", "Blog", "Announcements", "Testimonial Videos", "Gallery Archive"]);
+    } else if (presetName === "Full Admin") {
+      setTitle("Administrator");
+      setPermissions(availableSections);
+    }
+  };
+
+  const handleAssign = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      setError("Please provide a role title.");
+      return;
+    }
+    if (grantAdminAccess && permissions.length === 0) {
+      setError("Please select at least one permission section.");
+      return;
+    }
+
+    updateAccount(student.id, {
+      pendingRoleOffer: {
+        title: title.trim(),
+        role: grantAdminAccess ? "admin" : "assistant",
+        permissions,
+        grantAdminAccess,
+        offeredAt: Date.now(),
+        offeredBy: adminUser?.name || "KR8 Administration",
+      },
+    });
+
+    onAssigned();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-xl rounded-3xl border border-white/20 bg-[#160d2b] p-6 shadow-2xl my-8">
+        <div className="flex items-center justify-between pb-3 border-b border-white/10">
+          <div>
+            <h3 className="font-bold text-white text-base">Assign Role & Permissions</h3>
+            <p className="text-xs text-[#cabfe0]">
+              Assigning to: <strong className="text-white">{student.name}</strong> ({student.id})
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleAssign} className="mt-4 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">
+              Custom Role Title *
+            </label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setError("");
+              }}
+              placeholder="e.g. Faculty Coach, Attendance Reviewer, Community Manager..."
+              className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <span className="block text-xs font-semibold text-[#e8ddf5] mb-1.5">Quick Presets:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {["Coach", "Attendance Reviewer", "Content & Media", "Full Admin"].map((preset) => (
+                <button
+                  type="button"
+                  key={preset}
+                  onClick={() => applyPreset(preset)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[#cabfe0] hover:bg-white/10 hover:text-white"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={grantAdminAccess}
+                onChange={(e) => setGrantAdminAccess(e.target.checked)}
+                className="rounded accent-pink-500"
+              />
+              <span className="text-xs font-semibold text-white">
+                Grant Admin Dashboard Access
+              </span>
+            </label>
+            <p className="mt-1 text-[11px] text-[#8a7ba8] pl-5">
+              If enabled, the student can log into the Admin portal to manage their assigned sections.
+            </p>
+          </div>
+
+          {grantAdminAccess && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-[#e8ddf5]">
+                  Granular Permissions ({permissions.length} selected):
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={selectAll}
+                    className="text-[11px] text-pink-300 hover:underline"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-[#8a7ba8]">·</span>
+                  <button
+                    type="button"
+                    onClick={deselectAll}
+                    className="text-[11px] text-[#8a7ba8] hover:text-white"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 rounded-xl border border-white/10 bg-black/40">
+                {availableSections.map((sec) => (
+                  <label
+                    key={sec}
+                    className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-xs"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={permissions.includes(sec)}
+                      onChange={() => toggleSection(sec)}
+                      className="rounded accent-pink-500"
+                    />
+                    <span className={permissions.includes(sec) ? "text-white font-medium" : "text-[#8a7ba8]"}>
+                      {sec}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
+
+          <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-[11px] text-amber-200/90 leading-relaxed">
+            ℹ <strong>Activation Process:</strong> When assigned, a promotion offer will immediately appear on <strong>{student.name}</strong>'s profile. They must set their role security password immediately upon viewing; if dismissed without setting up a password, the offer expires automatically.
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl px-4 py-2 text-xs text-gray-400 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+            >
+              Assign Role Offer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Phase 8: Suspend Student Modal (Requires Reason) ---------------- */
+
+function SuspendStudentModal({
+  student,
+  onClose,
+  onSuspended,
+}: {
+  student: Account;
+  onClose: () => void;
+  onSuspended: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+
+  const handleConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) {
+      setError("A stated reason is strictly required to suspend/delete an account.");
+      return;
+    }
+    const ok = suspendStudentAccount(student.id, reason.trim());
+    if (!ok) {
+      setError("Cannot suspend this account (executive accounts cannot be suspended).");
+      return;
+    }
+    onSuspended();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+      <div className="w-full max-w-lg rounded-3xl border border-red-500/40 bg-[#160d2b] p-6 shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <span className="text-xl">⚠️</span>
+          <h3 className="font-bold text-white text-lg">Delete / Suspend Student Account</h3>
+        </div>
+
+        <p className="mt-3 text-xs text-[#cabfe0] leading-relaxed">
+          You are about to delete and suspend the account of <strong className="text-white">{student.name}</strong> ({student.id}).
+        </p>
+
+        <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-200/90 leading-relaxed">
+          🚫 <strong>Permanent Credential Block:</strong> This permanently blocks their email (<span className="text-white">{student.email}</span>), phone (<span className="text-white">{student.phone}</span>), and KR8 ID from ever registering again on KR8 Digitals — UNLESS they successfully appeal within 30 days.
+        </div>
+
+        <form onSubmit={handleConfirm} className="mt-4 space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-red-300 mb-1">
+              Reason for Suspension (Required — visible to student) *
+            </label>
+            <textarea
+              rows={3}
+              required
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                setError("");
+              }}
+              placeholder="e.g. Repeated violation of community guidelines, fake attendance submission, or commercial spam..."
+              className="w-full rounded-xl border border-red-500/40 bg-black/50 p-3 text-xs text-white placeholder:text-gray-500 focus:border-red-400 focus:outline-none"
+            />
+          </div>
+
+          {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl px-4 py-2 text-xs text-gray-400 hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white hover:bg-red-500 shadow-lg"
+            >
+              Confirm Account Suspension
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
