@@ -120,28 +120,30 @@ button, a, input, select, textarea {
 }
 
 .hero-badge {
-  display: flex;
-  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
   max-width: 100%;
   white-space: nowrap;
-  font-size: clamp(0.48rem, 2.5vw, 0.875rem);
-  letter-spacing: clamp(-0.075em, 0vw, 0.08em);
-  padding-inline: clamp(0.6rem, 2vw, 1rem);
+  font-size: clamp(0.62rem, 2.2vw, 0.8125rem);
+  letter-spacing: 0.04em;
+  padding-inline: 0.85rem;
 }
 
 .hero-badge > :last-child {
   min-width: 0;
-  flex: 1 1 auto;
   width: auto;
   overflow: hidden;
-  text-overflow: clip;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 @media (max-width: 430px) {
   .hero-badge {
-    font-size: 0.48rem;
-    padding-inline: 0.55rem;
+    font-size: 0.65rem;
+    padding-inline: 0.75rem;
+    letter-spacing: 0.02em;
   }
 }
 
@@ -253,6 +255,53 @@ button, a, input, select, textarea {
   50% { transform: translateY(-12px); }
 }
 .floaty { animation: floaty 6s ease-in-out infinite; }
+
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-16px) rotate(3deg); }
+}
+@keyframes floatReverse {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(14px) rotate(-3deg); }
+}
+@keyframes floatHorizontal {
+  0%, 100% { transform: translateX(0px) translateY(0px); }
+  50% { transform: translateX(12px) translateY(-12px); }
+}
+@keyframes pulseGlowSlow {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(1.06); }
+}
+.animate-float-slow {
+  animation: floatSlow 7s ease-in-out infinite;
+}
+.animate-float-reverse {
+  animation: floatReverse 8.5s ease-in-out infinite;
+}
+.animate-float-horizontal {
+  animation: floatHorizontal 9s ease-in-out infinite;
+}
+.animate-pulse-glow {
+  animation: pulseGlowSlow 6s ease-in-out infinite;
+}
+
+@keyframes floatUpFade {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(0.8) rotate(0deg);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translateY(-130px) scale(1.2) rotate(12deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-260px) scale(1.4) rotate(-12deg);
+  }
+}
+.animate-float-up {
+  animation: floatUpFade 2.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

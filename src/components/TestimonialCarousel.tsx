@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import Icon from "./Icon";
 import {
   type Testimonial,
@@ -6,12 +7,11 @@ import {
   getVideoComments,
   addVideoComment,
   likeVideoComment,
+  getStudents,
+  generateDefaultAvatar,
 } from "../data/store";
 import { useAuth } from "../context/AuthContext";
-
-function shuffle<T>(items: T[]) {
-  return [...items].sort(() => Math.random() - 0.5);
-}
+import { Avatar } from "./ui";
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -70,13 +70,17 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Order videos: latest first, then shuffle the rest
-  const ordered = useMemo(() => {
+  // TRUE SHUFFLE ON MOUNT:
+  // Freshly shuffles all items each visit/session so repeat visitors see variety rather than the same video
+  const [ordered, setOrdered] = useState<Testimonial[]>(() => {
     if (!items.length) return [];
-    const sorted = [...items].sort((a, b) => b.createdAt - a.createdAt);
-    if (sorted.length <= 1) return sorted;
-    const [latest, ...rest] = sorted;
-    return [latest, ...shuffle(rest)];
+    return [...items].sort(() => Math.random() - 0.5);
+  });
+
+  useEffect(() => {
+    if (items.length) {
+      setOrdered([...items].sort(() => Math.random() - 0.5));
+    }
   }, [items]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -88,14 +92,30 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Touch swipe support
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+
   // Comments state
   const [comments, setComments] = useState<VideoComment[]>([]);
   const [commentText, setCommentText] = useState("");
   const [authorName, setAuthorName] = useState("");
 
+  const total = ordered.length;
   const currentItem = ordered[currentIndex] || items[0];
+  const prevIndex = (currentIndex - 1 + total) % total;
+  const nextIndex = (currentIndex + 1) % total;
+  const prevItem = ordered[prevIndex];
+  const nextItem = ordered[nextIndex];
 
-  // Deep linking: read ?video=[id] or hash on mount
+  // Link to real student profile if kr8Id exists and matches a registered student
+  const linkedStudent = useMemo(() => {
+    if (!currentItem?.kr8Id) return null;
+    const allStudents = getStudents();
+    return allStudents.find((s) => s.id.toLowerCase() === currentItem.kr8Id?.trim().toLowerCase()) || null;
+  }, [currentItem?.kr8Id]);
+
+  // Deep linking: read ?video=[id] on mount
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -127,12 +147,8 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     const playPromise = video.play();
     if (playPromise !== undefined) {
       playPromise
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch(() => {
-          setIsPlaying(false);
-        });
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     }
   }, [currentIndex]);
 
@@ -145,17 +161,16 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     return active ? active.text : null;
   }, [currentItem?.captions, currentTime]);
 
-  // Continuous auto-playback: on ended, go to next
   const handleEnded = () => {
-    setCurrentIndex((prev) => (prev + 1) % ordered.length);
+    setCurrentIndex((prev) => (prev + 1) % total);
   };
 
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % ordered.length);
+    setCurrentIndex((prev) => (prev + 1) % total);
   };
 
   const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + ordered.length) % ordered.length);
+    setCurrentIndex((prev) => (prev - 1 + total) % total);
   };
 
   const togglePlay = () => {
@@ -201,10 +216,61 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     setCurrentTime(newTime);
   };
 
-  const handleShare = async (e?: React.MouseEvent) => {
+  // Touch Swipe Handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    // Horizontal swipe threshold
+    if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
+
+  // General shareable link (landing on full testimonial library, not a single person's page)
+  const handleShareGeneral = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const shareUrl = `${window.location.origin}${window.location.pathname}?video=${currentItem.id}#student-stories`;
-    const shareTitle = `Watch ${currentItem.name}'s Journey at KR8 Digitals`;
+    const shareUrl = `${window.location.origin}/#student-stories`;
+    const shareTitle = "KR8 Digitals Student Stories & Reviews";
+    const shareText = "Come see what our students say! Real stories from African youth mastering high-income tech and creative skills for free at KR8 Digitals.";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        showToast("General student stories shared!");
+        return;
+      } catch {}
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast("General testimonial library link copied to clipboard!");
+    } catch {
+      showToast(shareUrl);
+    }
+  };
+
+  // Individual active story share link
+  const handleShareActive = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const shareUrl = `${window.location.origin}/?video=${currentItem.id}#student-stories`;
+    const shareTitle = `Watch ${currentItem.name}'s Story at KR8 Digitals`;
     const shareText = `Check out how ${currentItem.name} learned ${currentItem.skill} for free at KR8 Digitals Academy!`;
 
     if (navigator.share) {
@@ -216,16 +282,14 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
         });
         showToast("Story shared successfully!");
         return;
-      } catch {
-        // Fallback to clipboard
-      }
+      } catch {}
     }
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      showToast("Link copied to clipboard! Share with friends 🚀");
+      showToast("Story link copied to clipboard!");
     } catch {
-      showToast("Share URL: " + shareUrl);
+      showToast(shareUrl);
     }
   };
 
@@ -263,7 +327,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     );
   };
 
-  if (!ordered.length) {
+  if (!total) {
     return (
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-10 text-center text-sm text-[#8a7ba8]">
         Student testimonial videos will appear here as they are published.
@@ -271,8 +335,11 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     );
   }
 
+  // Active student avatar: prefer real linked profile avatar if present
+  const activeAvatar = linkedStudent?.avatar || currentItem.img || generateDefaultAvatar(currentItem.name, currentItem.id);
+
   return (
-    <div id="student-stories" className="relative w-full max-w-5xl mx-auto">
+    <div id="student-stories" className="relative w-full max-w-6xl mx-auto">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-2xl border border-pink-500/40 bg-[#160d2b]/95 px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl animate-fade-in">
@@ -283,16 +350,80 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
         </div>
       )}
 
-      {/* Main Experience Grid: Video Player + Interactive Story/Comments Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* VIDEO PLAYER COLUMN (7 cols on desktop) */}
-        <div className="lg:col-span-7 flex flex-col items-center">
+      {/* Top Controls Bar: General Library Share & Shuffle indicator */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 px-2">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-3 py-1 text-xs font-bold text-pink-300 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-pink-400 animate-pulse" />
+            Live Student Testimonials
+          </span>
+          <span className="text-xs text-[#8a7ba8] hidden sm:inline">
+            Freshly shuffled for each visit
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleShareGeneral}
+            className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all shadow-sm"
+            title="Share full testimonial library link"
+          >
+            <Icon name="share" size={13} />
+            <span>Share All Student Stories</span>
+          </button>
+        </div>
+      </div>
+
+      {/* SLIDING CAROUSEL STAGE */}
+      <div
+        className="relative flex items-center justify-center overflow-hidden py-4"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Desktop Left / Previous Arrow */}
+        <button
+          onClick={handlePrev}
+          aria-label="Previous story"
+          className="absolute left-2 sm:left-4 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-xl"
+        >
+          <span className="text-xl">‹</span>
+        </button>
+
+        {/* Carousel Visual Row */}
+        <div className="flex items-center justify-center gap-3 sm:gap-6 w-full max-w-full">
+          {/* PREVIOUS VIDEO PREVIEW (Faded & Dimmed on Left) */}
+          {prevItem && (
+            <div
+              onClick={handlePrev}
+              className="relative hidden md:flex flex-col items-center opacity-35 hover:opacity-75 scale-90 -mr-10 lg:-mr-8 z-10 cursor-pointer transition-all duration-500 shrink-0 select-none group"
+            >
+              <div className="relative w-[180px] lg:w-[220px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/10 bg-black shadow-lg">
+                <img
+                  src={prevItem.img}
+                  alt={prevItem.name}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm border border-white/20 group-hover:bg-pink-600 transition-colors">
+                    ‹
+                  </span>
+                </div>
+                <div className="absolute bottom-3 left-3 right-3 text-left">
+                  <p className="text-xs font-bold text-white truncate">{prevItem.name}</p>
+                  <p className="text-[10px] text-pink-300 truncate">{prevItem.skill}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ACTIVE CENTER VIDEO PLAYER */}
           <div
             ref={containerRef}
-            className="group relative w-full max-w-[340px] sm:max-w-[380px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/15 bg-black shadow-2xl glow-pink-sm select-none"
+            className="group relative w-full max-w-[340px] sm:max-w-[380px] aspect-[9/16] rounded-3xl overflow-hidden border-2 border-pink-500/40 bg-black shadow-2xl glow-pink-sm z-20 shrink-0 select-none transition-all duration-500"
           >
-            {/* Background Glow */}
-            <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-pink-500/20 via-purple-600/10 to-blue-500/20 blur-xl pointer-events-none" />
+            {/* Ambient Back Glow */}
+            <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-pink-500/30 via-purple-600/20 to-blue-500/20 blur-xl pointer-events-none" />
 
             {/* Video Element */}
             <video
@@ -315,347 +446,448 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               }}
               onEnded={handleEnded}
               onClick={togglePlay}
-              className="relative z-0 h-full w-full object-cover cursor-pointer"
+              className="h-full w-full object-cover cursor-pointer"
             />
 
-            {/* Big Centered Play/Pause Button on Video */}
-            {!isPlaying && (
+            {/* Tap to Unmute Overlay Hint */}
+            {isMuted && showUnmuteHint && (
               <button
-                onClick={togglePlay}
-                aria-label="Play video"
-                className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 backdrop-blur-[2px] transition-all"
+                onClick={handleUnmutePrompt}
+                className="absolute top-4 left-4 z-30 flex items-center gap-2 rounded-full border border-pink-400/50 bg-black/80 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl backdrop-blur-md animate-pulse hover:bg-pink-600"
               >
-                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-pink text-white shadow-2xl transform scale-100 hover:scale-110 active:scale-95 transition-transform glow-pink">
-                  <Icon name="video" size={32} />
-                </span>
+                <span>🔊</span>
+                <span>Tap to Unmute Audio</span>
               </button>
             )}
 
-            {/* Top Bar Overlay: Badge, Audio & Share */}
-            <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-auto">
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-pink-500/80 px-2.5 py-1 text-[11px] font-bold text-white tracking-wider uppercase backdrop-blur-md">
-                  {currentIndex === 0 ? "🔥 Latest Upload" : "Student Reel"}
-                </span>
-                <span className="rounded-full bg-black/60 border border-white/20 px-2.5 py-1 text-[11px] font-medium text-[#e8ddf5] backdrop-blur-md">
-                  {currentIndex + 1} of {ordered.length}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleShare}
-                  aria-label="Share this story"
-                  title="Share this student's story"
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 border border-white/20 text-white hover:bg-pink-500/30 hover:border-pink-500/50 transition-all backdrop-blur-md active:scale-90"
-                >
-                  <Icon name="share" size={16} />
-                </button>
-                <button
-                  onClick={toggleMute}
-                  aria-label={isMuted ? "Unmute sound" : "Mute sound"}
-                  title={isMuted ? "Unmute sound" : "Mute sound"}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 border border-white/20 text-white hover:bg-white/20 transition-all backdrop-blur-md active:scale-90"
-                >
-                  <Icon name={isMuted ? "volumeX" : "volume"} size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Unmute Prompt Banner if autoplaying muted */}
-            {isMuted && showUnmuteHint && isPlaying && (
-              <div className="absolute top-16 inset-x-0 z-20 flex justify-center px-4 animate-bounce">
-                <button
-                  onClick={handleUnmutePrompt}
-                  className="flex items-center gap-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 px-4 py-2 text-xs font-bold text-white shadow-xl hover:brightness-110 active:scale-95 transition-all glow-pink-sm"
-                >
-                  <Icon name="volume" size={14} />
-                  <span>Tap to Unmute Audio</span>
-                </button>
+            {/* Verified Student Badge on Video */}
+            {linkedStudent && (
+              <div className="absolute top-4 right-4 z-30 flex items-center gap-1.5 rounded-full border border-emerald-500/50 bg-emerald-950/80 px-3 py-1 text-[11px] font-bold text-emerald-300 shadow-xl backdrop-blur-md">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span>Verified Student</span>
               </div>
             )}
 
-            {/* STYLED AUTO-CAPTIONS OVERLAY */}
+            {/* Subtitles & Captions Overlay */}
             {captionsEnabled && currentCaption && (
-              <div className="absolute bottom-20 inset-x-3 z-20 flex justify-center pointer-events-none transition-all duration-300">
-                <div className="inline-block max-w-[95%] rounded-2xl border border-white/20 bg-black/85 px-4 py-2.5 text-center text-xs sm:text-sm font-semibold text-white tracking-wide shadow-2xl backdrop-blur-md animate-fade-in">
-                  <span className="leading-snug">{highlightKeywords(currentCaption)}</span>
-                </div>
+              <div className="pointer-events-none absolute bottom-24 left-3 right-3 z-20 flex justify-center text-center">
+                <p className="max-w-[92%] rounded-2xl bg-black/85 px-3.5 py-2 text-xs sm:text-sm font-semibold leading-relaxed text-white shadow-2xl backdrop-blur-md border border-white/15">
+                  {highlightKeywords(currentCaption)}
+                </p>
               </div>
             )}
 
-            {/* BOTTOM CONTROLS & TIMELINE OVERLAY */}
-            <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-12 pb-3 px-4 flex flex-col gap-2">
-              {/* Interactive Scrub Bar */}
+            {/* Video Gradient Shadow at Bottom */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black via-black/70 to-transparent z-10" />
+
+            {/* Bottom Controls & Info Overlay */}
+            <div className="absolute inset-x-0 bottom-0 z-20 p-4 space-y-2">
+              {/* Progress Scrubber */}
               <div
                 onClick={handleSeek}
-                className="group/bar relative h-2 w-full cursor-pointer rounded-full bg-white/25 hover:h-3 transition-all"
+                className="group/seek relative h-2 w-full cursor-pointer rounded-full bg-white/20 overflow-hidden"
               >
                 <div
-                  className="h-full rounded-full bg-gradient-pink relative"
+                  className="h-full bg-gradient-pink transition-all duration-100"
                   style={{
                     width: `${duration ? (currentTime / duration) * 100 : 0}%`,
                   }}
-                >
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 h-3.5 w-3.5 rounded-full bg-white shadow-md ring-2 ring-pink-500 scale-0 group-hover/bar:scale-100 transition-transform" />
-                </div>
+                />
               </div>
 
-              {/* Controls Row */}
-              <div className="flex items-center justify-between text-xs text-white">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handlePrev}
-                    aria-label="Previous story"
-                    title="Previous story"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all"
-                  >
-                    ⏮
-                  </button>
+              {/* Student Name & Controls Row */}
+              <div className="flex items-end justify-between gap-2 pt-1">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-white text-base truncate">
+                      {currentItem.name}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-pink-300 font-semibold truncate">
+                    {currentItem.skill} {currentItem.schoolOrRole ? `· ${currentItem.schoolOrRole}` : ""}
+                  </p>
+                  <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </p>
+                </div>
+
+                {/* Right Action Icons: Play, Mute, CC, Share */}
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     onClick={togglePlay}
                     aria-label={isPlaying ? "Pause" : "Play"}
-                    title={isPlaying ? "Pause" : "Play"}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-500 hover:bg-pink-600 active:scale-90 transition-all font-bold"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 backdrop-blur-sm transition-all"
                   >
-                    {isPlaying ? "❚❚" : "▶"}
+                    <span className="text-xs">{isPlaying ? "❚❚" : "▶"}</span>
                   </button>
                   <button
-                    onClick={handleNext}
-                    aria-label="Next story"
-                    title="Next story"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all"
+                    onClick={toggleMute}
+                    aria-label={isMuted ? "Unmute" : "Mute"}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 backdrop-blur-sm transition-all"
                   >
-                    ⏭
+                    <span className="text-xs">{isMuted ? "🔇" : "🔊"}</span>
                   </button>
-                  <span className="font-mono text-[11px] text-[#cabfe0] ml-1">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* CC (Closed Captions) Toggle */}
                   <button
-                    onClick={() => setCaptionsEnabled((prev) => !prev)}
-                    aria-label={captionsEnabled ? "Disable Captions" : "Enable Captions"}
-                    title={captionsEnabled ? "Captions On (Tap to Hide)" : "Captions Off (Tap to Show)"}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider transition-all border ${
+                    onClick={() => setCaptionsEnabled(!captionsEnabled)}
+                    aria-label="Toggle subtitles"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all ${
                       captionsEnabled
-                        ? "bg-pink-500/80 border-pink-400 text-white"
-                        : "bg-white/10 border-white/20 text-[#8a7ba8] hover:text-white"
+                        ? "bg-gradient-pink text-white"
+                        : "bg-white/15 text-white/50"
                     }`}
                   >
                     CC
                   </button>
-
-                  {/* Unmute/Mute Toggle */}
                   <button
-                    onClick={toggleMute}
-                    aria-label={isMuted ? "Unmute" : "Mute"}
-                    title={isMuted ? "Unmute" : "Mute"}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all text-white"
+                    onClick={handleShareActive}
+                    aria-label="Share story"
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 backdrop-blur-sm transition-all"
+                    title="Share this specific story"
                   >
-                    <Icon name={isMuted ? "volumeX" : "volume"} size={14} />
+                    <Icon name="share" size={13} />
                   </button>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* SIDEBAR COLUMN: Student Profile, Key Quote & Community Comments (5 cols on desktop) */}
-        <div className="lg:col-span-5 flex flex-col gap-4">
-          {/* Active Student Spotlight Card */}
-          <div className="rounded-3xl border border-white/10 bg-[#160d2b]/80 p-5 backdrop-blur-xl shadow-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
+          {/* NEXT VIDEO PREVIEW (Faded & Dimmed on Right) */}
+          {nextItem && (
+            <div
+              onClick={handleNext}
+              className="relative hidden md:flex flex-col items-center opacity-35 hover:opacity-75 scale-90 -ml-10 lg:-ml-8 z-10 cursor-pointer transition-all duration-500 shrink-0 select-none group"
+            >
+              <div className="relative w-[180px] lg:w-[220px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/10 bg-black shadow-lg">
                 <img
-                  src={currentItem.img}
-                  alt={currentItem.name}
-                  className="h-12 w-12 rounded-2xl object-cover ring-2 ring-pink-500/50 shadow-md"
+                  src={nextItem.img}
+                  alt={nextItem.name}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-1.5">
-                    {currentItem.name}
-                    <span className="text-pink-400 text-xs">✓ Verified</span>
-                  </h3>
-                  <p className="text-xs text-pink-300 font-medium">
-                    {currentItem.skill} {currentItem.schoolOrRole ? `· ${currentItem.schoolOrRole}` : ""}
-                  </p>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm border border-white/20 group-hover:bg-pink-600 transition-colors">
+                    ›
+                  </span>
+                </div>
+                <div className="absolute bottom-3 left-3 right-3 text-left">
+                  <p className="text-xs font-bold text-white truncate">{nextItem.name}</p>
+                  <p className="text-[10px] text-pink-300 truncate">{nextItem.skill}</p>
                 </div>
               </div>
-
-              <button
-                onClick={handleShare}
-                className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-white hover:border-pink-500/40 hover:bg-pink-500/10 active:scale-95 transition-all"
-              >
-                <Icon name="share" size={13} />
-                <span>Share</span>
-              </button>
             </div>
+          )}
+        </div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3.5">
-              <p className="text-xs italic text-[#e8ddf5] leading-relaxed">
-                "{currentItem.caption}"
-              </p>
+        {/* Desktop Right / Next Arrow */}
+        <button
+          onClick={handleNext}
+          aria-label="Next story"
+          className="absolute right-2 sm:right-4 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-xl"
+        >
+          <span className="text-xl">›</span>
+        </button>
+      </div>
+
+      {/* SWIPE HINT ON MOBILE */}
+      <div className="mt-2 text-center text-xs text-[#8a7ba8] md:hidden">
+        ← Swipe left / right or tap next to advance stories →
+      </div>
+
+      {/* DETAILS & COMMUNITY CHEERS SECTION */}
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* STUDENT BIO & VERIFICATION CARD (5 cols) */}
+        <div className="lg:col-span-5 rounded-3xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <Avatar src={activeAvatar} name={currentItem.name} size={48} />
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-white text-base">{currentItem.name}</h4>
+                {linkedStudent && (
+                  <span className="flex items-center text-emerald-400" title="Verified KR8 Student">
+                    <Icon name="check" size={14} />
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-pink-300 font-semibold">{currentItem.skill}</p>
             </div>
           </div>
 
-          {/* Interactive Community Comments & Encouragements Card */}
-          <div className="rounded-3xl border border-white/10 bg-[#160d2b]/80 p-5 backdrop-blur-xl shadow-xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <div className="flex items-center gap-2">
-                <Icon name="message" size={17} className="text-pink-400" />
-                <h4 className="font-bold text-white text-sm">Community Voices</h4>
-                <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[11px] font-bold text-pink-300">
-                  {comments.length}
+          {/* Quote */}
+          <div className="mt-4 rounded-2xl bg-black/40 p-4 border border-white/5">
+            <p className="text-xs text-[#d8cde8] leading-relaxed italic">
+              "{currentItem.caption}"
+            </p>
+          </div>
+
+          {/* VERIFIED STUDENT PROFILE CONNECTION */}
+          {linkedStudent ? (
+            <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  Verified KR8 Student Profile
+                </span>
+                <span className="font-mono text-[10px] text-emerald-200 bg-emerald-500/20 px-2 py-0.5 rounded">
+                  {linkedStudent.id}
                 </span>
               </div>
-              <span className="text-[11px] text-[#8a7ba8]">Cheer on {currentItem.name.split(" ")[0]}</span>
-            </div>
-
-            {/* Comment Form */}
-            <form onSubmit={handlePostComment} className="mt-3 flex flex-col gap-2">
-              {!currentUser && (
-                <input
-                  type="text"
-                  placeholder="Your Name (e.g. Ebuka, Sarah)"
-                  value={authorName}
-                  onChange={(e) => setAuthorName(e.target.value)}
-                  className="rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
-                />
-              )}
-              {currentUser && (
-                <div className="flex items-center gap-2 text-[11px] text-[#b8aecf]">
-                  <span>Posting as:</span>
-                  <span className="font-bold text-pink-300">{currentUser.name}</span>
-                  <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] text-pink-200">
-                    {currentUser.id}
-                  </span>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder={`Leave a cheer or question for ${currentItem.name.split(" ")[0]}...`}
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={!commentText.trim()}
-                  className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md disabled:opacity-40 hover:brightness-110 active:scale-95 transition-all"
+              <p className="mt-1 text-[11px] text-[#b8aecf]">
+                Authenticity confirmed. This testimonial belongs to verified active student{" "}
+                <strong className="text-white">{linkedStudent.name}</strong>.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Link
+                  to={`/verify?id=${linkedStudent.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
                 >
-                  Post
-                </button>
+                  <span>Verify Student Credential ↗</span>
+                </Link>
               </div>
-            </form>
-
-            {/* Comments Scrollable Feed */}
-            <div className="mt-4 max-h-[220px] overflow-y-auto space-y-2.5 pr-1 text-xs">
-              {comments.length === 0 ? (
-                <p className="py-4 text-center text-xs text-[#8a7ba8]">
-                  No comments yet. Be the first to congratulate {currentItem.name}!
-                </p>
-              ) : (
-                comments.map((c) => (
-                  <div
-                    key={c.id}
-                    className="rounded-2xl border border-white/5 bg-black/30 p-3 flex flex-col gap-1 transition-all hover:border-white/15"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white">{c.authorName}</span>
-                        {c.authorId && (
-                          <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-pink-300">
-                            {c.authorId.includes("FOUNDER") ? "Founder" : c.authorId}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-[#7d6f96]">
-                        {timeAgo(c.createdAt)}
-                      </span>
-                    </div>
-                    <p className="text-[#d8cde8] leading-relaxed mt-0.5">{c.comment}</p>
-                    <div className="mt-1 flex items-center justify-end">
-                      <button
-                        onClick={() => handleLike(c.id)}
-                        className="flex items-center gap-1 text-[11px] text-[#8a7ba8] hover:text-pink-400 active:scale-90 transition-all"
-                      >
-                        <span>♥</span>
-                        <span>{c.likes || 0}</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
             </div>
+          ) : (
+            <div className="mt-4 rounded-2xl border border-white/5 bg-black/20 p-3 text-[11px] text-[#8a7ba8]">
+              Published graduate testimonial · KR8 Digitals Creative Community
+            </div>
+          )}
+
+          {/* Share Option */}
+          <div className="mt-4 flex flex-wrap gap-2 pt-2 border-t border-white/5">
+            <button
+              onClick={handleShareActive}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow-md hover:brightness-110 active:scale-95 transition-all"
+            >
+              <Icon name="share" size={13} />
+              <span>Share {currentItem.name.split(" ")[0]}'s Story</span>
+            </button>
+            <button
+              onClick={handleShareGeneral}
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all"
+              title="Share full library"
+            >
+              <span>All Stories ↗</span>
+            </button>
+          </div>
+        </div>
+
+        {/* COMMUNITY CHEERS & COMMENTS (7 cols) */}
+        <div className="lg:col-span-7 rounded-3xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
+          <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div className="flex items-center gap-2">
+              <span className="text-pink-400">💬</span>
+              <h4 className="text-sm font-bold text-white">
+                Community Cheers ({comments.length})
+              </h4>
+            </div>
+            <span className="text-xs text-[#8a7ba8]">
+              Cheer for {currentItem.name.split(" ")[0]}
+            </span>
+          </div>
+
+          {/* Comment input form */}
+          <form onSubmit={handlePostComment} className="mt-4 flex flex-col gap-2">
+            {!currentUser && (
+              <input
+                type="text"
+                placeholder="Your Name (e.g. Ebuka, Sarah)"
+                value={authorName}
+                onChange={(e) => setAuthorName(e.target.value)}
+                className="rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
+              />
+            )}
+            {currentUser && (
+              <div className="flex items-center gap-2 text-[11px] text-[#b8aecf]">
+                <span>Posting as:</span>
+                <span className="font-bold text-pink-300">{currentUser.name}</span>
+                <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] text-pink-200">
+                  {currentUser.id}
+                </span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder={`Leave a cheer or question for ${currentItem.name.split(" ")[0]}...`}
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={!commentText.trim()}
+                className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md disabled:opacity-40 hover:brightness-110 active:scale-95 transition-all"
+              >
+                Post
+              </button>
+            </div>
+          </form>
+
+          {/* Comments Feed */}
+          <div className="mt-4 max-h-[220px] overflow-y-auto space-y-2.5 pr-1 text-xs">
+            {comments.length === 0 ? (
+              <p className="py-4 text-center text-xs text-[#8a7ba8]">
+                No comments yet. Be the first to congratulate {currentItem.name}!
+              </p>
+            ) : (
+              comments.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-2xl border border-white/5 bg-black/30 p-3 flex flex-col gap-1 transition-all hover:border-white/15"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-white">{c.authorName}</span>
+                      {c.authorId && (
+                        <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-pink-300">
+                          {c.authorId.includes("FOUNDER") ? "Founder" : c.authorId}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-[#7d6f96]">
+                      {timeAgo(c.createdAt)}
+                    </span>
+                  </div>
+                  <p className="text-[#d8cde8] leading-relaxed mt-0.5">{c.comment}</p>
+                  <div className="mt-1 flex items-center justify-end">
+                    <button
+                      onClick={() => handleLike(c.id)}
+                      className="flex items-center gap-1 text-[11px] text-[#8a7ba8] hover:text-pink-400 active:scale-90 transition-all"
+                    >
+                      <span>♥</span>
+                      <span>{c.likes || 0}</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
 
-      {/* PLAYLIST REEL STRIP (Horizontal row of student stories) */}
+      {/* NUMBERED STORIES PAGINATION ROW (Scalable up to 50k+ videos) */}
       <div className="mt-8 border-t border-white/10 pt-6">
-        <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 px-1">
           <div className="flex items-center gap-2">
             <span className="flex h-2 w-2 rounded-full bg-pink-500 animate-ping" />
             <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-              Continuous Student Reel
+              Student Stories Library
             </h4>
+            <span className="rounded-full bg-pink-500/20 px-2.5 py-0.5 text-xs font-mono font-bold text-pink-300">
+              Story #{currentIndex + 1} of {total}
+            </span>
           </div>
-          <p className="text-xs text-[#8a7ba8]">
-            Auto-advances seamlessly · Latest upload leads
+          <p className="text-xs text-[#a594c7]">
+            Select any story number to play · Click any number to jump
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {ordered.map((item, idx) => {
-            const isSelected = idx === currentIndex;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setCurrentIndex(idx)}
-                className={`flex items-center gap-3 rounded-2xl p-3 text-left transition-all backdrop-blur-md border ${
-                  isSelected
-                    ? "border-pink-500 bg-gradient-to-r from-pink-500/20 via-purple-500/10 to-transparent shadow-lg"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
-                }`}
-              >
-                <div className="relative h-14 w-11 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/20">
-                  <img
-                    src={item.img}
-                    alt={item.name}
-                    className="h-full w-full object-cover"
-                  />
-                  {isSelected && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-white text-[10px]">
-                        ▶
-                      </span>
-                    </span>
-                  )}
-                </div>
+        {/* Numbered Row with Smart Windowing */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+            {/* Previous Button */}
+            <button
+              onClick={handlePrev}
+              className="flex h-9 items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white hover:bg-white/15 transition-all"
+            >
+              <span>←</span>
+              <span className="hidden sm:inline">Prev</span>
+            </button>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className={`text-xs font-bold truncate ${isSelected ? "text-pink-300" : "text-white"}`}>
-                      {item.name}
-                    </p>
-                    {idx === 0 && (
-                      <span className="shrink-0 rounded bg-pink-500/30 px-1 py-0.5 text-[9px] font-bold text-pink-300">
-                        NEW
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-[#b8aecf] truncate">{item.skill}</p>
-                  <p className="text-[10px] text-[#7d6f96] truncate">
-                    {item.schoolOrRole || "KR8 Student"}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
+            {/* Smart Windowing for Up to 50k videos */}
+            {(() => {
+              const current = currentIndex + 1;
+              const pages: (number | "dots-left" | "dots-right")[] = [];
+
+              if (total <= 12) {
+                for (let i = 1; i <= total; i++) pages.push(i);
+              } else {
+                pages.push(1);
+                if (current > 4) pages.push("dots-left");
+
+                const start = Math.max(2, current - 2);
+                const end = Math.min(total - 1, current + 2);
+
+                for (let i = start; i <= end; i++) pages.push(i);
+
+                if (current < total - 3) pages.push("dots-right");
+                pages.push(total);
+              }
+
+              return pages.map((page, pIdx) => {
+                if (page === "dots-left" || page === "dots-right") {
+                  return (
+                    <span
+                      key={`dots-${pIdx}`}
+                      className="flex h-9 w-7 items-center justify-center text-xs text-[#7d6f96]"
+                    >
+                      …
+                    </span>
+                  );
+                }
+
+                const isSelected = page === current;
+                return (
+                  <button
+                    key={`story-btn-${page}`}
+                    onClick={() => {
+                      setCurrentIndex(page - 1);
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = 0;
+                        videoRef.current.play().catch(() => {});
+                        setIsPlaying(true);
+                      }
+                    }}
+                    className={`flex h-9 min-w-9 items-center justify-center rounded-xl px-2.5 font-mono text-xs font-bold transition-all ${
+                      isSelected
+                        ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/30 scale-105 glow-pink-sm ring-1 ring-white/30"
+                        : "border border-white/10 bg-white/[0.04] text-[#cabfe0] hover:border-pink-500/40 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              });
+            })()}
+
+            {/* Next Button */}
+            <button
+              onClick={handleNext}
+              className="flex h-9 items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white hover:bg-white/15 transition-all"
+            >
+              <span className="hidden sm:inline">Next</span>
+              <span>→</span>
+            </button>
+          </div>
+
+          {/* Direct Jump to Video Number Input */}
+          {total > 5 && (
+            <div className="mt-4 border-t border-white/10 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-[#b8aecf]">
+                <span className="text-pink-400 font-bold">▶ Now Playing:</span>
+                <span className="font-bold text-white">{currentItem.name}</span>
+                <span className="text-pink-300">({currentItem.skill})</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-[#8a7ba8]">Jump to #:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={total}
+                  placeholder={`1-${total}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val = parseInt((e.target as HTMLInputElement).value, 10);
+                      if (val >= 1 && val <= total) {
+                        setCurrentIndex(val - 1);
+                        (e.target as HTMLInputElement).value = "";
+                      }
+                    }
+                  }}
+                  className="w-16 rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-center font-mono text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

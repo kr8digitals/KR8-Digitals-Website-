@@ -17,7 +17,7 @@ export default function Leaderboard() {
       <div className="mx-auto max-w-6xl px-5 py-14">
         <div className="text-center">
           <Pill>Season 1 · Live</Pill>
-          <h1 className="font-display mt-5 text-5xl uppercase text-white sm:text-6xl">
+          <h1 className="font-display mt-5 text-5xl text-white sm:text-6xl font-bold">
             The KR8 <span className="text-gradient">Leaderboard</span>
           </h1>
           <p className="mx-auto mt-4 max-w-lg text-[#b8aecf]">
@@ -27,7 +27,7 @@ export default function Leaderboard() {
 
         <div className="mt-12 grid gap-10 lg:grid-cols-[1.6fr_1fr]">
           <div>
-            <h2 className="font-display text-2xl uppercase text-white">Full ranking</h2>
+            <h2 className="font-display text-2xl font-bold text-white">Full Ranking</h2>
             <div className="mt-6"><LeaderboardList /></div>
           </div>
           <div className="space-y-6">

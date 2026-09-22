@@ -9,6 +9,7 @@ import {
   getBiometricForStudent,
   removeBiometric,
   authenticateWithBiometrics,
+  checkBiometricSupport,
   type BiometricCredential,
 } from "../utils/biometrics";
 
@@ -32,11 +33,13 @@ export default function Settings() {
   const [bioLoading, setBioLoading] = useState(false);
   const [bioMessage, setBioMessage] = useState("");
   const [bioSuccess, setBioSuccess] = useState(false);
+  const [supportInfo, setSupportInfo] = useState<{ supported: boolean; hasPlatformSensor: boolean; reason: string } | null>(null);
 
   useEffect(() => {
     if (student) {
       setBiometric(getBiometricForStudent(student.id));
     }
+    checkBiometricSupport().then(setSupportInfo);
   }, [student]);
 
   if (!student) {
@@ -106,22 +109,22 @@ export default function Settings() {
 
   const handleEnableBiometric = async () => {
     setBioLoading(true);
-    setBioMessage("");
+    setBioMessage("Awaiting hardware sensor touch... Please touch your fingerprint sensor or verify your passkey when prompted.");
     setBioSuccess(false);
     try {
       const res = await registerBiometric(student.id, student.name);
       if (res.ok && res.credential) {
         setBiometric(res.credential);
         setBioSuccess(true);
-        setBioMessage("Fingerprint & biometric security registered successfully for this device!");
-        setTimeout(() => setBioMessage(""), 4000);
+        setBioMessage("Sensor verified! Fingerprint passkey registered successfully for this device.");
+        setTimeout(() => setBioMessage(""), 5000);
       } else {
         setBioSuccess(false);
-        setBioMessage(res.error || "Could not register biometric authentication.");
+        setBioMessage(res.error || "Sensor verification was not completed.");
       }
     } catch (e: unknown) {
       setBioSuccess(false);
-      setBioMessage(e instanceof Error ? e.message : "Registration error");
+      setBioMessage(e instanceof Error ? e.message : "Sensor registration error");
     } finally {
       setBioLoading(false);
     }
@@ -129,17 +132,17 @@ export default function Settings() {
 
   const handleTestBiometric = async () => {
     setBioLoading(true);
-    setBioMessage("");
+    setBioMessage("Touch your sensor now to verify identity...");
     setBioSuccess(false);
     try {
       const res = await authenticateWithBiometrics(student.id);
       if (res.ok) {
         setBioSuccess(true);
-        setBioMessage("Biometric verification successful! Your sensor and device passkey are ready.");
-        setTimeout(() => setBioMessage(""), 4000);
+        setBioMessage("Biometric verified! Your fingerprint sensor is fully active and working.");
+        setTimeout(() => setBioMessage(""), 5000);
       } else {
         setBioSuccess(false);
-        setBioMessage(res.error || "Biometric verification failed.");
+        setBioMessage(res.error || "Biometric sensor verification failed or was cancelled.");
       }
     } catch (e: unknown) {
       setBioSuccess(false);
@@ -379,6 +382,21 @@ export default function Settings() {
           </div>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+            {/* Hardware sensor diagnostic banner */}
+            <div className="mb-4 flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs">
+              <span className="text-pink-400">🔍</span>
+              <span className="text-[#8a7ba8]">Hardware Sensor Status:</span>
+              <span className="font-medium text-white">
+                {supportInfo
+                  ? supportInfo.hasPlatformSensor
+                    ? "✓ Built-in Sensor Ready (Touch ID / Windows Hello / Android Fingerprint)"
+                    : supportInfo.supported
+                    ? "ℹ Passkey Authenticator Ready (Mobile QR / Security Key)"
+                    : "⚠️ Biometrics Unavailable on this browser/window"
+                  : "Checking hardware sensors..."}
+              </span>
+            </div>
+
             {biometric ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -405,8 +423,9 @@ export default function Settings() {
                   <button
                     onClick={handleTestBiometric}
                     disabled={bioLoading}
-                    className="rounded-full border border-pink-400/50 bg-pink-500/10 px-4 py-2 text-xs font-bold text-pink-200 hover:bg-pink-500/20 disabled:opacity-50"
+                    className="rounded-full border border-pink-400/50 bg-pink-500/10 px-4 py-2 text-xs font-bold text-pink-200 hover:bg-pink-500/20 disabled:opacity-50 flex items-center gap-1.5"
                   >
+                    <Icon name="fingerprint" size={14} />
                     {bioLoading ? "Scanning sensor..." : "Test Fingerprint Sensor"}
                   </button>
                   <button
@@ -420,7 +439,7 @@ export default function Settings() {
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-[#b8aecf] leading-relaxed">
-                  Register your device fingerprint sensor or passkey for instant, passwordless logins on your phone, tablet, or laptop. KR8 Digitals uses the WebAuthn standard with zero biometric data transferred to external servers.
+                  Register your device fingerprint sensor or passkey for instant, passwordless logins on your phone, tablet, or laptop. When you click register, your browser will prompt you to touch your fingerprint sensor or verify your screen lock. Zero biometric data is ever sent to external servers.
                 </p>
                 <div className="pt-2">
                   <button
@@ -429,7 +448,7 @@ export default function Settings() {
                     className="inline-flex items-center gap-2 rounded-full bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform disabled:opacity-50"
                   >
                     <Icon name="fingerprint" size={16} />
-                    {bioLoading ? "Registering sensor..." : "Register Device Fingerprint / Passkey"}
+                    {bioLoading ? "Awaiting Sensor Touch..." : "Register Device Fingerprint / Passkey"}
                   </button>
                 </div>
               </div>
@@ -437,13 +456,14 @@ export default function Settings() {
 
             {bioMessage && (
               <div
-                className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium ${
+                className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium flex items-center gap-2 ${
                   bioSuccess
                     ? "bg-green-500/15 border border-green-500/30 text-green-300"
                     : "bg-red-500/15 border border-red-500/30 text-red-300"
                 }`}
               >
-                {bioMessage}
+                <span>{bioSuccess ? "✓" : "⚠️"}</span>
+                <span>{bioMessage}</span>
               </div>
             )}
           </div>
