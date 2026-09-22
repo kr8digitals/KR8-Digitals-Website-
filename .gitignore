@@ -25,3 +25,7 @@ dist-ssr
 .npm
 .sudo_as_admin_successful
 uploads/
+bin/
+.cache/
+.gitconfig
+

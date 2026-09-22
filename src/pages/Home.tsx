@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { IMG } from "../data/images";
-import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES, studentCount, tribeCount } from "../data/store";
+import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, DEFAULT_NARRATIVE_LINES, studentCount, tribeCount } from "../data/store";
 import Marquee from "../components/Marquee";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
@@ -83,8 +83,6 @@ function GuestHome() {
   const announcements = getAnnouncements();
   const portfolio = getPortfolio();
   const [homepageSettings, setHomepageSettings] = useState(getHomepageSettings());
-  const [narrativeIndex, setNarrativeIndex] = useState(0);
-  const [narrativeFading, setNarrativeFading] = useState(false);
 
   useEffect(() => {
     const sync = () => setHomepageSettings(getHomepageSettings());
@@ -96,77 +94,63 @@ function GuestHome() {
     };
   }, []);
 
-  const steps = homepageSettings.doubtToBelief && homepageSettings.doubtToBelief.length
-    ? homepageSettings.doubtToBelief
-    : DEFAULT_DOUBT_TO_BELIEF;
-
   const narrativeLines = homepageSettings.narrativeLines && homepageSettings.narrativeLines.length
     ? homepageSettings.narrativeLines
     : DEFAULT_NARRATIVE_LINES;
 
-  const [skepticIndex, setSkepticIndex] = useState(0);
-  const [skepticFading, setSkepticFading] = useState(false);
+  // Subtle animated sliding sequence of skepticism/doubt lines above the headline
+  const [doubtIndex, setDoubtIndex] = useState(0);
+  const [doubtPhase, setDoubtPhase] = useState<"enter" | "active" | "exit">("active");
 
-  // Rotate narrative skepticism line every 3.2s
   useEffect(() => {
     if (!narrativeLines.length) return;
-    const timer = setInterval(() => {
-      setSkepticFading(true);
-      setTimeout(() => {
-        setSkepticIndex((prev) => (prev + 1) % narrativeLines.length);
-        setSkepticFading(false);
+    const holdTimer = setTimeout(() => {
+      setDoubtPhase("exit");
+      const switchTimer = setTimeout(() => {
+        setDoubtIndex((prev) => (prev + 1) % narrativeLines.length);
+        setDoubtPhase("enter");
+        requestAnimationFrame(() => {
+          setTimeout(() => setDoubtPhase("active"), 20);
+        });
       }, 400);
-    }, 3600);
-    return () => clearInterval(timer);
-  }, [narrativeLines.length]);
+      return () => clearTimeout(switchTimer);
+    }, 3200);
 
-  useEffect(() => {
-    if (!steps.length) return;
-    const timer = setInterval(() => {
-      setNarrativeFading(true);
-      setTimeout(() => {
-        setNarrativeIndex((prev) => (prev + 1) % steps.length);
-        setNarrativeFading(false);
-      }, 400);
-    }, 5500);
-    return () => clearInterval(timer);
-  }, [steps.length]);
+    return () => clearTimeout(holdTimer);
+  }, [doubtIndex, narrativeLines.length]);
 
   return (
     <div>
-      {/* HERO SECTION — Cinematic & Engaging Experience with Ambient Flowing Gradient Motion */}
+      {/* HERO SECTION — Deep Dark Theme Matching Site Tone */}
       <section className="hero-section relative min-h-[auto] md:min-h-[82vh] flex items-center overflow-hidden pt-4 pb-12 sm:pt-6 sm:pb-16 md:pt-7 md:pb-20">
-        {/* Ambient Flowing Gradient Motion Layer */}
+        {/* Ambient Subtle Dark Gradient Atmosphere */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div
-            className="absolute -top-[25%] left-1/2 -translate-x-1/2 h-[550px] w-[900px] rounded-full bg-gradient-to-tr from-pink-600/20 via-purple-600/15 to-transparent blur-[130px] animate-pulse"
-            style={{ animationDuration: "8s" }}
+            className="absolute -top-[25%] left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-purple-950/25 blur-[140px]"
           />
           <div
-            className="absolute top-[35%] -left-[15%] h-[450px] w-[550px] rounded-full bg-gradient-to-br from-purple-800/20 via-pink-700/10 to-transparent blur-[110px] animate-pulse"
-            style={{ animationDuration: "12s" }}
+            className="absolute top-[35%] -left-[15%] h-[400px] w-[500px] rounded-full bg-purple-950/20 blur-[130px]"
           />
           <div
-            className="absolute top-[45%] -right-[15%] h-[480px] w-[580px] rounded-full bg-gradient-to-bl from-pink-500/15 via-blue-600/10 to-transparent blur-[120px] animate-pulse"
-            style={{ animationDuration: "10s" }}
+            className="absolute top-[45%] -right-[15%] h-[400px] w-[500px] rounded-full bg-pink-950/15 blur-[130px]"
           />
         </div>
 
-        {/* Ambient Flowing Gradient Ribbon */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 opacity-40">
+        {/* Ambient Subtle Gradient Ribbon */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 opacity-25">
           <svg className="absolute w-[200%] h-full -top-10 left-0" viewBox="0 0 1440 600" fill="none">
             <path
               d="M-200 350 C 200 150, 500 480, 850 280 C 1200 80, 1400 400, 1700 240"
               stroke="url(#hero-ribbon-gradient)"
-              strokeWidth="2.5"
+              strokeWidth="2"
               strokeDasharray="12 8"
               strokeLinecap="round"
             />
             <defs>
               <linearGradient id="hero-ribbon-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ec4899" stopOpacity="0.2" />
-                <stop offset="50%" stopColor="#a855f7" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#ec4899" stopOpacity="0.2" />
+                <stop offset="0%" stopColor="#ec4899" stopOpacity="0.15" />
+                <stop offset="50%" stopColor="#a855f7" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#ec4899" stopOpacity="0.15" />
               </linearGradient>
             </defs>
           </svg>
@@ -191,20 +175,25 @@ function GuestHome() {
 
           {/* Two-Column Layout: Left Text / Right Image (Stacks vertically on mobile) */}
           <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-12">
-            {/* Left Column: Typography, Supporting Description, Animated Narrative, CTAs & Glass Stats */}
+            {/* Left Column: Typography, Supporting Description, Subtle Animated Sequence, All 3 CTAs & Glass Stats */}
             <div className="hero-content rise-in lg:col-span-7">
-              {/* Skepticism Hook — Animated Line from "Doubt to Belief" Sequence */}
-              <div className="h-9 sm:h-10 flex items-center mb-1">
+              {/* Subtle Animated Skepticism Line Sequence (No static boxed card) */}
+              <div className="h-7 sm:h-8 mb-2 flex items-center overflow-hidden">
                 <div
-                  className={`inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-black/50 px-3.5 py-1 backdrop-blur-md transition-all duration-400 ${
-                    skepticFading ? "opacity-0 -translate-y-1.5" : "opacity-100 translate-y-0"
+                  className={`inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium tracking-wide transition-all duration-400 ease-out ${
+                    doubtPhase === "active"
+                      ? "translate-y-0 opacity-100"
+                      : doubtPhase === "enter"
+                      ? "-translate-y-3 opacity-0"
+                      : "translate-y-3 opacity-0"
                   }`}
                 >
-                  <span className="text-pink-400 font-serif italic text-xs">“</span>
-                  <span className="text-xs sm:text-sm font-medium text-[#e4daf2] tracking-wide">
-                    {narrativeLines[skepticIndex]}
+                  <span className="text-pink-400/90 text-xs select-none">✦</span>
+                  <span className="text-pink-300 font-serif italic text-xs sm:text-sm select-none">“</span>
+                  <span className="text-[#e2d5f2] font-medium tracking-wide">
+                    {narrativeLines[doubtIndex] || "They said free skills training doesn't exist."}
                   </span>
-                  <span className="text-pink-400 font-serif italic text-xs">”</span>
+                  <span className="text-pink-300 font-serif italic text-xs sm:text-sm select-none">”</span>
                 </div>
               </div>
 
@@ -243,72 +232,27 @@ function GuestHome() {
                 </div>
               </div>
 
-              {/* Animated "Doubt to Belief" Narrative Sequence (Editable in Admin) */}
-              {steps.length > 0 && (
-                <div className="mt-5 sm:mt-6 w-full rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.04] via-black/40 to-white/[0.02] p-3.5 sm:p-4 backdrop-blur-md shadow-xl transition-all">
-                  <div className="flex items-center justify-between pb-2 border-b border-white/5">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-2 w-2 rounded-full bg-pink-400 animate-ping" />
-                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-pink-300">
-                        The Journey: From Doubt to Belief
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {steps.map((_, sIdx) => (
-                        <button
-                          key={sIdx}
-                          onClick={() => {
-                            setNarrativeFading(true);
-                            setTimeout(() => {
-                              setNarrativeIndex(sIdx);
-                              setNarrativeFading(false);
-                            }, 200);
-                          }}
-                          className={`h-1.5 transition-all rounded-full ${
-                            sIdx === narrativeIndex ? "w-5 bg-pink-400" : "w-1.5 bg-white/20 hover:bg-white/40"
-                          }`}
-                          aria-label={`Jump to narrative step ${sIdx + 1}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={`mt-2.5 transition-opacity duration-300 ${narrativeFading ? "opacity-0" : "opacity-100"}`}>
-                    <div className="flex items-start gap-2">
-                      <span className="shrink-0 rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-amber-300">
-                        Student Doubt
-                      </span>
-                      <p className="text-xs sm:text-sm text-[#cabfe0] italic leading-snug">
-                        "{steps[narrativeIndex]?.doubt}"
-                      </p>
-                    </div>
-
-                    <div className="mt-2 flex items-start gap-2">
-                      <span className="shrink-0 rounded bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-emerald-300">
-                        KR8 Reality
-                      </span>
-                      <p className="text-xs sm:text-sm font-semibold text-white leading-snug">
-                        {steps[narrativeIndex]?.belief}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Three CTA buttons with Mobile Layout Polish */}
-              <div className="hero-actions mt-6 sm:mt-8 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3.5">
-                <GradientButton to="/register" className="group shadow-xl shadow-pink-500/25 px-5 sm:px-6 py-3 text-xs sm:text-sm font-bold justify-center text-center">
+              {/* All Three CTA Buttons on a Single Line */}
+              <div className="hero-actions mt-6 sm:mt-8 flex items-center gap-2 sm:gap-3 flex-nowrap overflow-x-auto pb-1 max-w-full">
+                <GradientButton
+                  to="/register"
+                  className="whitespace-nowrap px-4 sm:px-6 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold shadow-lg shadow-pink-500/25 shrink-0"
+                >
                   <span>Start Learning Free</span>
-                  <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
+                  <span className="ml-1 sm:ml-1.5 inline-block">→</span>
                 </GradientButton>
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
-                  <GhostButton to="/tribe#join" className="hero-tribe-cta border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm justify-center text-center">
-                    Join Tribe
-                  </GhostButton>
-                  <GhostButton to="/agency" className="hero-agency-cta border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm justify-center text-center">
-                    Hire Agency
-                  </GhostButton>
-                </div>
+                <GhostButton
+                  to="/tribe#join"
+                  className="hero-tribe-cta whitespace-nowrap px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs font-semibold shrink-0 border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 text-[#e4daf2]"
+                >
+                  Join the Tribe
+                </GhostButton>
+                <GhostButton
+                  to="/agency"
+                  className="hero-agency-cta whitespace-nowrap px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs font-semibold shrink-0 border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10 text-[#e4daf2]"
+                >
+                  Hire the Agency
+                </GhostButton>
               </div>
 
               {/* Stats Row with Mobile Responsive Grid */}

@@ -79,15 +79,15 @@ button, a, input, select, textarea {
     #0d0015;
 }
 
-/* Hero-only photo layer: the dark purple treatment remains the visual priority. */
+/* Hero-only photo layer: deep dark theme matching the rest of the site */
 .hero-section {
   position: relative;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
   background:
-    radial-gradient(ellipse 80% 70% at 50% 0%, rgba(122, 31, 168, 0.36), transparent 68%),
-    linear-gradient(180deg, #180026 0%, #0d0015 100%);
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(120, 20, 160, 0.12), transparent 70%),
+    linear-gradient(180deg, #0d0015 0%, #09000f 100%);
 }
 
 .hero-container,

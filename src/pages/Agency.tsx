@@ -72,8 +72,39 @@ const transformationSteps = [
 
 export default function Agency() {
   const [filter, setFilter] = useState("All");
-  const [path, setPath] = useState<"structured" | "custom">("structured");
+  const [path, setPath] = useState<"structured" | "custom" | "audit">("structured");
   const [sent, setSent] = useState(false);
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [auditSent, setAuditSent] = useState(false);
+
+  // In-page audit booking form state
+  const [auditForm, setAuditForm] = useState({
+    brandName: "",
+    fullName: "",
+    email: "",
+    phone: "",
+    websiteUrl: "",
+    primaryChallenge: "Conversion & Sales",
+    preferredFormat: "Live 20-min Strategic Call",
+    notes: "",
+  });
+
+  const handleAuditSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    try {
+      const existing = JSON.parse(localStorage.getItem("kr8_brand_audits") || "[]");
+      existing.unshift({
+        ...auditForm,
+        id: "audit_" + Date.now(),
+        submittedAt: new Date().toISOString(),
+      });
+      localStorage.setItem("kr8_brand_audits", JSON.stringify(existing));
+    } catch {
+      // fallback
+    }
+    setAuditSent(true);
+  };
+
   const portfolio = getPortfolio();
   const items = filter === "All" ? portfolio : portfolio.filter((p) => p.service === filter);
 
@@ -94,14 +125,14 @@ export default function Agency() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3.5">
-              <GradientButton href="#audit" className="shadow-xl shadow-pink-500/25">
-                <span>Claim Free Brand Audit →</span>
+              <GradientButton
+                onClick={() => setShowAuditModal(true)}
+                className="shadow-xl shadow-pink-500/25 cursor-pointer"
+              >
+                <span>Book a Free Brand Audit →</span>
               </GradientButton>
               <GhostButton href="#hire" className="border-white/20 bg-white/[0.04] hover:border-pink-500/40">
                 <span>Start a Project</span>
-              </GhostButton>
-              <GhostButton href={CONTACT.whatsappTeam} className="border-white/10 hover:border-purple-400/40">
-                <span>Chat Direct on WhatsApp ↗</span>
               </GhostButton>
             </div>
 
@@ -238,14 +269,25 @@ export default function Agency() {
                 <p className="mt-3 text-sm sm:text-base text-[#cabfe0] leading-relaxed">
                   Book an unscripted 20-minute Brand Diagnostic with our senior creative director. We will pinpoint exactly where your current identity is leaking high-value leads and present an actionable blueprint to dominate your niche.
                 </p>
-                <div className="mt-6 flex flex-wrap items-center gap-4">
-                  <GradientButton href="#hire" className="shadow-xl shadow-pink-500/30">
+                <div className="mt-6">
+                  <GradientButton
+                    onClick={() => setShowAuditModal(true)}
+                    className="shadow-xl shadow-pink-500/30 cursor-pointer"
+                  >
                     Book Your Free Brand Audit →
                   </GradientButton>
-                  <GhostButton href={CONTACT.whatsappTeam} className="border-white/20">
-                    Quick Chat via WhatsApp ↗
-                  </GhostButton>
                 </div>
+                <p className="text-xs text-[#a594c7] mt-4">
+                  Prefer to chat instead?{" "}
+                  <a
+                    href={CONTACT.whatsappTeam}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                  >
+                    Message us on WhatsApp
+                  </a>
+                </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-black/40 p-5 backdrop-blur-md">
@@ -318,12 +360,13 @@ export default function Agency() {
                       <span className="text-[10px] font-mono text-[#b8aecf] truncate max-w-[180px]">
                         {"domain" in p ? (p as unknown as { domain: string }).domain : "live website"}
                       </span>
-                      <span className="text-[10px] font-bold text-pink-300">Live ↗</span>
+                      <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Live
+                      </span>
                     </div>
                   )}
 
-                  {/* Clickable Image Container */}
-                  <div className="relative aspect-[4/3] overflow-hidden bg-black/40">
+                  <div className="relative aspect-video overflow-hidden bg-black/40">
                     {p.link ? (
                       <a href={p.link} target="_blank" rel="noreferrer" className="block h-full w-full group/img">
                         <img
@@ -393,22 +436,30 @@ export default function Agency() {
             center
           />
 
-          <div className="mx-auto mt-8 flex max-w-md justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5">
+          <div className="mx-auto mt-8 flex max-w-lg justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5">
             <button
-              onClick={() => setPath("structured")}
-              className={`flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${
+              onClick={() => { setPath("structured"); setSent(false); }}
+              className={`flex-1 rounded-full px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                 path === "structured" ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/25" : "text-[#b8aecf]"
               }`}
             >
               Structured Project
             </button>
             <button
-              onClick={() => setPath("custom")}
-              className={`flex-1 rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${
+              onClick={() => { setPath("custom"); setSent(false); }}
+              className={`flex-1 rounded-full px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                 path === "custom" ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/25" : "text-[#b8aecf]"
               }`}
             >
-              Custom Quote / Audit
+              Custom Quote
+            </button>
+            <button
+              onClick={() => { setPath("audit"); setSent(false); }}
+              className={`flex-1 rounded-full px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
+                path === "audit" ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/25" : "text-[#b8aecf]"
+              }`}
+            >
+              Free Brand Audit
             </button>
           </div>
 
@@ -419,14 +470,112 @@ export default function Agency() {
                   <Icon name="check" size={28} />
                 </div>
                 <h3 className="text-2xl font-bold text-white">
-                  {path === "custom" ? "Custom Request Received!" : "Project Brief Received!"}
+                  {path === "audit"
+                    ? "Brand Audit Request Received!"
+                    : path === "custom"
+                    ? "Custom Quote Request Received!"
+                    : "Project Brief Received!"}
                 </h3>
                 <p className="mt-3 text-sm text-[#b8aecf] max-w-md">
-                  A senior brand director will review your requirements and reach out within 12 hours. For instant scheduling, tap below to chat directly on WhatsApp.
+                  A senior brand director will review your requirements and reach out within 12 hours. We have logged your request securely.
                 </p>
-                <div className="mt-6">
-                  <GradientButton href={CONTACT.whatsappTeam}>Chat on WhatsApp Now →</GradientButton>
+                <div className="mt-6 flex flex-col items-center gap-3">
+                  <GhostButton
+                    onClick={() => setSent(false)}
+                    className="border-white/20 text-xs text-white hover:border-pink-500/40"
+                  >
+                    Submit Another Inquiry
+                  </GhostButton>
+                  <p className="text-xs text-[#a594c7]">
+                    Prefer to chat instead?{" "}
+                    <a
+                      href={CONTACT.whatsappTeam}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                    >
+                      Message us on WhatsApp
+                    </a>
+                  </p>
                 </div>
+              </Card>
+            ) : path === "audit" ? (
+              <Card>
+                <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                  <div>
+                    <h3 className="font-bold text-white text-lg">Book a Free Brand Audit</h3>
+                    <p className="text-xs text-[#a594c7] mt-0.5">
+                      Complimentary 20-minute strategic diagnostic with our creative director.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-2.5 py-0.5 text-[10px] font-bold uppercase text-pink-300">
+                    100% Free
+                  </span>
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setSent(true);
+                  }}
+                  className="mt-5 space-y-4"
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <input
+                      required
+                      className={inputCls}
+                      placeholder="Brand or Company Name *"
+                    />
+                    <input
+                      required
+                      className={inputCls}
+                      placeholder="Your Full Name *"
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <input
+                      type="email"
+                      required
+                      className={inputCls}
+                      placeholder="Work Email Address *"
+                    />
+                    <input
+                      required
+                      className={inputCls}
+                      placeholder="Phone or WhatsApp Number *"
+                    />
+                  </div>
+                  <input
+                    className={inputCls}
+                    placeholder="Current Website or Instagram Handle (e.g. brand.com)"
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <select className={inputCls} defaultValue="Conversion & Sales">
+                      <option value="Conversion & Sales">Primary Challenge: Low Conversions</option>
+                      <option value="Visual Identity">Primary Challenge: Outdated Branding</option>
+                      <option value="Video & Content">Primary Challenge: Low Video Reach</option>
+                      <option value="High-Ticket Pricing">Primary Challenge: Price Shopped by Clients</option>
+                      <option value="Other">Primary Challenge: Other</option>
+                    </select>
+                    <select className={inputCls} defaultValue="Live 20-min Strategic Call">
+                      <option value="Live 20-min Strategic Call">Format: Live Video Call (Google Meet)</option>
+                      <option value="Recorded Loom Video Teardown">Format: Recorded Loom Video Teardown</option>
+                    </select>
+                  </div>
+                  <GradientButton type="submit" className="w-full shadow-lg shadow-pink-500/20">
+                    Book Free Brand Audit Request →
+                  </GradientButton>
+                  <p className="text-xs text-[#a594c7] text-center pt-2">
+                    Prefer to chat instead?{" "}
+                    <a
+                      href={CONTACT.whatsappTeam}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                    >
+                      Message us on WhatsApp
+                    </a>
+                  </p>
+                </form>
               </Card>
             ) : path === "structured" ? (
               <Card>
@@ -456,12 +605,23 @@ export default function Agency() {
                 <GradientButton onClick={() => setSent(true)} className="mt-6 w-full shadow-lg shadow-pink-500/20">
                   Submit Project Request →
                 </GradientButton>
+                <p className="text-xs text-[#a594c7] text-center mt-4">
+                  Prefer to chat instead?{" "}
+                  <a
+                    href={CONTACT.whatsappTeam}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                  >
+                    Message us on WhatsApp
+                  </a>
+                </p>
               </Card>
             ) : (
               <Card>
-                <h3 className="font-bold text-white text-lg">Custom Quote or Audit Request</h3>
+                <h3 className="font-bold text-white text-lg">Custom Quote Request</h3>
                 <p className="mt-1 text-xs text-[#a594c7]">
-                  For non-standard projects, consultations, or brand audits — let us know your goals.
+                  For non-standard projects, consultations, or bespoke scopes — let us know your goals.
                 </p>
                 <textarea
                   className={`${inputCls} mt-4`}
@@ -482,21 +642,45 @@ export default function Agency() {
                 <GradientButton onClick={() => setSent(true)} className="mt-6 w-full shadow-lg shadow-pink-500/20">
                   Request Custom Quote →
                 </GradientButton>
+                <p className="text-xs text-[#a594c7] text-center mt-4">
+                  Prefer to chat instead?{" "}
+                  <a
+                    href={CONTACT.whatsappTeam}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                  >
+                    Message us on WhatsApp
+                  </a>
+                </p>
               </Card>
             )}
 
             <Card className="flex flex-col justify-between bg-gradient-to-br from-[#1a0030] to-[#12001f] border-pink-500/20 p-7">
               <div>
-                <span className="text-xs uppercase font-bold tracking-wider text-pink-400">Direct Contact</span>
-                <h3 className="font-display text-2xl text-white font-bold mt-2">Need an Answer Today?</h3>
+                <span className="text-xs uppercase font-bold tracking-wider text-pink-400">Enterprise Standards</span>
+                <h3 className="font-display text-2xl text-white font-bold mt-2">Engineered for Impact</h3>
                 <p className="mt-3 text-sm text-[#cabfe0] leading-relaxed">
-                  Skip the form and pitch your vision directly to our lead creative director on WhatsApp. We reply fast.
+                  Every client engagement receives dedicated creative direction, transparent sprint deliverables, and production-ready source files.
                 </p>
-                <div className="mt-6">
-                  <GradientButton href={CONTACT.whatsappTeam} className="w-full">
-                    Chat on WhatsApp →
-                  </GradientButton>
-                </div>
+                <ul className="mt-5 space-y-2.5 text-xs text-[#cabfe0]">
+                  <li className="flex items-center gap-2">
+                    <span className="text-pink-400">✦</span>
+                    <span>Dedicated Senior Creative Director</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-pink-400">✦</span>
+                    <span>Transparent Weekly Sprint Reviews</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-pink-400">✦</span>
+                    <span>Full Commercial Rights & Source Assets</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-pink-400">✦</span>
+                    <span>Post-Deployment Conversion Tracking</span>
+                  </li>
+                </ul>
               </div>
 
               <div className="mt-8 border-t border-white/10 pt-6 space-y-2 text-xs text-[#cabfe0]">
@@ -512,11 +696,198 @@ export default function Agency() {
                   <span className="text-pink-400">📍</span>
                   <span>Lagos & Global Remote</span>
                 </p>
+                <p className="pt-3 border-t border-white/10 text-[11px] text-[#a594c7]">
+                  Prefer to chat instead?{" "}
+                  <a
+                    href={CONTACT.whatsappTeam}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                  >
+                    Message us on WhatsApp
+                  </a>
+                </p>
               </div>
             </Card>
           </div>
         </div>
       </section>
+
+      {/* DEDICATED IN-PAGE BRAND AUDIT MODAL */}
+      {showAuditModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAuditModal(false);
+              setAuditSent(false);
+            }
+          }}
+        >
+          <div className="relative w-full max-w-xl rounded-3xl border border-pink-500/30 bg-gradient-to-b from-[#1c002c] to-[#0c0018] p-6 sm:p-8 shadow-2xl my-8">
+            <button
+              onClick={() => {
+                setShowAuditModal(false);
+                setAuditSent(false);
+              }}
+              className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-[#cabfe0] hover:bg-white/20 hover:text-white transition-all text-lg"
+              aria-label="Close modal"
+            >
+              ×
+            </button>
+
+            {auditSent ? (
+              <div className="py-8 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-pink text-white shadow-xl glow-pink-sm">
+                  <Icon name="check" size={32} />
+                </div>
+                <h3 className="font-display text-2xl font-bold text-white">Brand Audit Request Received!</h3>
+                <p className="mt-3 text-sm text-[#cabfe0] leading-relaxed max-w-md mx-auto">
+                  Our senior creative director will review your assets and send your private calendar invitation and diagnostic details within 24 hours.
+                </p>
+                <div className="mt-6 flex flex-col items-center gap-3">
+                  <GradientButton
+                    onClick={() => {
+                      setShowAuditModal(false);
+                      setAuditSent(false);
+                    }}
+                    className="shadow-lg shadow-pink-500/25"
+                  >
+                    Done
+                  </GradientButton>
+                  <p className="text-xs text-[#a594c7]">
+                    Prefer to chat instead?{" "}
+                    <a
+                      href={CONTACT.whatsappTeam}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                    >
+                      Message us on WhatsApp
+                    </a>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-pink-400/30 bg-pink-500/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-pink-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  100% Free · Zero Obligation
+                </span>
+                <h3 className="font-display mt-3 text-2xl sm:text-3xl font-bold text-white">
+                  Book Your Free Brand Audit
+                </h3>
+                <p className="mt-2 text-xs sm:text-sm text-[#cabfe0] leading-relaxed">
+                  A 20-minute strategic diagnostic with our creative director. We will dissect your identity, positioning, and conversion friction to give you a clear roadmap.
+                </p>
+
+                <form onSubmit={handleAuditSubmit} className="mt-5 space-y-3.5">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Brand or Business Name *</label>
+                      <input
+                        required
+                        value={auditForm.brandName}
+                        onChange={(e) => setAuditForm({ ...auditForm, brandName: e.target.value })}
+                        className={inputCls}
+                        placeholder="e.g. Acme Studio"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Your Full Name *</label>
+                      <input
+                        required
+                        value={auditForm.fullName}
+                        onChange={(e) => setAuditForm({ ...auditForm, fullName: e.target.value })}
+                        className={inputCls}
+                        placeholder="e.g. Alex Morgan"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Work Email *</label>
+                      <input
+                        type="email"
+                        required
+                        value={auditForm.email}
+                        onChange={(e) => setAuditForm({ ...auditForm, email: e.target.value })}
+                        className={inputCls}
+                        placeholder="alex@acme.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Phone Number *</label>
+                      <input
+                        required
+                        value={auditForm.phone}
+                        onChange={(e) => setAuditForm({ ...auditForm, phone: e.target.value })}
+                        className={inputCls}
+                        placeholder="+234 ... or +1 ..."
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Website or Social Handle</label>
+                    <input
+                      value={auditForm.websiteUrl}
+                      onChange={(e) => setAuditForm({ ...auditForm, websiteUrl: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. yourbrand.com or @yourhandle"
+                    />
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Primary Growth Bottleneck</label>
+                      <select
+                        value={auditForm.primaryChallenge}
+                        onChange={(e) => setAuditForm({ ...auditForm, primaryChallenge: e.target.value })}
+                        className={inputCls}
+                      >
+                        <option value="Conversion & Sales">Low Website Conversions</option>
+                        <option value="Visual Identity">Outdated Visual Identity</option>
+                        <option value="Video & Content">Weak Social & Video Presence</option>
+                        <option value="High-Ticket Pricing">Trouble Charging Premium Rates</option>
+                        <option value="Other">Other / General Strategy</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Preferred Delivery</label>
+                      <select
+                        value={auditForm.preferredFormat}
+                        onChange={(e) => setAuditForm({ ...auditForm, preferredFormat: e.target.value })}
+                        className={inputCls}
+                      >
+                        <option value="Live 20-min Strategic Call (Google Meet)">Live Video Call (Google Meet)</option>
+                        <option value="Recorded Loom Video Teardown">Recorded Loom Video Teardown</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <GradientButton type="submit" className="w-full mt-2 shadow-xl shadow-pink-500/25">
+                    Submit Free Brand Audit Request →
+                  </GradientButton>
+
+                  <p className="text-xs text-[#a594c7] text-center pt-2">
+                    Prefer to chat instead?{" "}
+                    <a
+                      href={CONTACT.whatsappTeam}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                    >
+                      Message us on WhatsApp
+                    </a>
+                  </p>
+                </form>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
