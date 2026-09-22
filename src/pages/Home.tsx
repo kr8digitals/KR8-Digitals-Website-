@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { IMG } from "../data/images";
-import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, studentCount, tribeCount } from "../data/store";
+import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES, studentCount, tribeCount } from "../data/store";
 import Marquee from "../components/Marquee";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
@@ -10,6 +10,7 @@ import TestimonialCarousel from "../components/TestimonialCarousel";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, GlowImage } from "../components/ui";
 import Dashboard from "./Dashboard";
 import Icon from "../components/Icon";
+import HeroInteractiveCanvas from "../components/HeroInteractiveCanvas";
 
 export default function Home() {
   const { student } = useAuth();
@@ -24,8 +25,12 @@ function CountUp({ end, suffix = "" }: { end: number; suffix?: string }) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") {
+      setN(end);
+      return;
+    }
     const obs = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !seen) {
+      if (entries[0]?.isIntersecting && !seen) {
         setSeen(true);
         const dur = 1200, start = performance.now();
         const tick = (now: number) => {
@@ -43,53 +48,336 @@ function CountUp({ end, suffix = "" }: { end: number; suffix?: string }) {
 }
 
 const pillars = [
-  { icon: "certificate" as const, label: "Academy", title: "Free training, real certificate", desc: "Structured week-by-week curriculum in the skills people hire for. Zero cost, real instructors.", to: "/academy" },
-  { icon: "users" as const, label: "Tribe", title: "An open creative community", desc: "Creatives, professionals and beginners share work, recommend each other, and grow together.", to: "/tribe" },
-  { icon: "video" as const, label: "Agency", title: "Real client work, real delivery", desc: "World-class creative work shipped by our graduate-powered team.", to: "/agency" },
+  {
+    icon: "certificate" as const,
+    label: "The Academy",
+    title: "Zero Tuition. Pure Craft.",
+    desc: "Intensive week-by-week cohorts in Graphic Design, Web Engineering, and Video Editing. Real tutors, live feedback, verifiable graduation certificates — 100% free.",
+    to: "/register",
+  },
+  {
+    icon: "users" as const,
+    label: "The Tribe",
+    title: "Never Build Alone Again.",
+    desc: "An unbroken African creative family. Share messy in-progress drafts, find collaborators, exchange paid gigs, and lift each other into high-income careers.",
+    to: "/tribe#join",
+  },
+  {
+    icon: "video" as const,
+    label: "The Agency",
+    title: "From Free Classes to Paid Retainers.",
+    desc: "We engineer brand positioning, conversion websites, and viral short-form video engines for global companies — executed by our vetted senior directors and top graduates.",
+    to: "/agency",
+  },
 ];
 
 const journey = [
-  { n: "1", t: "Register & get your KR8 ID" },
-  { n: "2", t: "Show up & learn — take your attendance" },
-  { n: "3", t: "Earn points" },
-  { n: "4", t: "Climb the leaderboard" },
-  { n: "5", t: "Graduate with a verified certificate" },
+  { n: "1", t: "Claim Your Verifiable KR8 ID in 60s" },
+  { n: "2", t: "Show Up & Ship Daily Live Drills" },
+  { n: "3", t: "Earn XP & Build an Undeniable Portfolio" },
+  { n: "4", t: "Climb the Leaderboard & Get Discovered" },
+  { n: "5", t: "Graduate & Step into Paid Client Work" },
 ];
 
 function GuestHome() {
   const announcements = getAnnouncements();
   const portfolio = getPortfolio();
-  const homepageSettings = getHomepageSettings();
+  const [homepageSettings, setHomepageSettings] = useState(getHomepageSettings());
+  const [narrativeIndex, setNarrativeIndex] = useState(0);
+  const [narrativeFading, setNarrativeFading] = useState(false);
+
+  useEffect(() => {
+    const sync = () => setHomepageSettings(getHomepageSettings());
+    window.addEventListener("kr8:homepage-settings-updated", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("kr8:homepage-settings-updated", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const steps = homepageSettings.doubtToBelief && homepageSettings.doubtToBelief.length
+    ? homepageSettings.doubtToBelief
+    : DEFAULT_DOUBT_TO_BELIEF;
+
+  const narrativeLines = homepageSettings.narrativeLines && homepageSettings.narrativeLines.length
+    ? homepageSettings.narrativeLines
+    : DEFAULT_NARRATIVE_LINES;
+
+  const [skepticIndex, setSkepticIndex] = useState(0);
+  const [skepticFading, setSkepticFading] = useState(false);
+
+  // Rotate narrative skepticism line every 3.2s
+  useEffect(() => {
+    if (!narrativeLines.length) return;
+    const timer = setInterval(() => {
+      setSkepticFading(true);
+      setTimeout(() => {
+        setSkepticIndex((prev) => (prev + 1) % narrativeLines.length);
+        setSkepticFading(false);
+      }, 400);
+    }, 3600);
+    return () => clearInterval(timer);
+  }, [narrativeLines.length]);
+
+  useEffect(() => {
+    if (!steps.length) return;
+    const timer = setInterval(() => {
+      setNarrativeFading(true);
+      setTimeout(() => {
+        setNarrativeIndex((prev) => (prev + 1) % steps.length);
+        setNarrativeFading(false);
+      }, 400);
+    }, 5500);
+    return () => clearInterval(timer);
+  }, [steps.length]);
+
   return (
     <div>
-      {/* HERO */}
-      <section className="hero-section">
-        <div className="hero-container mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 md:py-24 lg:grid-cols-2">
-          <div className="hero-content rise-in">
-            <Pill className="hero-badge"><span>Unified Creative Institution & Digital Agency</span></Pill>
-            <h1 className="hero-headline font-display mt-6 space-y-2 text-white sm:space-y-1">
-              <span className="flex items-start gap-2"><span className="mt-2 text-[0.6em] text-pink-400">•</span><span>Learn digital skills <span className="text-gradient">free.</span></span></span>
-              <span className="flex items-start gap-2"><span className="mt-2 text-[0.6em] text-pink-400">•</span><span>Belong and build with our <span className="text-gradient">tribe.</span></span></span>
-              <span className="flex items-start gap-2"><span className="mt-2 text-[0.6em] text-pink-400">•</span><span>Let's bring your <span className="text-gradient">brand to life.</span></span></span>
-            </h1>
-            <div className="hero-actions mt-8 flex flex-wrap gap-3">
-              <GradientButton to="/academy">Start Learning Free</GradientButton>
-              <GhostButton to="/tribe" className="hero-tribe-cta">Join the Tribe</GhostButton>
-              <GhostButton to="/agency" className="hero-agency-cta">Hire the Agency</GhostButton>
-            </div>
-            <div className="hero-stats mt-10 grid grid-cols-3 gap-6">
-              <div className="min-w-0"><CountUp end={studentCount()} suffix="+" /><div className="mt-1 text-[9px] uppercase leading-tight tracking-[0.08em] text-[#8a7ba8] sm:text-xs sm:tracking-wider">Students Trained</div></div>
-              <div className="min-w-0"><CountUp end={tribeCount()} suffix="+" /><div className="mt-1 text-[9px] uppercase leading-tight tracking-[0.08em] text-[#8a7ba8] sm:text-xs sm:tracking-wider">Tribe Members</div></div>
-              <div className="min-w-0"><CountUp end={homepageSettings.projectsDone} suffix="+" /><div className="mt-1 text-[9px] uppercase leading-tight tracking-[0.08em] text-[#8a7ba8] sm:text-xs sm:tracking-wider">Projects Done</div></div>
+      {/* HERO SECTION — Cinematic & Engaging Experience with Ambient Flowing Gradient Motion */}
+      <section className="hero-section relative min-h-[auto] md:min-h-[82vh] flex items-center overflow-hidden pt-4 pb-12 sm:pt-6 sm:pb-16 md:pt-7 md:pb-20">
+        {/* Ambient Flowing Gradient Motion Layer */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute -top-[25%] left-1/2 -translate-x-1/2 h-[550px] w-[900px] rounded-full bg-gradient-to-tr from-pink-600/20 via-purple-600/15 to-transparent blur-[130px] animate-pulse"
+            style={{ animationDuration: "8s" }}
+          />
+          <div
+            className="absolute top-[35%] -left-[15%] h-[450px] w-[550px] rounded-full bg-gradient-to-br from-purple-800/20 via-pink-700/10 to-transparent blur-[110px] animate-pulse"
+            style={{ animationDuration: "12s" }}
+          />
+          <div
+            className="absolute top-[45%] -right-[15%] h-[480px] w-[580px] rounded-full bg-gradient-to-bl from-pink-500/15 via-blue-600/10 to-transparent blur-[120px] animate-pulse"
+            style={{ animationDuration: "10s" }}
+          />
+        </div>
+
+        {/* Ambient Flowing Gradient Ribbon */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 opacity-40">
+          <svg className="absolute w-[200%] h-full -top-10 left-0" viewBox="0 0 1440 600" fill="none">
+            <path
+              d="M-200 350 C 200 150, 500 480, 850 280 C 1200 80, 1400 400, 1700 240"
+              stroke="url(#hero-ribbon-gradient)"
+              strokeWidth="2.5"
+              strokeDasharray="12 8"
+              strokeLinecap="round"
+            />
+            <defs>
+              <linearGradient id="hero-ribbon-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#ec4899" stopOpacity="0.2" />
+                <stop offset="50%" stopColor="#a855f7" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#ec4899" stopOpacity="0.2" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+
+        {/* Dynamic Interactive Background Canvas & Floating Creative Objects */}
+        <HeroInteractiveCanvas />
+
+        <div className="hero-container relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6">
+          {/* Institution Badge with live pulsing status — Centered above both columns */}
+          <div className="flex w-full justify-center mb-5 sm:mb-8">
+            <div className="hero-badge inline-flex items-center justify-center gap-2 rounded-full border border-pink-500/30 bg-gradient-to-r from-pink-500/15 via-purple-500/15 to-transparent px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 text-center">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pink-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-pink-500" />
+              </span>
+              <span className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 truncate">
+                Unified Creative Institution & Digital Agency
+              </span>
             </div>
           </div>
-          <div className="floaty">
-            <GlowImage src={IMG.heroGroup} alt="Diverse African creators collaborating" caption="Creators in the making — learning, building, belonging." className="aspect-[4/3]" />
+
+          {/* Two-Column Layout: Left Text / Right Image (Stacks vertically on mobile) */}
+          <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-12">
+            {/* Left Column: Typography, Supporting Description, Animated Narrative, CTAs & Glass Stats */}
+            <div className="hero-content rise-in lg:col-span-7">
+              {/* Skepticism Hook — Animated Line from "Doubt to Belief" Sequence */}
+              <div className="h-9 sm:h-10 flex items-center mb-1">
+                <div
+                  className={`inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-black/50 px-3.5 py-1 backdrop-blur-md transition-all duration-400 ${
+                    skepticFading ? "opacity-0 -translate-y-1.5" : "opacity-100 translate-y-0"
+                  }`}
+                >
+                  <span className="text-pink-400 font-serif italic text-xs">“</span>
+                  <span className="text-xs sm:text-sm font-medium text-[#e4daf2] tracking-wide">
+                    {narrativeLines[skepticIndex]}
+                  </span>
+                  <span className="text-pink-400 font-serif italic text-xs">”</span>
+                </div>
+              </div>
+
+              {/* Bold Headline — Resolving Doubt into Proof */}
+              <h1 className="hero-headline font-display text-4xl sm:text-6xl lg:text-7xl font-bold leading-tight tracking-tight text-white">
+                {homepageSettings.heroHeadline ? (
+                  homepageSettings.heroHeadline.includes("Happen.") ? (
+                    <>We Make It <span className="text-gradient font-extrabold">Happen.</span></>
+                  ) : (
+                    homepageSettings.heroHeadline
+                  )
+                ) : (
+                  <>We Make It <span className="text-gradient font-extrabold">Happen.</span></>
+                )}
+              </h1>
+
+              {/* Three-line supporting description directly under headline */}
+              <div className="hero-subheadline mt-4 sm:mt-5 space-y-2 sm:space-y-3 text-xs sm:text-base font-medium text-[#cabfe0]">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <span className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-pink-500/20 text-[10px] sm:text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
+                    ✦
+                  </span>
+                  <span>Learn digital skills <span className="text-gradient font-extrabold">free.</span></span>
+                </div>
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <span className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-purple-500/20 text-[10px] sm:text-xs text-purple-400 ring-1 ring-purple-500/40 shadow-sm shadow-purple-500/20">
+                    ✦
+                  </span>
+                  <span>Belong and build with our <span className="text-gradient font-extrabold">tribe.</span></span>
+                </div>
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <span className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-pink-500/20 text-[10px] sm:text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
+                    ✦
+                  </span>
+                  <span>Let's bring your <span className="text-gradient font-extrabold">brand to life.</span></span>
+                </div>
+              </div>
+
+              {/* Animated "Doubt to Belief" Narrative Sequence (Editable in Admin) */}
+              {steps.length > 0 && (
+                <div className="mt-5 sm:mt-6 w-full rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.04] via-black/40 to-white/[0.02] p-3.5 sm:p-4 backdrop-blur-md shadow-xl transition-all">
+                  <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-2 w-2 rounded-full bg-pink-400 animate-ping" />
+                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-pink-300">
+                        The Journey: From Doubt to Belief
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {steps.map((_, sIdx) => (
+                        <button
+                          key={sIdx}
+                          onClick={() => {
+                            setNarrativeFading(true);
+                            setTimeout(() => {
+                              setNarrativeIndex(sIdx);
+                              setNarrativeFading(false);
+                            }, 200);
+                          }}
+                          className={`h-1.5 transition-all rounded-full ${
+                            sIdx === narrativeIndex ? "w-5 bg-pink-400" : "w-1.5 bg-white/20 hover:bg-white/40"
+                          }`}
+                          aria-label={`Jump to narrative step ${sIdx + 1}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={`mt-2.5 transition-opacity duration-300 ${narrativeFading ? "opacity-0" : "opacity-100"}`}>
+                    <div className="flex items-start gap-2">
+                      <span className="shrink-0 rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-amber-300">
+                        Student Doubt
+                      </span>
+                      <p className="text-xs sm:text-sm text-[#cabfe0] italic leading-snug">
+                        "{steps[narrativeIndex]?.doubt}"
+                      </p>
+                    </div>
+
+                    <div className="mt-2 flex items-start gap-2">
+                      <span className="shrink-0 rounded bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-emerald-300">
+                        KR8 Reality
+                      </span>
+                      <p className="text-xs sm:text-sm font-semibold text-white leading-snug">
+                        {steps[narrativeIndex]?.belief}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Three CTA buttons with Mobile Layout Polish */}
+              <div className="hero-actions mt-6 sm:mt-8 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3.5">
+                <GradientButton to="/register" className="group shadow-xl shadow-pink-500/25 px-5 sm:px-6 py-3 text-xs sm:text-sm font-bold justify-center text-center">
+                  <span>Start Learning Free</span>
+                  <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
+                </GradientButton>
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
+                  <GhostButton to="/tribe#join" className="hero-tribe-cta border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm justify-center text-center">
+                    Join Tribe
+                  </GhostButton>
+                  <GhostButton to="/agency" className="hero-agency-cta border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm justify-center text-center">
+                    Hire Agency
+                  </GhostButton>
+                </div>
+              </div>
+
+              {/* Stats Row with Mobile Responsive Grid */}
+              <div className="hero-stats mt-6 sm:mt-10 grid grid-cols-3 gap-2 sm:gap-4">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06]">
+                  <CountUp end={studentCount()} suffix="+" />
+                  <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <span className="truncate">Students</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-purple-500/30 hover:bg-white/[0.06]">
+                  <CountUp end={tribeCount()} suffix="+" />
+                  <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-pink-400 shrink-0" />
+                    <span className="truncate">Tribe Members</span>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06]">
+                  <CountUp end={homepageSettings.projectsDone} suffix="+" />
+                  <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shrink-0" />
+                    <span className="truncate">Projects Done</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Multi-layered Interactive Showcase */}
+            <div className="hero-media relative lg:col-span-5">
+              {/* Ambient Background Glow Layer */}
+              <div className="absolute -inset-4 rounded-3xl bg-gradient-to-tr from-pink-500/25 via-purple-600/20 to-transparent opacity-60 blur-2xl" />
+
+              {/* Main Showcase Image Frame */}
+              <div className="floaty relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/10 to-transparent p-2 backdrop-blur-xl shadow-2xl">
+                <GlowImage
+                  src={IMG.heroGroup}
+                  alt="Diverse African creators collaborating"
+                  caption="Creators in the making — learning, building, belonging."
+                  className="aspect-[4/3] rounded-2xl"
+                />
+
+                {/* Floating Glass Micro-Card 1: Active Cohort */}
+                <div className="absolute top-5 right-5 flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur-md shadow-xl">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-white">
+                    Cohort Active · 100% Free
+                  </span>
+                </div>
+
+                {/* Floating Glass Micro-Card 2: Community Badge */}
+                <div className="absolute bottom-5 left-5 hidden sm:flex items-center gap-2 rounded-xl border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur-md shadow-xl">
+                  <span className="text-xs">⭐</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-pink-200">
+                    Think It. KR8 It
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <Marquee items={["Learn free", "Verifiable KR8 ID", "Belong deeply", "Build for real", "Graduate-powered agency"]} />
+      <Marquee items={["Think It. KR8 It", "Learn free", "Verifiable KR8 ID", "Belong deeply", "Build for real", "Graduate-powered agency"]} />
 
       {/* THREE PILLARS */}
       <section className="section-bg py-20">
@@ -114,19 +402,26 @@ function GuestHome() {
         <div className="mx-auto max-w-7xl px-5">
           <div className="rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#1a0030] to-[#12001f] p-8 sm:p-12">
             <div className="text-center">
-              <Pill>The Journey</Pill>
-              <h2 className="font-display mt-5 text-4xl text-white sm:text-5xl">From zero to <span className="text-gradient">certified.</span></h2>
+              <Pill>The Blueprint</Pill>
+              <h2 className="font-display mt-5 text-4xl text-white sm:text-5xl">From zero skills to <span className="text-gradient">getting paid.</span></h2>
+              <p className="mx-auto mt-4 max-w-2xl text-sm sm:text-base text-[#cabfe0]">
+                No tuition ransom. No 4-year theory degrees. A battle-tested path from cracking open design and code tools to billing international clients.
+              </p>
             </div>
             <div className="mt-12 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               {journey.map((s, i) => (
                 <div key={s.n} className="flex items-start gap-4 lg:flex-1 lg:flex-col lg:items-center lg:text-center">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-pink font-display text-lg text-white">{s.n}</div>
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-pink font-display text-lg text-white shadow-lg shadow-pink-500/30">{s.n}</div>
                   <p className="text-sm font-medium text-[#cabfe0] lg:px-2">{s.t}</p>
                   {i < journey.length - 1 && <div className="hidden h-px flex-1" />}
                 </div>
               ))}
             </div>
-            <div className="mt-12 text-center"><GradientButton to="/academy">Apply for Free →</GradientButton></div>
+            <div className="mt-12 text-center">
+              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
+                Join the Free Cohort Today →
+              </GradientButton>
+            </div>
           </div>
         </div>
       </section>
@@ -135,44 +430,268 @@ function GuestHome() {
       <section className="section-bg py-16">
         <div className="mx-auto grid max-w-7xl gap-10 px-5 lg:grid-cols-2">
           <div>
-            <SectionHead label="Live in the Tribe" title="Always something" highlight="happening." />
+            <SectionHead label="Live in the Tribe" title="Always something" highlight="happening." sub="Real-time check-ins, portfolio critiques, and creative milestones from our global family." />
             <div className="mt-8"><LiveFeed /></div>
           </div>
           <div>
-            <SectionHead label="Top creators" title="The" highlight="leaderboard" />
+            <SectionHead label="Top creators" title="The" highlight="leaderboard" sub="Creators shipping daily drills, accumulating XP, and commanding top industry visibility." />
             <div className="mt-8"><LeaderboardList limit={5} /></div>
             <Link to="/leaderboard" className="mt-6 inline-block text-sm font-semibold text-pink-400 hover:text-pink-300">View Full Leaderboard →</Link>
           </div>
         </div>
       </section>
 
-      {/* AGENCY PORTFOLIO */}
-      <section className="section-bg py-16">
+      {/* TESTIMONIALS — Real Proof of the Free Academy Training */}
+      <section className="section-bg py-20 border-t border-white/5">
         <div className="mx-auto max-w-7xl px-5">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <SectionHead label="KR8 Agency" title="Your brand deserves" highlight="better." />
-            <div className="text-right"><CountUp end={120} suffix="+" /><div className="text-xs uppercase tracking-wider text-[#8a7ba8]">Projects completed</div></div>
-          </div>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {portfolio.slice(0, 4).map((p) => (
-              <div key={p.id} className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-                <div className="aspect-[4/3] overflow-hidden"><img src={p.img} alt={p.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" /></div>
-                <div className="p-4"><p className="text-[11px] uppercase tracking-wider text-pink-400">{p.service}</p><h4 className="mt-1 text-sm font-bold text-white">{p.title}</h4>{p.showPrice && <p className="mt-1 text-xs text-[#b8aecf]">{p.price}</p>}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <GradientButton to="/agency">Let's Handle Your Project →</GradientButton>
-            <GhostButton href="https://wa.me/2348125687509">Chat on WhatsApp</GhostButton>
+          <SectionHead
+            label="Verified Proof · 100% Free Training"
+            title="From Learners to"
+            highlight="Earners."
+            sub="Real African youth with zero industry connections who joined KR8's tuition-free cohorts, mastered high-income craft, and stepped into paid freelance retainers and design studios. Hear their unscripted journeys below."
+            center
+          />
+          <div className="mt-12">
+            <TestimonialCarousel items={getTestimonials()} />
           </div>
         </div>
       </section>
 
-      {/* TESTIMONIALS */}
-      <section className="section-bg py-16">
-        <div className="mx-auto max-w-7xl px-5">
-          <SectionHead label="Real voices" title="From learners to" highlight="earners" center />
-          <div className="mt-12"><TestimonialCarousel items={getTestimonials()} /></div>
+      {/* REDESIGNED KR8 AGENCY TRANSFORMATION SECTION */}
+      <section className="section-bg relative overflow-hidden py-20 border-y border-white/10">
+        {/* Ambient Glow Orbs */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-gradient-to-tr from-pink-500/15 via-purple-600/15 to-transparent blur-3xl pointer-events-none" />
+
+        <div className="relative mx-auto max-w-7xl px-5">
+          {/* Header Eyebrow & Value Proposition */}
+          <div className="text-center max-w-3xl mx-auto">
+            <div className="inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-pink-500/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-pink-300 backdrop-blur-md mb-4 shadow glow-pink-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-pink-400 animate-ping" />
+              <span>KR8 Creative & Digital Agency</span>
+            </div>
+
+            <h2 className="font-display text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
+              Stop Being Invisible. We Turn Brands into <span className="text-gradient">Market Leaders.</span>
+            </h2>
+
+            <p className="mt-4 text-sm sm:text-base text-[#cabfe0] leading-relaxed">
+              Most businesses lose 60%+ of their potential revenue because their visual identity looks amateur,
+              their website fails to convert, or their content gets drowned out by competitors. We engineer your complete
+              brand transformation — positioning you to command premium prices, double your digital visibility, and turn
+              curious visitors into high-ticket clients.
+            </p>
+          </div>
+
+          {/* Core Growth Metrics Bar */}
+          <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-3xl border border-white/10 bg-black/40 backdrop-blur-md">
+            <div className="text-center p-3 border-r border-white/5 last:border-0">
+              <div className="font-display text-3xl sm:text-4xl text-gradient font-black">+240%</div>
+              <p className="mt-1 text-xs font-semibold text-white">Avg. Visibility Growth</p>
+              <p className="text-[10px] text-[#8a7ba8]">Across organic social & search</p>
+            </div>
+            <div className="text-center p-3 border-r border-white/5 last:border-0">
+              <div className="font-display text-3xl sm:text-4xl text-gradient font-black">3.2x</div>
+              <p className="mt-1 text-xs font-semibold text-white">Conversion Rate Lift</p>
+              <p className="text-[10px] text-[#8a7ba8]">From UX & funnel optimization</p>
+            </div>
+            <div className="text-center p-3 border-r border-white/5 last:border-0">
+              <div className="font-display text-3xl sm:text-4xl text-white font-black">120+</div>
+              <p className="mt-1 text-xs font-semibold text-white">Projects Delivered</p>
+              <p className="text-[10px] text-[#8a7ba8]">For startups, creators & firms</p>
+            </div>
+            <div className="text-center p-3">
+              <div className="font-display text-3xl sm:text-4xl text-pink-300 font-black">100%</div>
+              <p className="mt-1 text-xs font-semibold text-white">Bespoke Craftsmanship</p>
+              <p className="text-[10px] text-[#8a7ba8]">Zero cookie-cutter templates</p>
+            </div>
+          </div>
+
+          {/* 4 Pillars of Transformation (What We Offer) */}
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
+            {/* Pillar 1: Brand Positioning */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-6 sm:p-8 transition-all hover:border-pink-500/40 hover:shadow-2xl hover:shadow-pink-500/10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-pink-500/20 text-pink-400 group-hover:scale-110 transition-transform">
+                  <Icon name="palette" size={24} />
+                </div>
+                <span className="rounded-full bg-pink-500/10 border border-pink-500/30 px-3 py-1 text-[11px] font-bold text-pink-300">
+                  Command Premium Pricing
+                </span>
+              </div>
+              <h3 className="font-display text-xl font-bold text-white">
+                Brand Positioning & Visual Authority
+              </h3>
+              <p className="mt-3 text-xs sm:text-sm text-[#b8aecf] leading-relaxed">
+                When you look like everyone else, clients negotiate on price. We rebuild your brand narrative, bespoke
+                logo suite, luxury typography, packaging, and pitch decks into a unified identity that commands respect
+                and attracts high-value buyers who pay without haggling.
+              </p>
+              <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Brand Strategy</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Design Systems</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Visual Identity</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Pitch Presentations</span>
+              </div>
+            </div>
+
+            {/* Pillar 2: Conversion Websites */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-6 sm:p-8 transition-all hover:border-purple-500/40 hover:shadow-2xl hover:shadow-purple-500/10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-500/20 text-purple-400 group-hover:scale-110 transition-transform">
+                  <Icon name="code" size={24} />
+                </div>
+                <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-3 py-1 text-[11px] font-bold text-purple-300">
+                  Convert Visitors into Clients
+                </span>
+              </div>
+              <h3 className="font-display text-xl font-bold text-white">
+                High-Converting Websites & Web Platforms
+              </h3>
+              <p className="mt-3 text-xs sm:text-sm text-[#b8aecf] leading-relaxed">
+                A gorgeous website that gets no inquiries is just expensive digital art. We build lightning-fast,
+                SEO-engineered web experiences with conversion copywriting, intuitive mobile UX, and frictionless
+                booking flows that work like your hardest-working 24/7 salesperson.
+              </p>
+              <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Custom Web Platforms</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Mobile-First UI/UX</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ High-Ticket Funnels</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Technical SEO</span>
+              </div>
+            </div>
+
+            {/* Pillar 3: Viral Video Engine */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-6 sm:p-8 transition-all hover:border-pink-500/40 hover:shadow-2xl hover:shadow-pink-500/10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-pink-500/20 text-pink-400 group-hover:scale-110 transition-transform">
+                  <Icon name="video" size={24} />
+                </div>
+                <span className="rounded-full bg-pink-500/10 border border-pink-500/30 px-3 py-1 text-[11px] font-bold text-pink-300">
+                  Double Your Reach
+                </span>
+              </div>
+              <h3 className="font-display text-xl font-bold text-white">
+                High-Retention Video & Motion Engine
+              </h3>
+              <p className="mt-3 text-xs sm:text-sm text-[#b8aecf] leading-relaxed">
+                The algorithm rewards retention and emotion. Our post-production room crafts cinematic short-form reels,
+                YouTube long-form edits, UGC commercials, and 2D/3D motion graphics with psychological pacing, sound
+                design, and hooks that keep viewers glued to your story.
+              </p>
+              <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ TikTok / Reels Machine</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Commercial Ad Videos</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ 2D/3D Motion Design</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Sound & Color Grading</span>
+              </div>
+            </div>
+
+            {/* Pillar 4: AI & Systems */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-6 sm:p-8 transition-all hover:border-cyan-500/40 hover:shadow-2xl hover:shadow-cyan-500/10">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/20 text-cyan-400 group-hover:scale-110 transition-transform">
+                  <Icon name="spark" size={24} />
+                </div>
+                <span className="rounded-full bg-cyan-500/10 border border-cyan-500/30 px-3 py-1 text-[11px] font-bold text-cyan-300">
+                  Scale Without Overhead
+                </span>
+              </div>
+              <h3 className="font-display text-xl font-bold text-white">
+                AI Agent Automations & Growth Funnels
+              </h3>
+              <p className="mt-3 text-xs sm:text-sm text-[#b8aecf] leading-relaxed">
+                Stop drowning in repetitive inquiries. We deploy smart AI agents that qualify incoming leads on your website
+                and social channels, answer FAQs instantly, schedule strategy appointments, and sync data straight to
+                your CRM 24 hours a day.
+              </p>
+              <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ AI Lead Qualifiers</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Workflow Automations</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ CRM Integration</span>
+                <span className="rounded-lg bg-black/40 px-2.5 py-1 text-[#cabfe0]">✦ Paid Ads Strategy</span>
+              </div>
+            </div>
+          </div>
+
+          {/* The 4-Step Brand Velocity Framework */}
+          <div className="mt-16 rounded-3xl border border-white/10 bg-black/30 p-6 sm:p-10 backdrop-blur-md">
+            <div className="text-center max-w-2xl mx-auto mb-10">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-pink-400">Our Methodology</h4>
+              <h3 className="font-display text-2xl sm:text-3xl font-bold text-white mt-1">
+                How We Take You From <span className="text-gradient">Overlooked to In-Demand</span>
+              </h3>
+              <p className="text-xs sm:text-sm text-[#b8aecf] mt-2">
+                A proven, battle-tested execution framework designed to eliminate guesswork and drive measurable ROI.
+              </p>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="relative p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                <div className="font-display text-3xl font-black text-pink-400/40 mb-2">01</div>
+                <h5 className="font-bold text-white text-sm">Deep Audit & Positioning</h5>
+                <p className="text-xs text-[#b8aecf] mt-1.5 leading-relaxed">
+                  We audit your current brand presence, uncover friction in your customer journey, and carve out a distinct market moat.
+                </p>
+              </div>
+
+              <div className="relative p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                <div className="font-display text-3xl font-black text-purple-400/40 mb-2">02</div>
+                <h5 className="font-bold text-white text-sm">Design & Web Engineering</h5>
+                <p className="text-xs text-[#b8aecf] mt-1.5 leading-relaxed">
+                  Elite creative directors and developers construct your brand identity and conversion web platform with pixel precision.
+                </p>
+              </div>
+
+              <div className="relative p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                <div className="font-display text-3xl font-black text-pink-400/40 mb-2">03</div>
+                <h5 className="font-bold text-white text-sm">Visibility Blitz & Media</h5>
+                <p className="text-xs text-[#b8aecf] mt-1.5 leading-relaxed">
+                  We launch high-retention video reels, social content machines, and ad creatives that grab attention and build authority.
+                </p>
+              </div>
+
+              <div className="relative p-4 rounded-2xl border border-white/5 bg-white/[0.02]">
+                <div className="font-display text-3xl font-black text-emerald-400/40 mb-2">04</div>
+                <h5 className="font-bold text-white text-sm">Scale, Leads & Retainers</h5>
+                <p className="text-xs text-[#b8aecf] mt-1.5 leading-relaxed">
+                  Track real conversion numbers, double down on high-performing creative assets, and grow with ongoing agency retainers.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Convincing Call To Action Banner */}
+          <div className="mt-12 rounded-3xl border border-pink-500/30 bg-gradient-to-r from-[#200a36] via-[#140624] to-[#200a36] p-8 sm:p-12 text-center shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 h-48 w-48 rounded-full bg-pink-500/15 blur-3xl pointer-events-none" />
+
+            <span className="inline-block rounded-full bg-gradient-pink px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow glow-pink-sm mb-3">
+              ✦ Guaranteed Creative Excellence
+            </span>
+
+            <h3 className="font-display text-2xl sm:text-4xl font-black text-white max-w-2xl mx-auto">
+              Ready to Stop Leaving Money on the Table?
+            </h3>
+
+            <p className="mt-3 text-xs sm:text-sm text-[#cabfe0] max-w-xl mx-auto leading-relaxed">
+              Book a free 20-minute Brand Strategy & Positioning Audit with Timfire and our senior creative directors.
+              We'll point out exactly where your brand is leaking clients and give you an actionable plan to double your visibility.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+              <GradientButton to="/agency#hire" className="shadow-xl shadow-pink-500/25">
+                <span>Claim Your Free Brand Audit →</span>
+              </GradientButton>
+              <GhostButton href="https://wa.me/2348125687509">
+                <span>Chat Direct on WhatsApp ↗</span>
+              </GhostButton>
+              <Link
+                to="/agency"
+                className="text-xs font-semibold text-pink-300 hover:text-white underline underline-offset-4 transition-colors px-2 py-1"
+              >
+                Explore Full Agency Showcase & Pricing →
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -297,9 +816,14 @@ function GuestHome() {
           <div className="relative overflow-hidden rounded-[2.5rem] border border-pink-400/30 bg-gradient-to-br from-[#1a0030] to-[#12001f] p-12">
             <div className="absolute -top-20 left-1/2 h-60 w-60 -translate-x-1/2 rounded-full bg-gradient-pink opacity-30 blur-3xl" />
             <div className="relative">
-              <h2 className="font-display text-4xl text-white sm:text-5xl">Your craft starts <span className="text-gradient">today.</span></h2>
-              <p className="mx-auto mt-4 max-w-md text-[#b8aecf]">Join thousands of creators learning free, belonging deeply, and building for real.</p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3"><GradientButton to="/academy">Join for Free →</GradientButton><GhostButton to="/about">Our Story</GhostButton></div>
+              <h2 className="font-display text-4xl text-white sm:text-5xl">Your creative breakthrough <span className="text-gradient">starts today.</span></h2>
+              <p className="mx-auto mt-4 max-w-lg text-[#cabfe0] text-base leading-relaxed">
+                Stop waiting for the "right time" or saving for overpriced bootcamps. Over 3,000 African youth have proven that with free instruction, honest community, and relentless work ethic, you can build a life you are proud of.
+              </p>
+              <div className="mt-8 flex flex-wrap justify-center gap-3">
+                <GradientButton to="/academy" className="shadow-xl shadow-pink-500/25">Join the Next Cohort (100% Free) →</GradientButton>
+                <GhostButton to="/about">Read Our Story</GhostButton>
+              </div>
             </div>
           </div>
         </div>

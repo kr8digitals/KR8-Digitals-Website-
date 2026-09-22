@@ -1,18 +1,23 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { useAuth } from "../context/AuthContext";
+import { useLiveStream } from "../context/LiveStreamContext";
 import {
   SKILLS, ATTENDANCE_TYPES, PORTFOLIO,
   getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
   getPaymentSettings, savePaymentSettings, getSkillRegistration, getSkillWhatsApp,
   saveSkillSetting, getFounders, saveFounders, getTeam,
-  getTestimonials, addTestimonial, deleteTestimonial,
+  getTestimonials, addTestimonial, deleteTestimonial, updateTestimonial,
   getVideoComments, deleteVideoComment,
   getAccounts, getStudents, updateAccount,
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
   addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
-  type Account, type Announcement, type Testimonial, type VideoComment,
+  getStreamReplays, saveStreamReplays,
+  canUserHostStream, deleteStreamRecording,
+  getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, archiveAnnouncementToGallery,
+  getHomepageSettings, saveHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES,
+  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep,
 } from "../data/store";
-import { Card } from "../components/ui";
+import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
   processGraduationCertificate,
@@ -23,9 +28,9 @@ import {
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Home", "Academy", "Testimonial Videos", "Agency", "Student Management", "Blog",
+  "Overview", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Gallery Archive", "Student Management", "Blog",
   "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
-  "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions",
+  "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions", "Supabase Database",
 ];
 
 export default function Admin() {
@@ -36,7 +41,8 @@ export default function Admin() {
   const [tab, setTab] = useState("Overview");
   const [students, setStudents] = useState<Account[]>(() => getAccounts().filter((a) => a.type !== "tribe"));
 
-  const isUltimate = currentUser?.admin?.role === "ultimate" || (!currentUser?.admin && !currentUser) || pw === MAIN_ADMIN_PASSWORD;
+  const isAuthorized = !!(currentUser?.admin || currentUser?.type === "founder" || currentUser?.type === "co-founder");
+  const isUltimate = currentUser?.admin?.role === "ultimate" || currentUser?.type === "founder" || pw === MAIN_ADMIN_PASSWORD;
 
   // Real-time synchronization whenever student data or accounts update
   useEffect(() => {
@@ -59,6 +65,29 @@ export default function Admin() {
     setAuth(true);
   };
 
+  // If user is not logged in or not authorized, block public view completely
+  if (!currentUser || !isAuthorized) {
+    return (
+      <div className="section-bg flex min-h-screen items-center justify-center px-5">
+        <Card className="w-full max-w-md text-center py-10">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+            <Icon name="lock" size={28} />
+          </div>
+          <Pill>Authorized Personnel Only</Pill>
+          <h1 className="font-display mt-4 text-2xl text-white sm:text-3xl">Restricted Access</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
+            The Admin Portal is strictly reserved for verified KR8 Digitals faculty and executive leadership.
+            Access is managed directly through authorized member profiles.
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            <GradientButton to="/academy">Go to Member Portal</GradientButton>
+            <GhostButton to="/">Return to Homepage</GhostButton>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   if (!auth) {
     return (
       <div className="section-bg flex min-h-screen items-center justify-center px-5">
@@ -67,7 +96,9 @@ export default function Admin() {
             <Icon name="lock" size={23} />
           </div>
           <h1 className="font-display text-2xl text-white">Admin Access</h1>
-          <p className="mt-2 text-sm text-[#b8aecf]">Restricted area. Enter your admin password.</p>
+          <p className="mt-2 text-sm text-[#b8aecf]">
+            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative password.
+          </p>
           <input
             type="password"
             value={pw}
@@ -80,9 +111,6 @@ export default function Admin() {
           <button onClick={unlock} className="mt-4 w-full rounded-full bg-gradient-pink py-3 text-sm font-bold text-white">
             Unlock Dashboard
           </button>
-          <p className="mt-4 text-[10px] text-[#8a7ba8]">
-            Main admin password: <span className="font-mono text-pink-300">KR8@Adm!n2026</span>
-          </p>
         </Card>
       </div>
     );
@@ -149,7 +177,9 @@ export default function Admin() {
           {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
           {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
           {tab === "Testimonial Videos" && <TestimonialVideosManager />}
+          {tab === "Live Streams & Replays" && <LiveStreamsManager />}
           {tab === "Agency" && <AgencyManager />}
+          {tab === "Gallery Archive" && <GalleryManager />}
           {tab === "Student Management" && <StudentManager students={students} />}
           {tab === "Blog" && <BlogManager />}
           {tab === "Announcements" && <AnnouncementManager />}
@@ -167,6 +197,7 @@ export default function Admin() {
           {tab === "Attendance Review" && <AttendancePanel />}
           {tab === "Moderation" && <ModerationManager />}
           {tab === "Admin Permissions" && isUltimate && <PermissionsManager />}
+          {tab === "Supabase Database" && <SupabaseManager />}
         </div>
       </div>
     </div>
@@ -358,7 +389,8 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
   const [created, setCreated] = useState<Account | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const years = Array.from({ length: 40 }, (_, i) => 2010 - i);
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 1920 + 1 }, (_, i) => currentYear - i);
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
 
@@ -964,17 +996,23 @@ function BlogManager() {
 
   const addPost = () => {
     if (!title.trim() || !excerpt.trim()) return;
-    const newPost = {
+    const newPost: BlogPost = {
       id: `b-${Date.now()}`,
       title: title.trim(),
       category,
       author: author.trim() || "KR8 Team",
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
       excerpt: excerpt.trim(),
+      content: excerpt.trim(),
       readTime: "4 min",
       img: "https://images.pexels.com/photos/3182773/pexels-photo-3182773.jpeg?auto=compress&cs=tinysrgb&w=900",
-      source: "admin" as const,
+      source: "admin",
       pinned: false,
+      isPublic: true,
+      mediaType: "image",
+      likes: 0,
+      likedBy: [],
+      comments: [],
     };
     const next = [newPost, ...posts];
     setPosts(next);
@@ -1468,6 +1506,15 @@ function AnnouncementManager() {
     setTimeout(() => setSaved(false), 3000);
   };
 
+  const handleArchive = (id: string) => {
+    archiveAnnouncementToGallery(id);
+    const updated = items.filter((a) => a.id !== id);
+    saveAnnouncements(updated);
+    setItems(updated);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -1501,24 +1548,384 @@ function AnnouncementManager() {
 
       <Card>
         <h3 className="font-bold text-white text-lg">Active Announcements ({items.length})</h3>
-        <p className="mt-1 text-sm text-[#b8aecf]">Live announcements displayed on the site.</p>
+        <p className="mt-1 text-sm text-[#b8aecf]">
+          Live announcements displayed on the site. Instead of deleting past milestones, click "Archive to Gallery" to permanently preserve them with their dates.
+        </p>
         <div className="mt-4 space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div key={item.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
               <div>
                 <p className="text-xs text-pink-400 font-semibold">{item.date} · {item.author}</p>
                 <h4 className="text-base font-bold text-white mt-1">{item.title}</h4>
                 <p className="text-xs text-[#cabfe0] mt-1">{item.body || item.caption}</p>
               </div>
-              <button
-                onClick={() => handleDelete(item.id)}
-                className="shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
-              >
-                Delete
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleArchive(item.id)}
+                  className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2.5 py-1 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all flex items-center gap-1"
+                  title="Preserve in Gallery rather than deleting"
+                >
+                  <span>📦</span>
+                  <span>Archive to Gallery</span>
+                </button>
+                <button
+                  onClick={() => handleDelete(item.id)}
+                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------------- Gallery Archive & Approval Manager ---------------- */
+
+function GalleryManager() {
+  const [items, setItems] = useState<GalleryItem[]>(() => getGalleryItems());
+  const [activeSubTab, setActiveSubTab] = useState<"pending" | "approved" | "new">("pending");
+  const [msg, setMsg] = useState("");
+
+  // New item form
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newCategory, setNewCategory] = useState<GalleryItem["category"]>("Flyers & Posters");
+  const [newMediaType, setNewMediaType] = useState<"image" | "video">("image");
+  const [newUrl, setNewUrl] = useState("");
+  const [newDate, setNewDate] = useState(
+    new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })
+  );
+  const [newAuthor, setNewAuthor] = useState("KR8 Admin Studio");
+  const [newLink, setNewLink] = useState("");
+
+  const pendingItems = items.filter((i) => i.status === "pending");
+  const approvedItems = items.filter((i) => i.status === "approved");
+
+  const reload = () => {
+    setItems(getGalleryItems());
+  };
+
+  const handleApprove = (id: string) => {
+    approveGalleryItem(id);
+    reload();
+    setMsg("Media piece approved and published to public Gallery!");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const handleReject = (id: string) => {
+    rejectGalleryItem(id);
+    reload();
+    setMsg("Media piece removed from queue.");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const handleDirectAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newUrl.trim()) return;
+
+    addGalleryItem({
+      title: newTitle.trim(),
+      description: newDesc.trim(),
+      category: newCategory,
+      mediaType: newMediaType,
+      url: newUrl.trim(),
+      date: newDate.trim(),
+      author: newAuthor.trim(),
+      link: newLink.trim() || undefined,
+      status: "approved",
+      featured: true,
+    });
+
+    reload();
+    setNewTitle("");
+    setNewDesc("");
+    setNewUrl("");
+    setNewLink("");
+    setMsg("Direct item added to Gallery archive successfully!");
+    setActiveSubTab("approved");
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div>
+            <h3 className="font-bold text-white text-xl">Living Gallery & Media Archive</h3>
+            <p className="text-xs text-[#a594c7] mt-1">
+              Archived campaigns, client work, student milestones, and viewer suggestions.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setActiveSubTab("pending")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all relative ${
+                activeSubTab === "pending"
+                  ? "bg-gradient-pink text-white shadow"
+                  : "border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white"
+              }`}
+            >
+              Pending Approvals
+              {pendingItems.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.2 text-[10px] text-white font-bold">
+                  {pendingItems.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveSubTab("approved")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                activeSubTab === "approved"
+                  ? "bg-gradient-pink text-white shadow"
+                  : "border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white"
+              }`}
+            >
+              Public Archive ({approvedItems.length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab("new")}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+                activeSubTab === "new"
+                  ? "bg-gradient-pink text-white shadow"
+                  : "border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white"
+              }`}
+            >
+              + Direct Upload
+            </button>
+          </div>
+        </div>
+
+        {msg && <p className="mt-3 text-xs text-emerald-400 font-bold">{msg}</p>}
+
+        {/* SUBTAB 1: PENDING APPROVALS */}
+        {activeSubTab === "pending" && (
+          <div className="mt-6 space-y-4">
+            <h4 className="font-bold text-white text-sm">
+              Viewer Suggestions Awaiting Review ({pendingItems.length})
+            </h4>
+
+            {pendingItems.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center">
+                <span className="text-3xl">✨</span>
+                <p className="text-sm font-semibold text-white mt-2">No pending suggestions</p>
+                <p className="text-xs text-[#8a7ba8] mt-1">
+                  When visitors or students suggest media via the Gallery page, they appear here for your approval.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {pendingItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col justify-between rounded-2xl border border-yellow-500/30 bg-yellow-500/[0.03] p-4 text-xs"
+                  >
+                    <div>
+                      <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/60 mb-3 border border-white/10">
+                        {item.mediaType === "video" ? (
+                          <video src={item.url} controls className="h-full w-full object-cover" />
+                        ) : (
+                          <img src={item.url} alt={item.title} className="h-full w-full object-cover" />
+                        )}
+                      </div>
+                      <span className="rounded bg-yellow-500/20 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                        {item.category}
+                      </span>
+                      <h5 className="font-bold text-white text-sm mt-1">{item.title}</h5>
+                      <p className="text-[#b8aecf] mt-1">{item.description}</p>
+                      <p className="text-[#8a7ba8] text-[10px] mt-2">
+                        Submitted by: <strong className="text-white">{item.author}</strong> ({item.date})
+                      </p>
+                    </div>
+
+                    <div className="mt-4 flex gap-2 border-t border-white/10 pt-3">
+                      <button
+                        onClick={() => handleApprove(item.id)}
+                        className="flex-1 rounded-xl bg-gradient-pink py-2 text-xs font-bold text-white shadow hover:brightness-110 active:scale-95 transition-all"
+                      >
+                        Approve & Publish ✅
+                      </button>
+                      <button
+                        onClick={() => handleReject(item.id)}
+                        className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                      >
+                        Reject ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SUBTAB 2: APPROVED PUBLIC ARCHIVE */}
+        {activeSubTab === "approved" && (
+          <div className="mt-6 space-y-3">
+            <h4 className="font-bold text-white text-sm">
+              Live in Public Gallery ({approvedItems.length})
+            </h4>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {approvedItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col justify-between rounded-2xl border border-white/10 bg-black/30 p-3 text-xs"
+                >
+                  <div>
+                    <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/60 mb-2 border border-white/10">
+                      {item.mediaType === "video" ? (
+                        <video src={item.url} controls className="h-full w-full object-cover" />
+                      ) : (
+                        <img src={item.url} alt={item.title} className="h-full w-full object-cover" />
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-pink-300 font-semibold">
+                      <span>{item.category}</span>
+                      <span>{item.date}</span>
+                    </div>
+                    <h5 className="font-bold text-white text-xs mt-1 truncate">{item.title}</h5>
+                    <p className="text-[#8a7ba8] text-[11px] truncate">By {item.author}</p>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2 text-[10px]">
+                    <a
+                      href="/gallery"
+                      target="_blank"
+                      className="text-pink-400 font-bold hover:underline"
+                    >
+                      View on site ↗
+                    </a>
+                    <button
+                      onClick={() => handleReject(item.id)}
+                      className="text-red-400 hover:text-red-300 font-bold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* SUBTAB 3: DIRECT UPLOAD */}
+        {activeSubTab === "new" && (
+          <form onSubmit={handleDirectAdd} className="mt-6 space-y-4 max-w-xl">
+            <h4 className="font-bold text-white text-sm">Direct Archival Upload</h4>
+            <p className="text-xs text-[#a594c7]">
+              Directly upload flyers, banners, brand guides, or project showreels to the public Gallery archive.
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Title *</label>
+              <input
+                required
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder="e.g. AfriSTEM Robotics Portal Launch Flyer"
+                className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Category</label>
+                <select
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value as GalleryItem["category"])}
+                  className="w-full rounded-xl border border-white/15 bg-[#140824] px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                >
+                  <option>Flyers & Posters</option>
+                  <option>Brand Identity</option>
+                  <option>Student Showcases</option>
+                  <option>Video Clips</option>
+                  <option>Event Moments</option>
+                  <option>Community Archives</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Media Type</label>
+                <select
+                  value={newMediaType}
+                  onChange={(e) => setNewMediaType(e.target.value as "image" | "video")}
+                  className="w-full rounded-xl border border-white/15 bg-[#140824] px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                >
+                  <option value="image">Image / Graphic</option>
+                  <option value="video">Video Clip</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                Media URL or Local Asset Path *
+              </label>
+              <input
+                required
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="e.g. /portfolio/afristem_hero.jpg or https://..."
+                className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Description</label>
+              <textarea
+                rows={2}
+                value={newDesc}
+                onChange={(e) => setNewDesc(e.target.value)}
+                placeholder="Context, design rationale, or event story..."
+                className="w-full rounded-xl border border-white/15 bg-black/30 p-3 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Date</label>
+                <input
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  placeholder="Sep 2026"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Author / Studio</label>
+                <input
+                  value={newAuthor}
+                  onChange={(e) => setNewAuthor(e.target.value)}
+                  placeholder="KR8 Studio Team"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">Project Link (Opt)</label>
+                <input
+                  value={newLink}
+                  onChange={(e) => setNewLink(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="rounded-xl bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+            >
+              Add to Gallery Archive
+            </button>
+          </form>
+        )}
       </Card>
     </div>
   );
@@ -1599,6 +2006,7 @@ function TestimonialVideosManager() {
   const [items, setItems] = useState<Testimonial[]>(getTestimonials());
   const [comments, setComments] = useState<VideoComment[]>(getVideoComments());
   const [name, setName] = useState("");
+  const [kr8Id, setKr8Id] = useState("");
   const [skill, setSkill] = useState("Graphic Design");
   const [schoolOrRole, setSchoolOrRole] = useState("");
   const [caption, setCaption] = useState("");
@@ -1607,7 +2015,12 @@ function TestimonialVideosManager() {
   const [captionsInput, setCaptionsInput] = useState("");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [previewingVideo, setPreviewingVideo] = useState<Testimonial | null>(null);
+  const [editingItem, setEditingItem] = useState<Testimonial | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  const matchedStudent = kr8Id
+    ? getStudents().find((s) => s.id.toLowerCase() === kr8Id.trim().toLowerCase())
+    : null;
 
   const handleVideoFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1658,6 +2071,7 @@ function TestimonialVideosManager() {
 
     const created = addTestimonial({
       name: name.trim(),
+      kr8Id: kr8Id.trim() || undefined,
       skill: skill.trim(),
       schoolOrRole: schoolOrRole.trim() || undefined,
       caption: caption.trim(),
@@ -1670,6 +2084,7 @@ function TestimonialVideosManager() {
     const refreshed = getTestimonials();
     setItems(refreshed);
     setName("");
+    setKr8Id("");
     setSchoolOrRole("");
     setCaption("");
     setVideoUrl("");
@@ -1677,6 +2092,20 @@ function TestimonialVideosManager() {
     setCaptionsInput("");
     setStatusMsg(`Published "${created.name}"! This video is now the latest upload and will lead playback.`);
     setTimeout(() => setStatusMsg(null), 5000);
+  };
+
+  const handleSaveEditedItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    if (!editingItem.name.trim() || !editingItem.caption.trim()) {
+      setStatusMsg("Student name and caption quote are required.");
+      return;
+    }
+    updateTestimonial(editingItem);
+    setItems(getTestimonials());
+    setStatusMsg(`Testimonial for "${editingItem.name}" updated successfully!`);
+    setEditingItem(null);
+    setTimeout(() => setStatusMsg(null), 4000);
   };
 
   const handleDelete = (id: string, title: string) => {
@@ -1777,6 +2206,24 @@ function TestimonialVideosManager() {
               />
             </div>
 
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Attach Student KR8 ID (Optional — Auto-links profile)</label>
+              <input
+                type="text"
+                value={kr8Id}
+                onChange={(e) => setKr8Id(e.target.value.toUpperCase())}
+                placeholder="e.g. KR82026KT0001GDVFD"
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 font-mono text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+              {matchedStudent && (
+                <p className="mt-1 text-[11px] text-emerald-400 font-semibold">
+                  ✓ Matched: {matchedStudent.name} ({matchedStudent.skill})
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Video File / URL</label>
               <div className="flex gap-2">
@@ -1880,6 +2327,11 @@ function TestimonialVideosManager() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h4 className="font-bold text-white text-sm">{item.name}</h4>
+                    {item.kr8Id && (
+                      <span className="font-mono rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-pink-300">
+                        {item.kr8Id}
+                      </span>
+                    )}
                     {index === 0 && (
                       <span className="rounded-full bg-pink-500/30 border border-pink-400/40 px-2 py-0.5 text-[10px] font-bold text-pink-300">
                         🔥 Leads Reel (Latest)
@@ -1897,6 +2349,12 @@ function TestimonialVideosManager() {
                   className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all"
                 >
                   Preview
+                </button>
+                <button
+                  onClick={() => setEditingItem({ ...item })}
+                  className="rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+                >
+                  Edit
                 </button>
                 <button
                   onClick={() => {
@@ -1970,6 +2428,122 @@ function TestimonialVideosManager() {
         </div>
       </Card>
 
+      {/* VIDEO EDIT MODAL */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto">
+          <div className="relative w-full max-w-xl rounded-3xl border border-white/20 bg-[#160d2b] p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Icon name="video" size={18} className="text-pink-400" />
+                <h4 className="font-bold text-white text-base">Edit Testimonial: {editingItem.name}</h4>
+              </div>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedItem} className="mt-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Student Full Name *</label>
+                  <input
+                    type="text"
+                    value={editingItem.name}
+                    onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Skill / Track *</label>
+                  <input
+                    type="text"
+                    value={editingItem.skill}
+                    onChange={(e) => setEditingItem({ ...editingItem, skill: e.target.value })}
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">University / Role</label>
+                  <input
+                    type="text"
+                    value={editingItem.schoolOrRole || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, schoolOrRole: e.target.value })}
+                    placeholder="e.g. Federal University Dutse or Cohort Graduate"
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Attached KR8 ID</label>
+                  <input
+                    type="text"
+                    value={editingItem.kr8Id || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, kr8Id: e.target.value.toUpperCase() })}
+                    placeholder="e.g. KR82026KT0001GDVFD"
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 font-mono text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Caption / Quote *</label>
+                <textarea
+                  value={editingItem.caption}
+                  onChange={(e) => setEditingItem({ ...editingItem, caption: e.target.value })}
+                  rows={2}
+                  required
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Video Path / URL</label>
+                  <input
+                    type="text"
+                    value={editingItem.video || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, video: e.target.value })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Poster Thumbnail Path / URL</label>
+                  <input
+                    type="text"
+                    value={editingItem.img || ""}
+                    onChange={(e) => setEditingItem({ ...editingItem, img: e.target.value })}
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-[#b8aecf] hover:bg-white/5 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* VIDEO PREVIEW MODAL */}
       {previewingVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
@@ -2000,13 +2574,84 @@ function TestimonialVideosManager() {
 }
 
 function HomeManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
+  const [settings, setSettings] = useState(getHomepageSettings());
+  const [headline, setHeadline] = useState(settings.heroHeadline || "We Make It Happen.");
+  const [projectsDone, setProjectsDone] = useState(settings.projectsDone || 120);
+  const [narrativeLines, setNarrativeLines] = useState<string[]>(
+    settings.narrativeLines && settings.narrativeLines.length ? settings.narrativeLines : DEFAULT_NARRATIVE_LINES
+  );
+  const [steps, setSteps] = useState<DoubtToBeliefStep[]>(
+    settings.doubtToBelief && settings.doubtToBelief.length ? settings.doubtToBelief : DEFAULT_DOUBT_TO_BELIEF
+  );
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const handleSave = () => {
+    const updated = {
+      ...settings,
+      heroHeadline: headline.trim() || "We Make It Happen.",
+      projectsDone: Number(projectsDone) || 0,
+      narrativeLines: narrativeLines.filter((l) => l.trim()),
+      doubtToBelief: steps,
+    };
+    saveHomepageSettings(updated);
+    setSettings(updated);
+    setSavedMsg("Homepage hero and narrative settings saved successfully!");
+    setTimeout(() => setSavedMsg(null), 3500);
+  };
+
+  const handleAddNarrativeLine = () => {
+    setNarrativeLines([...narrativeLines, "They doubted that our students could build real products."]);
+  };
+
+  const handleUpdateNarrativeLine = (idx: number, val: string) => {
+    const next = [...narrativeLines];
+    next[idx] = val;
+    setNarrativeLines(next);
+  };
+
+  const handleDeleteNarrativeLine = (idx: number) => {
+    setNarrativeLines(narrativeLines.filter((_, i) => i !== idx));
+  };
+
+  const handleAddStep = () => {
+    const newStep: DoubtToBeliefStep = {
+      id: `dtb-${Date.now()}`,
+      doubt: "Is it really true that beginners can succeed?",
+      belief: "Our structured mentors and peers guide you every day.",
+    };
+    setSteps([...steps, newStep]);
+  };
+
+  const handleUpdateStep = (index: number, field: "doubt" | "belief", value: string) => {
+    const next = [...steps];
+    next[index] = { ...next[index], [field]: value };
+    setSteps(next);
+  };
+
+  const handleDeleteStep = (index: number) => {
+    setSteps(steps.filter((_, i) => i !== index));
+  };
+
+  const handleResetDefaults = () => {
+    setNarrativeLines(DEFAULT_NARRATIVE_LINES);
+    setSteps(DEFAULT_DOUBT_TO_BELIEF);
+  };
+
   return (
     <div className="space-y-6">
+      {savedMsg && (
+        <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/80 p-4 text-xs font-bold text-emerald-200">
+          ✓ {savedMsg}
+        </div>
+      )}
+
       <Card>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
           <div>
-            <h3 className="font-bold text-white text-lg">Homepage Settings & Video Testimonials</h3>
-            <p className="mt-1 text-sm text-[#b8aecf]">Homepage banner & announcements are synchronized across user sessions.</p>
+            <h3 className="font-bold text-white text-lg">Hero Section & Narrative Sequence</h3>
+            <p className="mt-1 text-xs text-[#b8aecf]">
+              Configure hero headline, projects completed counter, and the animated "Doubt to Belief" story sequence.
+            </p>
           </div>
           {onOpenVideos && (
             <button
@@ -2018,8 +2663,445 @@ function HomeManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
             </button>
           )}
         </div>
+
+        <div className="mt-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Hero Main Headline</label>
+              <input
+                type="text"
+                value={headline}
+                onChange={(e) => setHeadline(e.target.value)}
+                placeholder="We Make It Happen."
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Projects Done Counter</label>
+              <input
+                type="number"
+                value={projectsDone}
+                onChange={(e) => setProjectsDone(Number(e.target.value))}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Animated Skepticism Hook Lines */}
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-bold text-white text-sm">
+                  Animated Skepticism Lines (Pre-Headline Narrative)
+                </h4>
+                <p className="text-[11px] text-[#8a7ba8]">
+                  These lines drop in one at a time before "We Make It Happen.", capturing real skepticism before resolving into proof.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddNarrativeLine}
+                className="rounded-xl bg-pink-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-pink-500"
+              >
+                + Add Skepticism Line
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {narrativeLines.map((line, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-pink-300 w-14 shrink-0">Line #{idx + 1}:</span>
+                  <input
+                    type="text"
+                    value={line}
+                    onChange={(e) => handleUpdateNarrativeLine(idx, e.target.value)}
+                    className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                  {narrativeLines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteNarrativeLine(idx)}
+                      className="text-xs text-red-400 hover:text-red-300 px-2"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Animated Doubt to Belief Narrative Sequence */}
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                  <span>Animated "Doubt to Belief" Narrative Sequence</span>
+                  <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[10px] font-mono text-pink-300">
+                    {steps.length} Steps
+                  </span>
+                </h4>
+                <p className="text-[11px] text-[#8a7ba8]">
+                  These phrases animate sequentially in the hero section, showing how student doubts transform into confidence and real results.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetDefaults}
+                  className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-[#cabfe0] hover:text-white hover:bg-white/5"
+                >
+                  Reset Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddStep}
+                  className="rounded-xl bg-pink-600/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-pink-500"
+                >
+                  + Add Narrative Step
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-4">
+              {steps.map((step, idx) => (
+                <div
+                  key={step.id || idx}
+                  className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-pink-400">Step #{idx + 1} Narrative</span>
+                    {steps.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStep(idx)}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Remove Step
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-amber-300 mb-1">
+                        Student Doubt (Initial Question / Fear):
+                      </label>
+                      <input
+                        type="text"
+                        value={step.doubt}
+                        onChange={(e) => handleUpdateStep(idx, "doubt", e.target.value)}
+                        placeholder="e.g. Can you really master high-income skills completely free?"
+                        className="w-full rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-xs text-white focus:border-amber-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-emerald-300 mb-1">
+                        Transformative Belief (The KR8 Reality):
+                      </label>
+                      <input
+                        type="text"
+                        value={step.belief}
+                        onChange={(e) => handleUpdateStep(idx, "belief", e.target.value)}
+                        placeholder="e.g. Zero tuition, live masterclasses, and verified certificates. 100% free."
+                        className="w-full rounded-xl border border-white/10 bg-black/50 px-3 py-2 text-xs text-white focus:border-emerald-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4 flex justify-end">
+            <button
+              onClick={handleSave}
+              className="rounded-xl bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-xl hover:brightness-110 active:scale-95 transition-all glow-pink-sm"
+            >
+              Save Hero & Narrative Settings
+            </button>
+          </div>
+        </div>
       </Card>
       <TestimonialVideosManager />
+    </div>
+  );
+}
+
+function LiveStreamsManager() {
+  const {
+    isLive,
+    activeStream,
+    openStage,
+    endStream,
+    recordings,
+  } = useLiveStream();
+  const accounts: Account[] = getAccounts();
+  const [replays, setReplays] = useState<StreamReplay[]>(getStreamReplays());
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Eligible Broadcasters list
+  const eligibleUsers = accounts.filter((acc: Account) => canUserHostStream(acc));
+
+  const handleDeleteReplay = (id: string, title: string) => {
+    if (!confirm(`Delete replay "${title}" from the archives?`)) return;
+    const next = replays.filter((r) => r.id !== id);
+    setReplays(next);
+    saveStreamReplays(next);
+    setStatusMsg(`Deleted replay "${title}".`);
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
+
+  const handleDeleteRecording = (id: string, title: string) => {
+    if (!confirm(`Delete cloud recording "${title}"?`)) return;
+    deleteStreamRecording(id);
+    setStatusMsg(`Deleted recording "${title}".`);
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Active Broadcasts Control & Table */}
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Icon name="video" size={20} className="text-pink-400" />
+              <h3 className="font-bold text-white text-lg">Active Live Broadcasts & WebRTC Stage</h3>
+            </div>
+            <p className="mt-1 text-xs text-[#b8aecf]">
+              Monitor running broadcasts, viewer counts, LiveKit SFU relay state, and enforce broadcast termination.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => openStage()}
+              className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+            >
+              {isLive ? "Open Live Stage →" : "Launch Studio (Go Live) →"}
+            </button>
+          </div>
+        </div>
+
+        {isLive && activeStream ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-xs text-[#cabfe0]">
+              <thead className="border-b border-white/10 bg-white/5 uppercase tracking-wider text-[10px] text-pink-300">
+                <tr>
+                  <th className="py-2.5 px-3">Title & Host</th>
+                  <th className="py-2.5 px-3">Category</th>
+                  <th className="py-2.5 px-3">Visibility</th>
+                  <th className="py-2.5 px-3">Started</th>
+                  <th className="py-2.5 px-3">Viewers</th>
+                  <th className="py-2.5 px-3">LiveKit Room</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                <tr>
+                  <td className="py-3 px-3">
+                    <span className="font-bold text-white block">{activeStream.title}</span>
+                    <span className="text-[11px] text-pink-400">Host: {activeStream.hostName}</span>
+                  </td>
+                  <td className="py-3 px-3">{activeStream.category}</td>
+                  <td className="py-3 px-3">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      activeStream.visibility === "private"
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    }`}>
+                      {activeStream.visibility === "private" ? "🔒 Private" : "Public"}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3 font-mono text-[11px]">
+                    {new Date(activeStream.startedAt).toLocaleTimeString()}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-emerald-400 font-bold">
+                    👥 {activeStream.viewers?.length || activeStream.viewerCount || 1}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-[11px] text-gray-400">
+                    {activeStream.livekitRoomName || activeStream.id}
+                  </td>
+                  <td className="py-3 px-3 text-right space-x-2">
+                    <button
+                      onClick={() => openStage()}
+                      className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-white/20"
+                    >
+                      Stage
+                    </button>
+                    <button
+                      onClick={endStream}
+                      className="rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-700"
+                    >
+                      Force End
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-white/5 bg-black/25 p-4 text-xs text-[#b8aecf]">
+            Status: <span className="font-semibold text-white">Studio Idle</span>. No live streams currently running.
+          </div>
+        )}
+      </Card>
+
+      {/* Cloud Recordings Manager */}
+      <Card>
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h3 className="font-bold text-white text-lg">LiveKit Cloud Stream Recordings Library</h3>
+            <p className="text-xs text-[#8a7ba8]">
+              Manage egress cloud-recorded broadcast sessions, duration, storage footprint, and playback visibility.
+            </p>
+          </div>
+          {statusMsg && <span className="text-xs text-pink-300 font-semibold">{statusMsg}</span>}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {recordings.length === 0 ? (
+            <p className="text-xs text-[#8a7ba8] py-4 text-center">No cloud recordings generated yet.</p>
+          ) : (
+            recordings.map((rec) => (
+              <div
+                key={rec.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-white/20"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="relative h-14 w-20 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/15">
+                    <img src={rec.thumbnail || "/founder_timfire_wide.jpg"} alt={rec.title} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.2 text-[9px] font-mono text-white">
+                      {rec.durationMinutes}m
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-sm">{rec.title}</h4>
+                    <p className="text-xs text-pink-300">{rec.category} · Host: {rec.hostName}</p>
+                    <p className="text-xs text-[#8a7ba8] mt-0.5">
+                      {rec.recordedAt} · {rec.sizeMb ? `${rec.sizeMb} MB` : "48 MB"} · {rec.isPublic ? "🌐 Public" : "🔒 Private"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => openStage(rec as any)}
+                    className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15"
+                  >
+                    Play
+                  </button>
+                  <a
+                    href={rec.videoUrl}
+                    download
+                    className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15"
+                  >
+                    Download
+                  </a>
+                  <button
+                    onClick={() => handleDeleteRecording(rec.id, rec.title)}
+                    className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+
+      {/* Stream Eligibility Manager */}
+      <Card>
+        <div className="border-b border-white/10 pb-3">
+          <h3 className="font-bold text-white text-lg">Live Streaming Eligibility Directory ({eligibleUsers.length})</h3>
+          <p className="text-xs text-[#8a7ba8]">
+            Only Founders, Co-Founders, Admins with permissions, and Coaches can launch live streams. Unregistered visitors, students, and tribe members cannot stream.
+          </p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {eligibleUsers.map((user: Account) => (
+            <div
+              key={user.id}
+              className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3"
+            >
+              <div className="h-10 w-10 shrink-0 rounded-full bg-gradient-pink flex items-center justify-center text-white font-bold text-sm">
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.name} className="h-full w-full rounded-full object-cover" />
+                ) : (
+                  user.name.charAt(0)
+                )}
+              </div>
+              <div className="overflow-hidden">
+                <p className="font-bold text-white text-xs truncate">{user.name}</p>
+                <p className="text-[11px] text-[#cabfe0] truncate">{user.email}</p>
+                <span className="mt-1 inline-block rounded bg-pink-500/20 px-1.5 py-0.2 text-[9px] font-bold uppercase text-pink-300">
+                  {user.type === "founder" || user.type === "co-founder"
+                    ? user.type
+                    : user.admin
+                    ? "Admin"
+                    : "Coach"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Recorded Replays Vault */}
+      <Card>
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div>
+            <h3 className="font-bold text-white text-lg">Stream Replay Vault & Archives ({replays.length})</h3>
+            <p className="text-xs text-[#8a7ba8]">
+              Past recorded streams saved to site data. Guests are prompted to create a free account to watch.
+            </p>
+          </div>
+          {statusMsg && <span className="text-xs text-pink-300 font-semibold">{statusMsg}</span>}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {replays.map((r) => (
+            <div
+              key={r.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-4 transition-all hover:border-white/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative h-14 w-20 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/15">
+                  <img src={r.thumbnail} alt={r.title} className="h-full w-full object-cover" />
+                  <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.2 text-[9px] font-mono text-white">
+                    {r.durationMinutes}m
+                  </span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">{r.title}</h4>
+                  <p className="text-xs text-pink-300">{r.category} · Host: {r.hostName}</p>
+                  <p className="text-xs text-[#8a7ba8] mt-0.5">
+                    {r.date} · 👥 {r.peakViewers} peak viewers · {r.messagesCount} chat messages
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => openStage(r)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all"
+                >
+                  Preview Replay
+                </button>
+                <button
+                  onClick={() => handleDeleteReplay(r.id, r.title)}
+                  className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -2039,5 +3121,250 @@ function PermissionsManager() {
       <h3 className="font-bold text-white text-lg">Admin Permissions & Access Control</h3>
       <p className="mt-1 text-sm text-[#b8aecf]">The Ultimate Administrator account has unconstrained access to all sections.</p>
     </Card>
+  );
+}
+
+function SupabaseManager() {
+  const [url, setUrl] = useState(() => localStorage.getItem("kr8_supabase_url") || "");
+  const [anonKey, setAnonKey] = useState(() => localStorage.getItem("kr8_supabase_anon_key") || "");
+  const [status, setStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [statusMsg, setStatusMsg] = useState("");
+  const [showSql, setShowSql] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const isConnected = !!url.trim() && !!anonKey.trim();
+
+  const handleSaveAndTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url.trim() || !anonKey.trim()) {
+      setStatus("error");
+      setStatusMsg("Please provide both your Supabase Project URL and Anon Public Key.");
+      return;
+    }
+
+    setStatus("testing");
+    setStatusMsg("Validating connection to Supabase...");
+
+    localStorage.setItem("kr8_supabase_url", url.trim());
+    localStorage.setItem("kr8_supabase_anon_key", anonKey.trim());
+
+    try {
+      const res = await fetch(`${url.trim().replace(/\/$/, "")}/rest/v1/`, {
+        headers: {
+          apikey: anonKey.trim(),
+          Authorization: `Bearer ${anonKey.trim()}`,
+        },
+      });
+
+      if (res.ok || res.status === 200 || res.status === 404) {
+        setStatus("success");
+        setStatusMsg("Connected successfully to Supabase! All platform data and live streaming will sync to your database.");
+        window.dispatchEvent(new Event("kr8:supabase-configured"));
+      } else {
+        setStatus("error");
+        setStatusMsg(`Supabase rejected request (HTTP ${res.status}). Please check your API key.`);
+      }
+    } catch (err: any) {
+      setStatus("error");
+      setStatusMsg(`Connection error: ${err.message || "Failed to reach Supabase project"}`);
+    }
+  };
+
+  const handleCopySql = () => {
+    const sql = `-- KR8 DIGITALS SUPABASE SCHEMA
+create table if not exists public.accounts (
+  id text primary key,
+  type text not null default 'student',
+  executive_role text,
+  name text not null,
+  email text unique not null,
+  phone text not null,
+  country text default 'NG',
+  skill text,
+  dob text,
+  password text not null,
+  vip boolean default false,
+  points integer default 0,
+  attendance_accepted integer default 0,
+  submissions integer default 0,
+  referrals integer default 0,
+  graduated boolean default false,
+  cert_tier text,
+  cert_recognition text,
+  avatar text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create table if not exists public.live_streams (
+  id text primary key,
+  title text not null,
+  category text not null,
+  description text,
+  host_id text,
+  host_name text not null,
+  host_avatar text,
+  visibility text default 'public',
+  access_key text,
+  is_live boolean default true,
+  started_at bigint not null,
+  viewer_count integer default 1,
+  quality text default '1080p60',
+  viewers jsonb default '[]'::jsonb,
+  assigned_tasks jsonb default '[]'::jsonb,
+  recognized_participants jsonb default '[]'::jsonb
+);
+
+create table if not exists public.live_chat (
+  id text primary key,
+  stream_id text not null,
+  sender_id text not null,
+  sender_name text not null,
+  sender_role text default 'viewer',
+  sender_badge text,
+  text text not null,
+  created_at bigint not null
+);
+
+alter publication supabase_realtime add table public.live_streams;
+alter publication supabase_realtime add table public.live_chat;
+`;
+    navigator.clipboard?.writeText(sql);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <span className="text-xs uppercase font-bold tracking-wider text-emerald-400">
+              Cloud Database & Real-Time Sync
+            </span>
+            <h3 className="font-bold text-white text-xl mt-1">Supabase Database Integration</h3>
+            <p className="mt-1 text-sm text-[#b8aecf]">
+              Connect your Supabase project to synchronize student registrations, attendances, and live stream broadcasts across all devices.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+            <span className="text-xs font-bold text-white">
+              {isConnected ? "Configured & Active" : "Local Mode (No DB Connected)"}
+            </span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveAndTest} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+              Supabase Project URL *
+            </label>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://xyzabcdefghijklm.supabase.co"
+              className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-xs font-mono text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
+              required
+            />
+            <span className="text-[10px] text-[#8a7ba8] mt-1 block">
+              Found in your Supabase Dashboard: Settings → API → Project URL
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+              Supabase Anon / Public API Key *
+            </label>
+            <input
+              type="password"
+              value={anonKey}
+              onChange={(e) => setAnonKey(e.target.value)}
+              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+              className="w-full rounded-xl border border-white/15 bg-black/30 px-4 py-2.5 text-xs font-mono text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none"
+              required
+            />
+            <span className="text-[10px] text-[#8a7ba8] mt-1 block">
+              Found in your Supabase Dashboard: Settings → API → Project API keys (anon public)
+            </span>
+          </div>
+
+          {statusMsg && (
+            <div
+              className={`rounded-xl p-3 text-xs ${
+                status === "success"
+                  ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-200"
+                  : status === "error"
+                  ? "bg-red-500/20 border border-red-500/40 text-red-200"
+                  : "bg-blue-500/20 border border-blue-500/40 text-blue-200"
+              }`}
+            >
+              {statusMsg}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={status === "testing"}
+              className="rounded-xl bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg hover:scale-105 active:scale-95 transition-all"
+            >
+              {status === "testing" ? "Testing Connection..." : "Save & Connect Supabase →"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSql(!showSql)}
+              className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white hover:bg-white/10"
+            >
+              {showSql ? "Hide SQL Setup" : "View 1-Click SQL Schema"}
+            </button>
+          </div>
+        </form>
+
+        {showSql && (
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-pink-300">
+                Supabase SQL Editor Setup (Copy & Run in Supabase)
+              </span>
+              <button
+                onClick={handleCopySql}
+                className="rounded-lg bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/20"
+              >
+                {copiedSql ? "Copied to Clipboard!" : "Copy SQL Script"}
+              </button>
+            </div>
+            <pre className="max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-black/60 p-4 text-[11px] font-mono text-emerald-300">
+{`-- 1. Create Accounts Table
+create table if not exists public.accounts (
+  id text primary key,
+  type text not null default 'student',
+  name text not null,
+  email text unique not null,
+  phone text not null,
+  skill text,
+  points integer default 0,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. Create Live Streams Table
+create table if not exists public.live_streams (
+  id text primary key,
+  title text not null,
+  category text not null,
+  host_name text not null,
+  visibility text default 'public',
+  access_key text,
+  is_live boolean default true,
+  viewers jsonb default '[]'::jsonb,
+  assigned_tasks jsonb default '[]'::jsonb
+);
+
+-- 3. Enable Realtime
+alter publication supabase_realtime add table public.live_streams;`}
+            </pre>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
