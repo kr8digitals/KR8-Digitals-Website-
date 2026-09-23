@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { GradientButton, GhostButton, Card } from "./ui";
+import { GradientButton } from "./ui";
 import Icon from "./Icon";
 import { saveClientRequest } from "../data/store";
 

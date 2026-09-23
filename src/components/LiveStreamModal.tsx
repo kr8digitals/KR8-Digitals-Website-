@@ -171,7 +171,7 @@ export default function LiveStreamModal() {
       }
       // Host muted locally to prevent acoustic feedback howl; audience is unmuted so they hear host
       video.muted = isHost;
-      video.play().catch((err: any) => {
+      video.play().catch(() => {
         // Handle browser autoplay policy blocking unmuted audio
         if (!isHost && video && !video.muted) {
           video.muted = true;

@@ -7,7 +7,6 @@ import {
   addVideoComment,
   likeVideoComment,
   getStudents,
-  generateDefaultAvatar,
 } from "../data/store";
 import { useAuth } from "../context/AuthContext";
 
@@ -68,7 +67,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // TRUE SHUFFLE ON INITIAL MOUNT (Session-based, does not reshuffle on every re-render)
-  const [ordered, setOrdered] = useState<Testimonial[]>(() => {
+  const [ordered] = useState<Testimonial[]>(() => {
     if (!items || !items.length) return [];
     try {
       const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v15");

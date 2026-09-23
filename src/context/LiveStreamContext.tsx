@@ -522,6 +522,7 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
           audio: true,
         });
+        const isHost = (activeStream && student?.id === activeStream.hostId) || currentRole === "host";
         const isPresenter = isHost || currentRole === "co-host" || currentRole === "speaker" || currentRole === "panelist";
         if (!isPresenter) {
           stream.getAudioTracks().forEach((t) => (t.enabled = false));
