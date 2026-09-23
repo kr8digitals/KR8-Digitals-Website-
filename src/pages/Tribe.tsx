@@ -43,6 +43,17 @@ const AVAILABLE_INTERESTS = [
 
 export default function Tribe() {
   const { user, signIn, addNotification } = useAuth();
+  const [liveTribeCount, setLiveTribeCount] = useState(() => tribeCount());
+
+  useEffect(() => {
+    const sync = () => setLiveTribeCount(tribeCount());
+    window.addEventListener("kr8:accounts-updated", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("kr8:accounts-updated", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -217,7 +228,7 @@ export default function Tribe() {
             </div>
             <div className="mt-10 flex items-center gap-8 border-t border-white/10 pt-8">
               <div>
-                <div className="font-display text-4xl sm:text-5xl text-gradient font-bold">{tribeCount().toLocaleString()}</div>
+                <div className="font-display text-4xl sm:text-5xl text-gradient font-bold">{liveTribeCount.toLocaleString()}</div>
                 <div className="text-xs uppercase tracking-wider text-[#a594c7] mt-1">Creators & Builders</div>
               </div>
               <div className="h-10 w-px bg-white/10" />

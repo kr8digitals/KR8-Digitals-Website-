@@ -92,13 +92,24 @@ function GuestHome() {
   const portfolio = getPortfolio();
   const [homepageSettings, setHomepageSettings] = useState(getHomepageSettings());
 
+  const [liveCounts, setLiveCounts] = useState(() => ({
+    students: studentCount(),
+    tribe: tribeCount(),
+  }));
+
   useEffect(() => {
-    const sync = () => setHomepageSettings(getHomepageSettings());
-    window.addEventListener("kr8:homepage-settings-updated", sync);
-    window.addEventListener("storage", sync);
+    const syncSettings = () => setHomepageSettings(getHomepageSettings());
+    const syncCounts = () => setLiveCounts({ students: studentCount(), tribe: tribeCount() });
+
+    window.addEventListener("kr8:homepage-settings-updated", syncSettings);
+    window.addEventListener("kr8:accounts-updated", syncCounts);
+    window.addEventListener("storage", syncSettings);
+    window.addEventListener("storage", syncCounts);
     return () => {
-      window.removeEventListener("kr8:homepage-settings-updated", sync);
-      window.removeEventListener("storage", sync);
+      window.removeEventListener("kr8:homepage-settings-updated", syncSettings);
+      window.removeEventListener("kr8:accounts-updated", syncCounts);
+      window.removeEventListener("storage", syncSettings);
+      window.removeEventListener("storage", syncCounts);
     };
   }, []);
 
@@ -207,7 +218,7 @@ function GuestHome() {
               {/* Stats Row with Mobile Responsive Grid */}
               <div className="hero-stats mt-6 sm:mt-10 grid grid-cols-3 gap-2 sm:gap-4">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06]">
-                  <CountUp end={studentCount()} suffix="+" />
+                  <CountUp end={liveCounts.students} suffix="+" />
                   <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
                     <span className="truncate">Students</span>
@@ -215,7 +226,7 @@ function GuestHome() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-purple-500/30 hover:bg-white/[0.06]">
-                  <CountUp end={tribeCount()} suffix="+" />
+                  <CountUp end={liveCounts.tribe} suffix="+" />
                   <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
                     <span className="h-1.5 w-1.5 rounded-full bg-pink-400 shrink-0" />
                     <span className="truncate">Tribe Members</span>

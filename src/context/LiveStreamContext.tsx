@@ -117,6 +117,7 @@ interface LiveStreamContextType {
   lastEndedStream: StreamReplay | null;
   activeReplay: StreamReplay | null;
   localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
   cameraActive: boolean;
   micActive: boolean;
   isScreenSharing: boolean;
@@ -181,6 +182,7 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
 
   // WebRTC / MediaStream state
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(true);
   const [micActive, setMicActive] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -275,19 +277,28 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
     if (!isStageOpen || !activeStream || activeReplay) return;
 
     const participantName = student?.name || "Guest Creator";
+    const isStreamHost = Boolean(
+      student?.id === activeStream.hostId ||
+      student?.type === "founder" ||
+      student?.type === "co-founder"
+    );
 
     void liveKitManager.connect({
       roomName: activeStream.livekitRoomName || activeStream.id,
       participantName,
-      isHost: student?.id === activeStream.hostId,
+      isHost: isStreamHost,
       audioOnly,
       onDataReceived: (msg: StreamDataMessage) => {
         handleIncomingDataMessage(msg);
+      },
+      onRemoteStream: (stream: MediaStream) => {
+        setRemoteStream(stream);
       },
     });
 
     return () => {
       liveKitManager.disconnect();
+      setRemoteStream(null);
     };
   }, [isStageOpen, activeStream?.id, activeReplay, audioOnly, student?.id, student?.name]);
 
@@ -506,7 +517,7 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
   const startCameraStream = async (): Promise<MediaStream | null> => {
     if (audioOnly) return null;
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
           audio: true,
@@ -519,6 +530,9 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
           setMicActive(true);
         }
         setIsScreenSharing(false);
+        setLocalStream(stream);
+        setCameraActive(true);
+        void liveKitManager.publishStream(stream);
         return stream;
       }
     } catch {
@@ -531,6 +545,7 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
     setLocalStream(virtualStream);
     setCameraActive(true);
     setMicActive(true);
+    void liveKitManager.publishStream(virtualStream);
     return virtualStream;
   };
 
@@ -554,6 +569,7 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
         setLocalStream(screenStream);
         setIsScreenSharing(true);
         setCameraActive(true);
+        void liveKitManager.publishStream(screenStream);
         return screenStream;
       }
     } catch {
@@ -1059,6 +1075,7 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
         lastEndedStream,
         activeReplay,
         localStream,
+        remoteStream,
         cameraActive,
         micActive,
         isScreenSharing,

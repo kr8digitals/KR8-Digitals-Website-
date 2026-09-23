@@ -52,6 +52,7 @@ export default function LiveStreamModal() {
     replays,
     activeReplay,
     localStream,
+    remoteStream,
     cameraActive,
     micActive,
     isScreenSharing,
@@ -120,6 +121,9 @@ export default function LiveStreamModal() {
         student?.type === "co-founder")
   );
 
+  const activeMediaStream = isHost ? localStream : (remoteStream || localStream);
+  const [isAutoplayBlocked, setIsAutoplayBlocked] = useState(false);
+
   const isCoHost = currentRole === "co-host";
   const isPresenter = isHost || isCoHost || currentRole === "panelist";
   const isModerator = isPresenter || currentRole === "moderator";
@@ -152,17 +156,29 @@ export default function LiveStreamModal() {
         video.load();
         video.play().catch(() => {});
       }
-    } else if (localStream && !audioOnly) {
+      return;
+    }
+
+    if (activeMediaStream && !audioOnly) {
       if (video.src) {
         video.pause();
         video.removeAttribute("src");
         video.src = "";
         video.load();
       }
-      if (video.srcObject !== localStream) {
-        video.srcObject = localStream;
-        video.play().catch(() => {});
+      if (video.srcObject !== activeMediaStream) {
+        video.srcObject = activeMediaStream;
       }
+      // Host muted locally to prevent acoustic feedback howl; audience is unmuted so they hear host
+      video.muted = isHost;
+      video.play().catch((err: any) => {
+        // Handle browser autoplay policy blocking unmuted audio
+        if (!isHost && video && !video.muted) {
+          video.muted = true;
+          video.play().catch(() => {});
+          setIsAutoplayBlocked(true);
+        }
+      });
     } else {
       if (video.src) {
         video.pause();
@@ -172,11 +188,11 @@ export default function LiveStreamModal() {
       }
       video.srcObject = null;
 
-      if (isHost && isLive && isStageOpen && !audioOnly) {
+      if (isHost && isLive && isStageOpen && !audioOnly && !localStream) {
         void startCameraStream();
       }
     }
-  }, [localStream, activeReplay, isLive, isStageOpen, isHost, audioOnly, startCameraStream]);
+  }, [activeMediaStream, localStream, activeReplay, isLive, isStageOpen, isHost, audioOnly, startCameraStream]);
 
   // Scroll chat to bottom
   useEffect(() => {
@@ -563,13 +579,56 @@ export default function LiveStreamModal() {
                     </p>
                   </div>
                 ) : (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted={isHost}
-                    className="h-full w-full object-contain"
-                  />
+                  <>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted={isHost}
+                      className="h-full w-full object-contain"
+                    />
+
+                    {/* Stage Monitor Card when media stream is still negotiating */}
+                    {!activeMediaStream && !activeReplay && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#180a2b] via-black to-[#130722] z-10 pointer-events-none select-none">
+                        <div className="relative mb-4">
+                          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-pink text-white font-bold text-2xl shadow-xl shadow-pink-500/20">
+                            {activeStream?.hostName ? activeStream.hostName.charAt(0).toUpperCase() : "K"}
+                          </div>
+                          <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-black text-xs font-bold ring-2 ring-black">
+                            🔴
+                          </span>
+                        </div>
+                        <h4 className="text-base sm:text-lg font-bold text-white max-w-md truncate">{activeStream?.title || "KR8 Live Broadcast"}</h4>
+                        <p className="text-xs text-pink-300 font-medium mt-1">Host: {activeStream?.hostName || "KR8 Lead Presenter"}</p>
+                        <div className="mt-4 flex items-center gap-2 rounded-full bg-black/60 px-4 py-1.5 border border-pink-500/30">
+                          <span className="h-2 w-2 rounded-full bg-pink-500 animate-ping" />
+                          <span className="text-xs text-emerald-400 font-mono font-semibold">Broadcasting Live · Stage Audio Active</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Unmute prompt if browser autoplay policy muted audio */}
+                    {isAutoplayBlocked && !isHost && (
+                      <div className="absolute inset-x-0 bottom-16 z-30 flex justify-center px-4 pointer-events-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const video = videoRef.current;
+                            if (video) {
+                              video.muted = false;
+                              video.volume = 1;
+                              video.play().catch(() => {});
+                              setIsAutoplayBlocked(false);
+                            }
+                          }}
+                          className="flex items-center gap-2 rounded-full bg-pink-600 hover:bg-pink-500 active:scale-95 px-5 py-2.5 text-xs font-bold text-white shadow-2xl transition-all animate-bounce cursor-pointer"
+                        >
+                          <span>🔊 Tap to Unmute & Listen to Host</span>
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Spotlight / Pin Badges */}

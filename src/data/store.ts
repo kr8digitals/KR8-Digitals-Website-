@@ -2396,14 +2396,14 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     caption: "The classes, practical drills, and tutor feedback pushed me from a total novice to creating industry-grade video edits.",
     img: "/videos/testimonial_new_2_poster.jpg",
     video: "/videos/testimonial_new_2.mp4",
-    duration: 27,
+    duration: 266,
     createdAt: 1726000000000 + 480000,
     captions: [
-      { start: 0.0, end: 4.0, text: "Hello everyone, my name is William Marvelous." },
-      { start: 4.0, end: 8.5, text: "I am a student of the KR8 Digitals cohort." },
-      { start: 8.5, end: 14.5, text: "Learning video editing here has been an incredible experience with real hands-on projects." },
-      { start: 14.5, end: 20.0, text: "From pacing and cutting to motion effects, the mentorship made all the difference." },
-      { start: 20.0, end: 27.0, text: "Zero cost for training, learn and grow with KR8 Digitals!" },
+      { start: 0.0, end: 5.0, text: "Hello everyone, my name is William Marvelous and I'm a student of KR8 Digitals." },
+      { start: 5.0, end: 12.0, text: "I heard about KR8 Digitals when I was just scrolling on my feed." },
+      { start: 12.0, end: 20.0, text: "Learning video editing here has been an incredible experience with real hands-on projects." },
+      { start: 20.0, end: 30.0, text: "The mentors guide you patiently through pacing, transitions, and industry techniques." },
+      { start: 30.0, end: 42.0, text: "100% free with structured cohort assignments. Join KR8 Digitals today!" },
     ],
   },
   {
@@ -2414,13 +2414,14 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     caption: "KR8 Digitals transformed how I understand branding and creative problem solving. 100% free with real mentorship.",
     img: "/videos/testimonial_new_3_poster.jpg",
     video: "/videos/testimonial_new_3.mp4",
-    duration: 24,
+    duration: 304,
     createdAt: 1726000000000 + 470000,
     captions: [
-      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Adrian Washington." },
-      { start: 4.5, end: 11.0, text: "KR8 Digitals is teaching valuable high-income digital skills completely free." },
-      { start: 11.0, end: 17.5, text: "The mentors review your work thoroughly and show you how to design for real clients." },
-      { start: 17.5, end: 24.0, text: "If you want to transform your creative career, join KR8 Digitals today!" },
+      { start: 0.0, end: 5.0, text: "Hello everyone, my name is Adrian Washington and I'd like to share my story with you." },
+      { start: 5.0, end: 12.0, text: "It was a sunny afternoon when I saw an opportunity to join the creative tribe." },
+      { start: 12.0, end: 22.0, text: "KR8 Digitals taught me valuable high-income branding principles completely free." },
+      { start: 22.0, end: 32.0, text: "The mentors review your work thoroughly and show you how to design for real clients." },
+      { start: 32.0, end: 45.0, text: "If you want to transform your creative career, join KR8 Digitals today!" },
     ],
   },
   {
@@ -2672,7 +2673,7 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
   },
 ];
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v12";
+const TESTIMONIAL_KEY = "kr8_testimonials_v15";
 const VIDEO_COMMENT_KEY = "kr8_video_comments_v3";
 
 export function getTestimonials(): Testimonial[] {
@@ -2994,7 +2995,10 @@ export const SCORING = [
 ];
 
 export function tribeCount(): number {
-  return 2480 + getAccounts().filter((account) => account.type === "tribe").length;
+  // Combination of registered tribe members and students, preserving current base statistics
+  const tribeMembers = getAccounts().filter((account) => account.type === "tribe").length;
+  const students = getStudents().length;
+  return 2480 + tribeMembers + students;
 }
 export function studentCount(): number {
   return 1200 + getStudents().length;
@@ -3673,6 +3677,9 @@ export function awardPointsToStreamViewer(
   ];
 
   updateLiveStream({ recognizedParticipants: recognized });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("kr8:points-updated", { detail: { userId, points, reason } }));
+  }
 
   sendLiveChatMessage({
     streamId,

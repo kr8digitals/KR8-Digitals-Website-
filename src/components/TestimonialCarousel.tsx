@@ -71,7 +71,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const [ordered, setOrdered] = useState<Testimonial[]>(() => {
     if (!items || !items.length) return [];
     try {
-      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v12");
+      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v15");
       if (stored) {
         const parsedIds: string[] = JSON.parse(stored);
         const map = new Map(items.map((it) => [it.id, it]));
@@ -85,7 +85,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     }
     const shuffled = [...items].sort(() => Math.random() - 0.5);
     try {
-      sessionStorage.setItem("kr8_shuffled_testimonials_v12", JSON.stringify(shuffled.map((i) => i.id)));
+      sessionStorage.setItem("kr8_shuffled_testimonials_v15", JSON.stringify(shuffled.map((i) => i.id)));
     } catch {}
     return shuffled;
   });

@@ -11,19 +11,28 @@ export default function LeaderboardList({ limit }: { limit?: number }) {
   useEffect(() => {
     const update = () => refresh((value) => value + 1);
     window.addEventListener("kr8:accounts-updated", update);
+    window.addEventListener("kr8:points-updated", update);
     window.addEventListener("storage", update);
     return () => {
       window.removeEventListener("kr8:accounts-updated", update);
+      window.removeEventListener("kr8:points-updated", update);
       window.removeEventListener("storage", update);
     };
   }, []);
 
   const all = getStudents();
-  const real = all.filter((s) => !s.isPlaceholder).sort((a, b) => b.points - a.points);
-  const placeholders = all.filter((s) => s.isPlaceholder).sort((a, b) => b.points - a.points);
+  // Rank all students by real points earned descending
+  const sorted = [...all].sort((a, b) => {
+    const pA = a.points || 0;
+    const pB = b.points || 0;
+    if (pB !== pA) return pB - pA;
+    // Tie-break: real students before placeholders
+    if (!a.isPlaceholder && b.isPlaceholder) return -1;
+    if (a.isPlaceholder && !b.isPlaceholder) return 1;
+    return a.name.localeCompare(b.name);
+  });
   const max = limit ?? 50;
-  // Real registrants always occupy the first slots; placeholders only backfill the remainder.
-  const rows = [...real.slice(0, max), ...placeholders.slice(0, Math.max(0, max - real.length))];
+  const rows = sorted.slice(0, max);
 
   return (
     <div className="w-full max-w-full space-y-2 overflow-x-hidden">

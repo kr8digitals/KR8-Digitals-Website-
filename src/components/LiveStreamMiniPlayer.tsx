@@ -3,16 +3,18 @@ import { useLiveStream } from "../context/LiveStreamContext";
 import Icon from "./Icon";
 
 export default function LiveStreamMiniPlayer() {
-  const { activeStream, isLive, isMiniPlayerOpen, localStream, openStage, closeMiniPlayer } = useLiveStream();
+  const { activeStream, isLive, isMiniPlayerOpen, localStream, remoteStream, openStage, closeMiniPlayer } = useLiveStream();
   const [muted, setMuted] = useState(true);
   const miniVideoRef = useRef<HTMLVideoElement | null>(null);
 
+  const activeMedia = remoteStream || localStream;
+
   useEffect(() => {
-    if (miniVideoRef.current && localStream) {
-      miniVideoRef.current.srcObject = localStream;
+    if (miniVideoRef.current && activeMedia) {
+      miniVideoRef.current.srcObject = activeMedia;
       miniVideoRef.current.play().catch(() => {});
     }
-  }, [localStream, isMiniPlayerOpen]);
+  }, [activeMedia, isMiniPlayerOpen]);
 
   if (!isLive || !activeStream || !isMiniPlayerOpen) {
     return null;
@@ -22,7 +24,7 @@ export default function LiveStreamMiniPlayer() {
     <div className="fixed bottom-4 right-4 z-50 w-72 sm:w-80 overflow-hidden rounded-2xl border border-pink-500/40 bg-[#150a24] shadow-2xl backdrop-blur-xl ring-2 ring-pink-500/20 transition-all animate-rise">
       {/* Video Preview Box */}
       <div className="relative aspect-video w-full overflow-hidden bg-black">
-        {localStream ? (
+        {activeMedia ? (
           <video
             ref={miniVideoRef}
             autoPlay
