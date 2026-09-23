@@ -71,7 +71,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const [ordered, setOrdered] = useState<Testimonial[]>(() => {
     if (!items || !items.length) return [];
     try {
-      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v10");
+      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v12");
       if (stored) {
         const parsedIds: string[] = JSON.parse(stored);
         const map = new Map(items.map((it) => [it.id, it]));
@@ -85,7 +85,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     }
     const shuffled = [...items].sort(() => Math.random() - 0.5);
     try {
-      sessionStorage.setItem("kr8_shuffled_testimonials_v10", JSON.stringify(shuffled.map((i) => i.id)));
+      sessionStorage.setItem("kr8_shuffled_testimonials_v12", JSON.stringify(shuffled.map((i) => i.id)));
     } catch {}
     return shuffled;
   });
@@ -757,132 +757,6 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               ))
             )}
           </div>
-        </div>
-      </div>
-
-      {/* NUMBERED STORIES PAGINATION ROW (Scalable up to 50k+ videos) */}
-      <div className="mt-8 border-t border-white/10 pt-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 px-1">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-pink-500 animate-ping" />
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-              Student Stories Library
-            </h4>
-            <span className="rounded-full bg-pink-500/20 px-2.5 py-0.5 text-xs font-mono font-bold text-pink-300">
-              Story #{currentIndex + 1} of {total}
-            </span>
-          </div>
-          <p className="text-xs text-[#a594c7]">
-            Select any story number to play · Click any number to jump
-          </p>
-        </div>
-
-        {/* Numbered Row with Smart Windowing */}
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
-          <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
-            {/* Previous Button */}
-            <button
-              type="button"
-              onClick={handlePrev}
-              className="flex h-9 items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white hover:bg-white/15 transition-all"
-            >
-              <span>←</span>
-              <span className="hidden sm:inline">Prev</span>
-            </button>
-
-            {/* Smart Windowing for Up to 50k videos */}
-            {(() => {
-              const current = currentIndex + 1;
-              const pages: (number | "dots-left" | "dots-right")[] = [];
-
-              if (total <= 12) {
-                for (let i = 1; i <= total; i++) pages.push(i);
-              } else {
-                pages.push(1);
-                if (current > 4) pages.push("dots-left");
-
-                const start = Math.max(2, current - 2);
-                const end = Math.min(total - 1, current + 2);
-
-                for (let i = start; i <= end; i++) pages.push(i);
-
-                if (current < total - 3) pages.push("dots-right");
-                pages.push(total);
-              }
-
-              return pages.map((page, pIdx) => {
-                if (page === "dots-left" || page === "dots-right") {
-                  return (
-                    <span
-                      key={`dots-${pIdx}`}
-                      className="flex h-9 w-7 items-center justify-center text-xs text-[#7d6f96]"
-                    >
-                      …
-                    </span>
-                  );
-                }
-
-                const isSelected = page === current;
-                return (
-                  <button
-                    key={`story-btn-${page}`}
-                    type="button"
-                    onClick={() => {
-                      setCurrentIndex(page - 1);
-                    }}
-                    className={`flex h-9 min-w-9 items-center justify-center rounded-xl px-2.5 font-mono text-xs font-bold transition-all ${
-                      isSelected
-                        ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/30 scale-105 glow-pink-sm ring-1 ring-white/30"
-                        : "border border-white/10 bg-white/[0.04] text-[#cabfe0] hover:border-pink-500/40 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              });
-            })()}
-
-            {/* Next Button */}
-            <button
-              type="button"
-              onClick={handleNext}
-              className="flex h-9 items-center gap-1 rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-white hover:bg-white/15 transition-all"
-            >
-              <span className="hidden sm:inline">Next</span>
-              <span>→</span>
-            </button>
-          </div>
-
-          {/* Direct Jump to Video Number Input */}
-          {total > 5 && (
-            <div className="mt-4 border-t border-white/10 pt-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-[#b8aecf]">
-                <span className="text-pink-400 font-bold">▶ Now Playing:</span>
-                <span className="font-bold text-white">{currentItem.name}</span>
-                <span className="text-pink-300">({currentItem.skill})</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[#8a7ba8]">Jump to #:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={total}
-                  placeholder={`1-${total}`}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const val = parseInt((e.target as HTMLInputElement).value, 10);
-                      if (val >= 1 && val <= total) {
-                        setCurrentIndex(val - 1);
-                        (e.target as HTMLInputElement).value = "";
-                      }
-                    }
-                  }}
-                  className="w-16 rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-center font-mono text-xs text-white focus:border-pink-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

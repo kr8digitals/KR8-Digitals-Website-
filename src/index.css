@@ -79,15 +79,16 @@ button, a, input, select, textarea {
     #0d0015;
 }
 
-/* Hero-only photo layer: deep dark theme matching the rest of the site */
+/* Hero section: deep dark obsidian background matching and darker than site tone */
 .hero-section {
   position: relative;
   width: 100%;
   max-width: 100vw;
   overflow-x: hidden;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(120, 20, 160, 0.12), transparent 70%),
-    linear-gradient(180deg, #0d0015 0%, #09000f 100%);
+  background-color: #050009 !important;
+  background-image:
+    radial-gradient(ellipse 70% 45% at 50% 0%, rgba(55, 8, 85, 0.16), transparent 70%),
+    linear-gradient(180deg, #06000c 0%, #050008 100%) !important;
 }
 
 .hero-container,

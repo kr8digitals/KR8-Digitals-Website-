@@ -7,6 +7,7 @@ import {
   buildPhone,
   updateAccount,
   countryByCode,
+  saveClientRequest,
 } from "../data/store";
 import { useAuth } from "../context/AuthContext";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Check, GlowImage } from "../components/ui";
@@ -140,8 +141,42 @@ export default function Tribe() {
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
+  const [partnerError, setPartnerError] = useState("");
+
   const handlePartnerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setPartnerError("");
+
+    if (!partnerForm.org.trim()) {
+      setPartnerError("Please enter your brand or organization name.");
+      return;
+    }
+    if (!partnerForm.email.trim()) {
+      setPartnerError("Please enter an official contact email.");
+      return;
+    }
+    if (!partnerForm.proposal.trim()) {
+      setPartnerError("Please share brief details on how we can collaborate.");
+      return;
+    }
+
+    const res = saveClientRequest({
+      type: "partnership",
+      title: `Partnership Proposal: ${partnerForm.org}`,
+      name: partnerForm.org,
+      email: partnerForm.email,
+      phone: "",
+      details: {
+        organization: partnerForm.org,
+        collaborationGoals: partnerForm.proposal,
+      },
+    });
+
+    if (!res.success) {
+      setPartnerError(res.error || "Failed to submit partnership request.");
+      return;
+    }
+
     setPartnerSubmitted(true);
     addNotification("Partnership inquiry recorded! Our leadership team will connect.");
     setTimeout(() => {
@@ -480,6 +515,11 @@ export default function Tribe() {
               </div>
             ) : (
               <form onSubmit={handlePartnerSubmit} className="mt-4 space-y-4">
+                {partnerError && (
+                  <div className="rounded-xl border border-red-500/40 bg-red-500/20 p-2.5 text-xs text-red-200">
+                    {partnerError}
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-[#e8ddf5] mb-1">Brand or Organization Name *</label>
                   <input

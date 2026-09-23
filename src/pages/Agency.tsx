@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { IMG } from "../data/images";
-import { PORTFOLIO, getPortfolio, CONTACT, FULL_PORTFOLIO_LINK } from "../data/store";
+import { PORTFOLIO, getPortfolio, CONTACT, FULL_PORTFOLIO_LINK, saveClientRequest } from "../data/store";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, GlowImage } from "../components/ui";
 import Icon from "../components/Icon";
 import Marquee from "../components/Marquee";
@@ -76,32 +76,198 @@ export default function Agency() {
   const [sent, setSent] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [auditSent, setAuditSent] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [modalError, setModalError] = useState("");
 
-  // In-page audit booking form state
+  // 1. Structured Project Form State
+  const [structForm, setStructForm] = useState({
+    service: "",
+    timeline: "",
+    budget: "",
+    clientType: "",
+    name: "",
+    contact: "",
+  });
+
+  // 2. Custom Quote Form State
+  const [customForm, setCustomForm] = useState({
+    goals: "",
+    urgency: "Immediate / Urgent",
+    budget: "",
+    name: "",
+    contact: "",
+  });
+
+  // 3. Free Brand Audit Form State
   const [auditForm, setAuditForm] = useState({
     brandName: "",
     fullName: "",
     email: "",
     phone: "",
     websiteUrl: "",
-    primaryChallenge: "Conversion & Sales",
-    preferredFormat: "Live 20-min Strategic Call",
+    primaryChallenge: "Low Conversions & Sales",
+    preferredFormat: "Live 20-min Strategic Call (Google Meet)",
     notes: "",
   });
 
-  const handleAuditSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    try {
-      const existing = JSON.parse(localStorage.getItem("kr8_brand_audits") || "[]");
-      existing.unshift({
-        ...auditForm,
-        id: "audit_" + Date.now(),
-        submittedAt: new Date().toISOString(),
-      });
-      localStorage.setItem("kr8_brand_audits", JSON.stringify(existing));
-    } catch {
-      // fallback
+  // Handle Structured Project Submission
+  const handleStructuredSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!structForm.name.trim()) {
+      setFormError("Please enter your full name.");
+      return;
     }
+    if (!structForm.contact.trim()) {
+      setFormError("Please provide an email address or phone number.");
+      return;
+    }
+    if (!structForm.service) {
+      setFormError("Please select the primary service needed.");
+      return;
+    }
+
+    const res = saveClientRequest({
+      type: "structured",
+      title: `Structured Project: ${structForm.service}`,
+      name: structForm.name,
+      email: structForm.contact.includes("@") ? structForm.contact : "",
+      phone: !structForm.contact.includes("@") ? structForm.contact : "",
+      details: {
+        service: structForm.service,
+        timeline: structForm.timeline || "Flexible",
+        budget: structForm.budget || "To be discussed",
+        clientType: structForm.clientType || "Business",
+        contactProvided: structForm.contact,
+      },
+    });
+
+    if (!res.success) {
+      setFormError(res.error || "Failed to record your project request.");
+      return;
+    }
+
+    setSent(true);
+  };
+
+  // Handle Custom Quote Submission
+  const handleCustomSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!customForm.name.trim()) {
+      setFormError("Please enter your full name.");
+      return;
+    }
+    if (!customForm.contact.trim()) {
+      setFormError("Please provide an email address or phone number.");
+      return;
+    }
+    if (!customForm.goals.trim()) {
+      setFormError("Please describe your brand challenges and goals.");
+      return;
+    }
+
+    const res = saveClientRequest({
+      type: "custom_quote",
+      title: `Custom Quote Request from ${customForm.name}`,
+      name: customForm.name,
+      email: customForm.contact.includes("@") ? customForm.contact : "",
+      phone: !customForm.contact.includes("@") ? customForm.contact : "",
+      details: {
+        challengeAndGoals: customForm.goals,
+        urgency: customForm.urgency,
+        budget: customForm.budget || "Custom / Open",
+        contactProvided: customForm.contact,
+      },
+    });
+
+    if (!res.success) {
+      setFormError(res.error || "Failed to submit your custom quote request.");
+      return;
+    }
+
+    setSent(true);
+  };
+
+  // Handle Free Brand Audit Submission (In-Page)
+  const handleAuditTabSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError("");
+
+    if (!auditForm.brandName.trim()) {
+      setFormError("Please enter your brand or company name.");
+      return;
+    }
+    if (!auditForm.fullName.trim()) {
+      setFormError("Please enter your full name.");
+      return;
+    }
+    if (!auditForm.email.trim() && !auditForm.phone.trim()) {
+      setFormError("Please enter either an email address or phone number.");
+      return;
+    }
+
+    const res = saveClientRequest({
+      type: "brand_audit",
+      title: `Free Brand Audit: ${auditForm.brandName}`,
+      name: auditForm.fullName,
+      email: auditForm.email,
+      phone: auditForm.phone,
+      details: {
+        brandName: auditForm.brandName,
+        websiteOrHandle: auditForm.websiteUrl || "Not specified",
+        primaryChallenge: auditForm.primaryChallenge,
+        preferredDelivery: auditForm.preferredFormat,
+      },
+    });
+
+    if (!res.success) {
+      setFormError(res.error || "Failed to record brand audit booking.");
+      return;
+    }
+
+    setSent(true);
+  };
+
+  // Handle Free Brand Audit Submission (Modal)
+  const handleModalAuditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setModalError("");
+
+    if (!auditForm.brandName.trim()) {
+      setModalError("Please enter your brand or company name.");
+      return;
+    }
+    if (!auditForm.fullName.trim()) {
+      setModalError("Please enter your full name.");
+      return;
+    }
+    if (!auditForm.email.trim() && !auditForm.phone.trim()) {
+      setModalError("Please enter either an email address or phone number.");
+      return;
+    }
+
+    const res = saveClientRequest({
+      type: "brand_audit",
+      title: `Free Brand Audit: ${auditForm.brandName}`,
+      name: auditForm.fullName,
+      email: auditForm.email,
+      phone: auditForm.phone,
+      details: {
+        brandName: auditForm.brandName,
+        websiteOrHandle: auditForm.websiteUrl || "Not specified",
+        primaryChallenge: auditForm.primaryChallenge,
+        preferredDelivery: auditForm.preferredFormat,
+      },
+    });
+
+    if (!res.success) {
+      setModalError(res.error || "Failed to record brand audit booking.");
+      return;
+    }
+
     setAuditSent(true);
   };
 
@@ -126,7 +292,11 @@ export default function Agency() {
 
             <div className="mt-8 flex flex-wrap items-center gap-3.5">
               <GradientButton
-                onClick={() => setShowAuditModal(true)}
+                onClick={() => {
+                  setModalError("");
+                  setAuditSent(false);
+                  setShowAuditModal(true);
+                }}
                 className="shadow-xl shadow-pink-500/25 cursor-pointer"
               >
                 <span>Book a Free Brand Audit →</span>
@@ -271,7 +441,11 @@ export default function Agency() {
                 </p>
                 <div className="mt-6">
                   <GradientButton
-                    onClick={() => setShowAuditModal(true)}
+                    onClick={() => {
+                      setModalError("");
+                      setAuditSent(false);
+                      setShowAuditModal(true);
+                    }}
                     className="shadow-xl shadow-pink-500/30 cursor-pointer"
                   >
                     Book Your Free Brand Audit →
@@ -438,7 +612,7 @@ export default function Agency() {
 
           <div className="mx-auto mt-8 flex max-w-lg justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5">
             <button
-              onClick={() => { setPath("structured"); setSent(false); }}
+              onClick={() => { setPath("structured"); setSent(false); setFormError(""); }}
               className={`flex-1 rounded-full px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                 path === "structured" ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/25" : "text-[#b8aecf]"
               }`}
@@ -446,7 +620,7 @@ export default function Agency() {
               Structured Project
             </button>
             <button
-              onClick={() => { setPath("custom"); setSent(false); }}
+              onClick={() => { setPath("custom"); setSent(false); setFormError(""); }}
               className={`flex-1 rounded-full px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                 path === "custom" ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/25" : "text-[#b8aecf]"
               }`}
@@ -454,7 +628,7 @@ export default function Agency() {
               Custom Quote
             </button>
             <button
-              onClick={() => { setPath("audit"); setSent(false); }}
+              onClick={() => { setPath("audit"); setSent(false); setFormError(""); }}
               className={`flex-1 rounded-full px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                 path === "audit" ? "bg-gradient-pink text-white shadow-lg shadow-pink-500/25" : "text-[#b8aecf]"
               }`}
@@ -481,7 +655,7 @@ export default function Agency() {
                 </p>
                 <div className="mt-6 flex flex-col items-center gap-3">
                   <GhostButton
-                    onClick={() => setSent(false)}
+                    onClick={() => { setSent(false); setFormError(""); }}
                     className="border-white/20 text-xs text-white hover:border-pink-500/40"
                   >
                     Submit Another Inquiry
@@ -512,21 +686,26 @@ export default function Agency() {
                     100% Free
                   </span>
                 </div>
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setSent(true);
-                  }}
-                  className="mt-5 space-y-4"
-                >
+
+                {formError && (
+                  <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/20 p-3 text-xs text-red-200">
+                    {formError}
+                  </div>
+                )}
+
+                <form onSubmit={handleAuditTabSubmit} className="mt-5 space-y-4">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <input
                       required
+                      value={auditForm.brandName}
+                      onChange={(e) => setAuditForm({ ...auditForm, brandName: e.target.value })}
                       className={inputCls}
                       placeholder="Brand or Company Name *"
                     />
                     <input
                       required
+                      value={auditForm.fullName}
+                      onChange={(e) => setAuditForm({ ...auditForm, fullName: e.target.value })}
                       className={inputCls}
                       placeholder="Your Full Name *"
                     />
@@ -534,30 +713,42 @@ export default function Agency() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <input
                       type="email"
-                      required
+                      value={auditForm.email}
+                      onChange={(e) => setAuditForm({ ...auditForm, email: e.target.value })}
                       className={inputCls}
                       placeholder="Work Email Address *"
                     />
                     <input
-                      required
+                      value={auditForm.phone}
+                      onChange={(e) => setAuditForm({ ...auditForm, phone: e.target.value })}
                       className={inputCls}
                       placeholder="Phone or WhatsApp Number *"
                     />
                   </div>
                   <input
+                    value={auditForm.websiteUrl}
+                    onChange={(e) => setAuditForm({ ...auditForm, websiteUrl: e.target.value })}
                     className={inputCls}
                     placeholder="Current Website or Instagram Handle (e.g. brand.com)"
                   />
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <select className={inputCls} defaultValue="Conversion & Sales">
-                      <option value="Conversion & Sales">Primary Challenge: Low Conversions</option>
-                      <option value="Visual Identity">Primary Challenge: Outdated Branding</option>
-                      <option value="Video & Content">Primary Challenge: Low Video Reach</option>
-                      <option value="High-Ticket Pricing">Primary Challenge: Price Shopped by Clients</option>
+                    <select
+                      value={auditForm.primaryChallenge}
+                      onChange={(e) => setAuditForm({ ...auditForm, primaryChallenge: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="Low Conversions & Sales">Primary Challenge: Low Conversions</option>
+                      <option value="Outdated Visual Identity">Primary Challenge: Outdated Branding</option>
+                      <option value="Low Social & Video Reach">Primary Challenge: Low Video Reach</option>
+                      <option value="Trouble Charging Premium Rates">Primary Challenge: Price Shopped</option>
                       <option value="Other">Primary Challenge: Other</option>
                     </select>
-                    <select className={inputCls} defaultValue="Live 20-min Strategic Call">
-                      <option value="Live 20-min Strategic Call">Format: Live Video Call (Google Meet)</option>
+                    <select
+                      value={auditForm.preferredFormat}
+                      onChange={(e) => setAuditForm({ ...auditForm, preferredFormat: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="Live 20-min Strategic Call (Google Meet)">Format: Live Video Call (Google Meet)</option>
                       <option value="Recorded Loom Video Teardown">Format: Recorded Loom Video Teardown</option>
                     </select>
                   </div>
@@ -581,41 +772,81 @@ export default function Agency() {
               <Card>
                 <h3 className="font-bold text-white text-lg">Structured Project Request</h3>
                 <p className="text-xs text-[#a594c7] mt-1">Fill out the details below to receive a formal project proposal.</p>
-                <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                  <select className={inputCls}>
-                    <option value="">Primary Service Needed</option>
-                    <option>Brand Identity & Strategy</option>
-                    <option>Website Design & Web App</option>
-                    <option>Short-Form Video Production</option>
-                    <option>AI Automation & Funnels</option>
-                    <option>Full Brand Overhaul (All Pillars)</option>
-                  </select>
-                  <input className={inputCls} placeholder="Target Timeline (e.g. 3-4 Weeks)" />
-                  <input className={inputCls} placeholder="Estimated Budget Range" />
-                  <select className={inputCls}>
-                    <option value="">Client Type</option>
-                    <option>High-Growth Startup</option>
-                    <option>Established Business / Enterprise</option>
-                    <option>Creator / Personal Brand</option>
-                    <option>Non-Profit / Institution</option>
-                  </select>
-                  <input className={inputCls} placeholder="Your Full Name" />
-                  <input className={inputCls} placeholder="Email Address or Phone" />
-                </div>
-                <GradientButton onClick={() => setSent(true)} className="mt-6 w-full shadow-lg shadow-pink-500/20">
-                  Submit Project Request →
-                </GradientButton>
-                <p className="text-xs text-[#a594c7] text-center mt-4">
-                  Prefer to chat instead?{" "}
-                  <a
-                    href={CONTACT.whatsappTeam}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
-                  >
-                    Message us on WhatsApp
-                  </a>
-                </p>
+
+                {formError && (
+                  <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/20 p-3 text-xs text-red-200">
+                    {formError}
+                  </div>
+                )}
+
+                <form onSubmit={handleStructuredSubmit} className="mt-6 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <select
+                      required
+                      value={structForm.service}
+                      onChange={(e) => setStructForm({ ...structForm, service: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">Primary Service Needed *</option>
+                      <option value="Brand Identity & Strategy">Brand Identity & Strategy</option>
+                      <option value="Website Design & Web App">Website Design & Web App</option>
+                      <option value="Short-Form Video Production">Short-Form Video Production</option>
+                      <option value="AI Automation & Funnels">AI Automation & Funnels</option>
+                      <option value="Full Brand Overhaul">Full Brand Overhaul (All Pillars)</option>
+                    </select>
+                    <input
+                      value={structForm.timeline}
+                      onChange={(e) => setStructForm({ ...structForm, timeline: e.target.value })}
+                      className={inputCls}
+                      placeholder="Target Timeline (e.g. 3-4 Weeks)"
+                    />
+                    <input
+                      value={structForm.budget}
+                      onChange={(e) => setStructForm({ ...structForm, budget: e.target.value })}
+                      className={inputCls}
+                      placeholder="Estimated Budget Range"
+                    />
+                    <select
+                      value={structForm.clientType}
+                      onChange={(e) => setStructForm({ ...structForm, clientType: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">Client Type</option>
+                      <option value="High-Growth Startup">High-Growth Startup</option>
+                      <option value="Established Business / Enterprise">Established Business / Enterprise</option>
+                      <option value="Creator / Personal Brand">Creator / Personal Brand</option>
+                      <option value="Non-Profit / Institution">Non-Profit / Institution</option>
+                    </select>
+                    <input
+                      required
+                      value={structForm.name}
+                      onChange={(e) => setStructForm({ ...structForm, name: e.target.value })}
+                      className={inputCls}
+                      placeholder="Your Full Name *"
+                    />
+                    <input
+                      required
+                      value={structForm.contact}
+                      onChange={(e) => setStructForm({ ...structForm, contact: e.target.value })}
+                      className={inputCls}
+                      placeholder="Email Address or Phone *"
+                    />
+                  </div>
+                  <GradientButton type="submit" className="mt-6 w-full shadow-lg shadow-pink-500/20">
+                    Submit Project Request →
+                  </GradientButton>
+                  <p className="text-xs text-[#a594c7] text-center mt-4">
+                    Prefer to chat instead?{" "}
+                    <a
+                      href={CONTACT.whatsappTeam}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                    >
+                      Message us on WhatsApp
+                    </a>
+                  </p>
+                </form>
               </Card>
             ) : (
               <Card>
@@ -623,36 +854,68 @@ export default function Agency() {
                 <p className="mt-1 text-xs text-[#a594c7]">
                   For non-standard projects, consultations, or bespoke scopes — let us know your goals.
                 </p>
-                <textarea
-                  className={`${inputCls} mt-4`}
-                  rows={4}
-                  placeholder="Tell us about your brand, current challenges, and what you aim to achieve..."
-                />
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <select className={inputCls}>
-                    <option value="">Urgency Level</option>
-                    <option>Immediate / Urgent</option>
-                    <option>Within 2-3 Weeks</option>
-                    <option>Planning for Next Quarter</option>
-                  </select>
-                  <input className={inputCls} placeholder="Approximate Budget (Optional)" />
-                  <input className={inputCls} placeholder="Your Name" />
-                  <input className={inputCls} placeholder="Email or Phone" />
-                </div>
-                <GradientButton onClick={() => setSent(true)} className="mt-6 w-full shadow-lg shadow-pink-500/20">
-                  Request Custom Quote →
-                </GradientButton>
-                <p className="text-xs text-[#a594c7] text-center mt-4">
-                  Prefer to chat instead?{" "}
-                  <a
-                    href={CONTACT.whatsappTeam}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
-                  >
-                    Message us on WhatsApp
-                  </a>
-                </p>
+
+                {formError && (
+                  <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/20 p-3 text-xs text-red-200">
+                    {formError}
+                  </div>
+                )}
+
+                <form onSubmit={handleCustomSubmit} className="mt-4 space-y-4">
+                  <textarea
+                    required
+                    rows={4}
+                    value={customForm.goals}
+                    onChange={(e) => setCustomForm({ ...customForm, goals: e.target.value })}
+                    className={inputCls}
+                    placeholder="Tell us about your brand, current challenges, and what you aim to achieve... *"
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <select
+                      value={customForm.urgency}
+                      onChange={(e) => setCustomForm({ ...customForm, urgency: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="Immediate / Urgent">Urgency: Immediate / Urgent</option>
+                      <option value="Within 2-3 Weeks">Urgency: Within 2-3 Weeks</option>
+                      <option value="Planning for Next Quarter">Urgency: Planning for Next Quarter</option>
+                    </select>
+                    <input
+                      value={customForm.budget}
+                      onChange={(e) => setCustomForm({ ...customForm, budget: e.target.value })}
+                      className={inputCls}
+                      placeholder="Approximate Budget (Optional)"
+                    />
+                    <input
+                      required
+                      value={customForm.name}
+                      onChange={(e) => setCustomForm({ ...customForm, name: e.target.value })}
+                      className={inputCls}
+                      placeholder="Your Full Name *"
+                    />
+                    <input
+                      required
+                      value={customForm.contact}
+                      onChange={(e) => setCustomForm({ ...customForm, contact: e.target.value })}
+                      className={inputCls}
+                      placeholder="Email or Phone *"
+                    />
+                  </div>
+                  <GradientButton type="submit" className="mt-6 w-full shadow-lg shadow-pink-500/20">
+                    Request Custom Quote →
+                  </GradientButton>
+                  <p className="text-xs text-[#a594c7] text-center mt-4">
+                    Prefer to chat instead?{" "}
+                    <a
+                      href={CONTACT.whatsappTeam}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-pink-400 hover:text-pink-300 underline underline-offset-2"
+                    >
+                      Message us on WhatsApp
+                    </a>
+                  </p>
+                </form>
               </Card>
             )}
 
@@ -721,6 +984,7 @@ export default function Agency() {
             if (e.target === e.currentTarget) {
               setShowAuditModal(false);
               setAuditSent(false);
+              setModalError("");
             }
           }}
         >
@@ -729,6 +993,7 @@ export default function Agency() {
               onClick={() => {
                 setShowAuditModal(false);
                 setAuditSent(false);
+                setModalError("");
               }}
               className="absolute top-5 right-5 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-[#cabfe0] hover:bg-white/20 hover:text-white transition-all text-lg"
               aria-label="Close modal"
@@ -750,6 +1015,7 @@ export default function Agency() {
                     onClick={() => {
                       setShowAuditModal(false);
                       setAuditSent(false);
+                      setModalError("");
                     }}
                     className="shadow-lg shadow-pink-500/25"
                   >
@@ -781,7 +1047,13 @@ export default function Agency() {
                   A 20-minute strategic diagnostic with our creative director. We will dissect your identity, positioning, and conversion friction to give you a clear roadmap.
                 </p>
 
-                <form onSubmit={handleAuditSubmit} className="mt-5 space-y-3.5">
+                {modalError && (
+                  <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/20 p-3 text-xs text-red-200">
+                    {modalError}
+                  </div>
+                )}
+
+                <form onSubmit={handleModalAuditSubmit} className="mt-5 space-y-3.5">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Brand or Business Name *</label>
@@ -810,7 +1082,6 @@ export default function Agency() {
                       <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Work Email *</label>
                       <input
                         type="email"
-                        required
                         value={auditForm.email}
                         onChange={(e) => setAuditForm({ ...auditForm, email: e.target.value })}
                         className={inputCls}
@@ -820,7 +1091,6 @@ export default function Agency() {
                     <div>
                       <label className="text-[11px] font-semibold text-[#a594c7] block mb-1">Phone Number *</label>
                       <input
-                        required
                         value={auditForm.phone}
                         onChange={(e) => setAuditForm({ ...auditForm, phone: e.target.value })}
                         className={inputCls}
@@ -847,10 +1117,10 @@ export default function Agency() {
                         onChange={(e) => setAuditForm({ ...auditForm, primaryChallenge: e.target.value })}
                         className={inputCls}
                       >
-                        <option value="Conversion & Sales">Low Website Conversions</option>
-                        <option value="Visual Identity">Outdated Visual Identity</option>
-                        <option value="Video & Content">Weak Social & Video Presence</option>
-                        <option value="High-Ticket Pricing">Trouble Charging Premium Rates</option>
+                        <option value="Low Conversions & Sales">Low Website Conversions</option>
+                        <option value="Outdated Visual Identity">Outdated Visual Identity</option>
+                        <option value="Low Social & Video Reach">Weak Social & Video Presence</option>
+                        <option value="Trouble Charging Premium Rates">Trouble Charging Premium Rates</option>
                         <option value="Other">Other / General Strategy</option>
                       </select>
                     </div>

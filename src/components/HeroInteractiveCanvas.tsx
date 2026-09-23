@@ -148,37 +148,24 @@ export default function HeroInteractiveCanvas() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden select-none">
       {/* Dynamic Quiet Stardust Canvas */}
-      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full opacity-70" />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full opacity-60" />
 
-      {/* Floating Quiet 3D / Glass Artistic Objects */}
-      {/* 1. Top Left Floating Soft Glowing Orb */}
-      <div
-        className="animate-float-slow absolute -top-12 -left-12 h-72 w-72 rounded-full bg-gradient-to-br from-pink-500/20 via-purple-600/15 to-transparent blur-3xl pointer-events-none"
-        style={{ animationDuration: "9s" }}
-      />
-
-      {/* 2. Top Right Floating Luminous Mesh */}
-      <div
-        className="animate-float-reverse absolute top-10 right-0 h-96 w-96 rounded-full bg-gradient-to-bl from-purple-500/15 via-pink-600/10 to-transparent blur-3xl pointer-events-none"
-        style={{ animationDuration: "12s" }}
-      />
-
-      {/* 3. Floating Glass Diamond / Prism (Top Left area) */}
+      {/* Floating Glass Diamond / Prism (Top Left area) */}
       <div
         className="animate-float-slow absolute top-1/4 left-[5%] hidden md:flex items-center justify-center pointer-events-none"
         style={{ animationDuration: "10s", animationDelay: "1s" }}
       >
-        <div className="relative h-14 w-14 rotate-12 rounded-2xl border border-white/20 bg-gradient-to-br from-white/10 to-white/[0.02] p-2.5 backdrop-blur-md shadow-xl shadow-pink-500/10">
-          <div className="flex h-full w-full items-center justify-center rounded-xl bg-gradient-to-br from-pink-500/30 to-purple-600/30 text-white shadow-inner">
+        <div className="relative h-14 w-14 rotate-12 rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent p-2.5 backdrop-blur-md shadow-xl shadow-pink-500/5">
+          <div className="flex h-full w-full items-center justify-center rounded-xl bg-gradient-to-br from-pink-500/20 to-purple-600/20 text-white shadow-inner">
             <span className="text-sm font-black tracking-widest text-pink-200">✦</span>
           </div>
-          <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-pink-400 blur-sm" />
+          <div className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-pink-400 blur-sm" />
         </div>
       </div>
 
-      {/* 4. Floating Glass Creative Pill (Right side background) */}
+      {/* Floating Glass Creative Pill (Right side background) */}
       <div
-        className="animate-float-reverse absolute top-[16%] right-[6%] hidden lg:flex items-center gap-2 rounded-full border border-pink-500/25 bg-black/40 px-3.5 py-1.5 backdrop-blur-lg shadow-xl shadow-purple-900/20 pointer-events-none"
+        className="animate-float-reverse absolute top-[16%] right-[6%] hidden lg:flex items-center gap-2 rounded-full border border-pink-500/20 bg-black/50 px-3.5 py-1.5 backdrop-blur-lg shadow-xl shadow-black/40 pointer-events-none"
         style={{ animationDuration: "11s", animationDelay: "2s" }}
       >
         <span className="relative flex h-2 w-2">
@@ -190,23 +177,23 @@ export default function HeroInteractiveCanvas() {
         </span>
       </div>
 
-      {/* 5. Floating Glass Sphere / Torus (Bottom Left of hero) */}
+      {/* Floating Glass Sphere / Torus (Bottom Left of hero) */}
       <div
         className="animate-float-horizontal absolute bottom-12 left-[10%] hidden sm:flex items-center justify-center pointer-events-none"
         style={{ animationDuration: "13s", animationDelay: "0.5s" }}
       >
-        <div className="relative flex h-12 w-12 items-center justify-center rounded-full border border-purple-400/30 bg-purple-950/40 backdrop-blur-md shadow-lg shadow-pink-500/10">
-          <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-pink-500/40 to-purple-400/40 blur-sm" />
+        <div className="relative flex h-12 w-12 items-center justify-center rounded-full border border-purple-500/20 bg-black/50 backdrop-blur-md shadow-lg shadow-black/40">
+          <div className="h-5 w-5 rounded-full bg-gradient-to-tr from-pink-500/20 to-purple-400/20 blur-sm" />
           <span className="absolute text-xs font-bold text-pink-300">⚡</span>
         </div>
       </div>
 
-      {/* 6. Floating Creative Sparkle (Bottom Right) */}
+      {/* Floating Creative Sparkle (Bottom Right) */}
       <div
         className="animate-float-slow absolute bottom-20 right-[12%] hidden md:flex items-center justify-center pointer-events-none"
         style={{ animationDuration: "8s", animationDelay: "3s" }}
       >
-        <div className="flex h-11 w-11 -rotate-6 items-center justify-center rounded-xl border border-white/15 bg-white/[0.05] backdrop-blur-md shadow-lg">
+        <div className="flex h-11 w-11 -rotate-6 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-lg">
           <span className="text-base">🎨</span>
         </div>
       </div>

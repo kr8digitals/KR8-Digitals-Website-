@@ -10,6 +10,7 @@ import {
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Avatar, Check, ImageWithFallback } from "../components/ui";
 import Marquee from "../components/Marquee";
 import TestimonialCarousel from "../components/TestimonialCarousel";
+import CoachingSection from "../components/CoachingSection";
 import Icon from "../components/Icon";
 import CountryPhone from "../components/CountryPhone";
 import { downloadCertificatePdf } from "../utils/certificate";
@@ -178,6 +179,9 @@ function GuestAcademy() {
           <div className="mt-10"><TestimonialCarousel items={getTestimonials()} /></div>
         </div>
       </section>
+
+      {/* NEW 1-ON-1 COACHING (PAY-AS-YOU-LEARN) SECTION */}
+      <CoachingSection />
 
       {curriculum && (
         <CurriculumModal

@@ -40,7 +40,7 @@ export default function LivePage() {
       <div className="mx-auto max-w-6xl px-5">
         {/* HERO SECTION */}
         <div className="text-center">
-          <Pill>LiveKit WebRTC Broadcast Stage</Pill>
+          <Pill>KR8 Real-Time Broadcast Stage</Pill>
           <h1 className="font-display mt-4 text-4xl text-white sm:text-6xl font-bold">
             KR8 Live <span className="text-gradient">Studio & Hall</span>
           </h1>

@@ -16,7 +16,8 @@ import {
   getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, archiveAnnouncementToGallery,
   getHomepageSettings, saveHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES,
   revokeStudentRegistration, suspendStudentAccount, getSuspendedAccounts, restoreSuspendedAccount, upholdSuspendedAccount,
-  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount,
+  getClientRequests, updateClientRequestStatus, deleteClientRequest,
+  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount, type ClientRequest,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
@@ -29,7 +30,7 @@ import {
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Gallery Archive", "Student Management", "Blog",
+  "Overview", "Client Requests", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Gallery Archive", "Student Management", "Blog",
   "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
   "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions", "Supabase Database",
 ];
@@ -175,6 +176,7 @@ export default function Admin() {
             </div>
           )}
 
+          {tab === "Client Requests" && <ClientRequestsManager />}
           {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
           {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
           {tab === "Testimonial Videos" && <TestimonialVideosManager />}
@@ -2051,6 +2053,267 @@ function AcademySkillManager({ skill }: { skill: (typeof SKILLS)[number] }) {
   );
 }
 
+/* ---------------- Client Requests Manager (Agency Inquiries & Coaching) ---------------- */
+
+function ClientRequestsManager() {
+  const [requests, setRequests] = useState<ClientRequest[]>(() => getClientRequests());
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const refresh = () => setRequests(getClientRequests());
+    window.addEventListener("kr8:client-requests-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kr8:client-requests-updated", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  const filtered = requests.filter((r) => {
+    if (filterType !== "all" && r.type !== filterType) return false;
+    if (filterStatus !== "all" && r.status !== filterStatus) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchName = r.name.toLowerCase().includes(q);
+      const matchEmail = r.email.toLowerCase().includes(q);
+      const matchPhone = r.phone.toLowerCase().includes(q);
+      const matchTitle = r.title.toLowerCase().includes(q);
+      if (!matchName && !matchEmail && !matchPhone && !matchTitle) return false;
+    }
+    return true;
+  });
+
+  const countNew = requests.filter((r) => r.status === "new").length;
+  const countContacted = requests.filter((r) => r.status === "contacted").length;
+  const countClosed = requests.filter((r) => r.status === "closed").length;
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case "brand_audit":
+        return <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-2.5 py-0.5 text-[10px] font-bold text-pink-300">✦ Free Brand Audit</span>;
+      case "structured":
+        return <span className="rounded-full bg-blue-500/20 border border-blue-500/40 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">💼 Project Brief</span>;
+      case "custom_quote":
+        return <span className="rounded-full bg-purple-500/20 border border-purple-500/40 px-2.5 py-0.5 text-[10px] font-bold text-purple-300">💬 Custom Quote</span>;
+      case "coaching":
+        return <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">🎯 Coaching Request</span>;
+      case "partnership":
+        return <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">🤝 Partnership</span>;
+      default:
+        return <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white">{type}</span>;
+    }
+  };
+
+  const getStatusBadge = (status: "new" | "contacted" | "closed") => {
+    switch (status) {
+      case "new":
+        return <span className="rounded-full bg-yellow-500/20 border border-yellow-500/40 px-2 py-0.5 text-[10px] font-bold text-yellow-300">New</span>;
+      case "contacted":
+        return <span className="rounded-full bg-sky-500/20 border border-sky-500/40 px-2 py-0.5 text-[10px] font-bold text-sky-300">Contacted</span>;
+      case "closed":
+        return <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold text-emerald-300">Closed</span>;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Metrics Row */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-wider text-[#a594c7]">Total Inquiries</p>
+          <p className="font-display text-2xl font-bold text-white mt-1">{requests.length}</p>
+        </Card>
+        <Card className="p-4 border-yellow-500/30 bg-yellow-500/5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wider text-yellow-300 font-bold">New & Actionable</p>
+            {countNew > 0 && <span className="h-2 w-2 rounded-full bg-yellow-400 animate-ping" />}
+          </div>
+          <p className="font-display text-2xl font-bold text-yellow-200 mt-1">{countNew}</p>
+        </Card>
+        <Card className="p-4 border-sky-500/30">
+          <p className="text-xs uppercase tracking-wider text-sky-300">Contacted / Active</p>
+          <p className="font-display text-2xl font-bold text-sky-200 mt-1">{countContacted}</p>
+        </Card>
+        <Card className="p-4 border-emerald-500/30">
+          <p className="text-xs uppercase tracking-wider text-emerald-300">Closed / Completed</p>
+          <p className="font-display text-2xl font-bold text-emerald-200 mt-1">{countClosed}</p>
+        </Card>
+      </div>
+
+      {/* Main Inbox Card */}
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+              <span>Client Requests & Inbound Inquiries</span>
+              {countNew > 0 && (
+                <span className="rounded-full bg-pink-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                  {countNew} new
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-[#b8aecf] mt-1">
+              All inbound submissions from the Agency page, 1-on-1 Coaching bookings, and Partnership proposals.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email..."
+              className="rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none w-44"
+            />
+          </div>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: "all", label: "All Types" },
+              { id: "brand_audit", label: "Brand Audits" },
+              { id: "structured", label: "Structured Projects" },
+              { id: "custom_quote", label: "Custom Quotes" },
+              { id: "coaching", label: "1-on-1 Coaching" },
+              { id: "partnership", label: "Partnerships" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setFilterType(f.id)}
+                className={`rounded-full px-3 py-1 font-semibold transition-all ${
+                  filterType === f.id
+                    ? "bg-gradient-pink text-white shadow-md"
+                    : "border border-white/10 bg-white/5 text-[#b8aecf] hover:text-white"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-[#8a7ba8]">Status:</span>
+            {(["all", "new", "contacted", "closed"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase transition-all ${
+                  filterStatus === s
+                    ? "bg-white/20 text-white"
+                    : "text-[#8a7ba8] hover:text-[#cabfe0]"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Request List */}
+        <div className="mt-5 space-y-3">
+          {filtered.length === 0 ? (
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-8 text-center text-xs text-[#8a7ba8]">
+              No client requests found matching the current filters. When a visitor submits an Agency project, Free Brand Audit, or 1-on-1 Coaching request, it will appear here instantly.
+            </div>
+          ) : (
+            filtered.map((req) => (
+              <div
+                key={req.id}
+                className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 hover:border-pink-500/30 transition-all space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {getTypeBadge(req.type)}
+                    <h4 className="font-bold text-white text-sm">{req.name}</h4>
+                    <span className="text-xs text-[#8a7ba8]">·</span>
+                    <span className="text-[11px] text-[#8a7ba8]">
+                      {new Date(req.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(req.status)}
+                    <select
+                      value={req.status}
+                      onChange={(e) => updateClientRequestStatus(req.id, e.target.value as any)}
+                      className="rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-[11px] font-semibold text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="new">Mark New</option>
+                      <option value="contacted">Mark Contacted</option>
+                      <option value="closed">Mark Closed</option>
+                    </select>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete request from ${req.name}?`)) {
+                          deleteClientRequest(req.id);
+                        }
+                      }}
+                      className="rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-all"
+                      title="Delete request"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {/* Contact links & summary */}
+                <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                  <div className="space-y-1">
+                    {req.email && (
+                      <p className="flex items-center gap-2 text-[#cabfe0]">
+                        <span className="text-pink-400">✉️</span>
+                        <a href={`mailto:${req.email}`} className="text-white hover:underline">
+                          {req.email}
+                        </a>
+                      </p>
+                    )}
+                    {req.phone && (
+                      <p className="flex items-center gap-2 text-[#cabfe0]">
+                        <span className="text-pink-400">📞</span>
+                        <a href={`tel:${req.phone}`} className="text-white hover:underline">
+                          {req.phone}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 text-left sm:text-right">
+                    <p className="text-xs font-semibold text-pink-300">{req.title}</p>
+                  </div>
+                </div>
+
+                {/* Details Breakdown */}
+                {req.details && Object.keys(req.details).length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-black/30 p-3 text-xs space-y-1.5">
+                    {Object.entries(req.details).map(([k, v]) => (
+                      <div key={k} className="flex flex-col sm:flex-row sm:items-start justify-between gap-1">
+                        <span className="font-semibold text-[#8a7ba8] capitalize">
+                          {k.replace(/([A-Z])/g, " $1")}:
+                        </span>
+                        <span className="text-white font-medium break-all max-w-lg text-left sm:text-right">
+                          {String(v)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function AgencyManager() {
   return (
     <Card>
@@ -2652,7 +2915,7 @@ function TestimonialVideosManager() {
       return;
     }
 
-    const effectiveVideo = videoUrl.trim() || "/videos/testimonial1.mp4";
+    const effectiveVideo = videoUrl.trim() || "/videos/testimonial_bio_nicz.mp4";
     const effectivePoster = posterUrl.trim() || "/videos/testimonial1_poster.jpg";
 
     let parsedCaptions = undefined;
@@ -2827,7 +3090,7 @@ function TestimonialVideosManager() {
                   type="text"
                   value={videoUrl}
                   onChange={(e) => setVideoUrl(e.target.value)}
-                  placeholder="/videos/testimonial1.mp4 or URL"
+                  placeholder="/videos/testimonial_bio_nicz.mp4 or URL"
                   className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
                 />
                 <label className="cursor-pointer shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 active:scale-95 transition-all">
@@ -3466,7 +3729,7 @@ function LiveStreamsManager() {
               <h3 className="font-bold text-white text-lg">Active Live Broadcasts & WebRTC Stage</h3>
             </div>
             <p className="mt-1 text-xs text-[#b8aecf]">
-              Monitor running broadcasts, viewer counts, LiveKit SFU relay state, and enforce broadcast termination.
+              Monitor running broadcasts, viewer counts, real-time relay state, and enforce broadcast termination.
             </p>
           </div>
 
@@ -3490,7 +3753,7 @@ function LiveStreamsManager() {
                   <th className="py-2.5 px-3">Visibility</th>
                   <th className="py-2.5 px-3">Started</th>
                   <th className="py-2.5 px-3">Viewers</th>
-                  <th className="py-2.5 px-3">LiveKit Room</th>
+                  <th className="py-2.5 px-3">Broadcast Room</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -3548,9 +3811,9 @@ function LiveStreamsManager() {
       <Card>
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <div>
-            <h3 className="font-bold text-white text-lg">LiveKit Cloud Stream Recordings Library</h3>
+            <h3 className="font-bold text-white text-lg">KR8 Broadcast Recordings Library</h3>
             <p className="text-xs text-[#8a7ba8]">
-              Manage egress cloud-recorded broadcast sessions, duration, storage footprint, and playback visibility.
+              Manage cloud-recorded broadcast sessions, duration, storage footprint, and playback visibility.
             </p>
           </div>
           {statusMsg && <span className="text-xs text-pink-300 font-semibold">{statusMsg}</span>}

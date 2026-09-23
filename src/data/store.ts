@@ -2377,7 +2377,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Graphic Design",
     caption: "At first I thought it was just another random WhatsApp group, but KR8 Digitals gave real structured training and assignments.",
     img: "/videos/testimonial_new_1_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1vEiF43pcFGeIk4699cc-FABIw4yOvMOh&export=download&confirm=t",
+    video: "/videos/testimonial_new_1.mp4",
     duration: 114,
     createdAt: 1726000000000 + 490000,
     captions: [
@@ -2395,14 +2395,15 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Video Editing & Animation",
     caption: "The classes, practical drills, and tutor feedback pushed me from a total novice to creating industry-grade video edits.",
     img: "/videos/testimonial_new_2_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1BpG9jSjAjEw45-YQNyKWGaD1QhJl86Md&export=download&confirm=t",
-    duration: 265,
+    video: "/videos/testimonial_new_2.mp4",
+    duration: 27,
     createdAt: 1726000000000 + 480000,
     captions: [
       { start: 0.0, end: 4.0, text: "Hello everyone, my name is William Marvelous." },
-      { start: 4.0, end: 10.0, text: "I am a student of the KR8 Digitals cohort." },
-      { start: 10.0, end: 18.5, text: "Learning video editing here has been an incredible experience with real hands-on projects." },
-      { start: 18.5, end: 28.0, text: "From pacing and cutting to motion effects, the mentorship made all the difference." },
+      { start: 4.0, end: 8.5, text: "I am a student of the KR8 Digitals cohort." },
+      { start: 8.5, end: 14.5, text: "Learning video editing here has been an incredible experience with real hands-on projects." },
+      { start: 14.5, end: 20.0, text: "From pacing and cutting to motion effects, the mentorship made all the difference." },
+      { start: 20.0, end: 27.0, text: "Zero cost for training, learn and grow with KR8 Digitals!" },
     ],
   },
   {
@@ -2412,13 +2413,14 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Brand Identity & Graphic Design",
     caption: "KR8 Digitals transformed how I understand branding and creative problem solving. 100% free with real mentorship.",
     img: "/videos/testimonial_new_3_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1XMH36PfFRvmth6FnYT1IPuCbafBxIZ4z&export=download&confirm=t",
-    duration: 304,
+    video: "/videos/testimonial_new_3.mp4",
+    duration: 24,
     createdAt: 1726000000000 + 470000,
     captions: [
       { start: 0.0, end: 4.5, text: "Hello everyone, my name is Adrian Washington." },
-      { start: 4.5, end: 12.0, text: "KR8 Digitals is teaching valuable high-income digital skills completely free." },
-      { start: 12.0, end: 20.0, text: "The mentors review your work thoroughly and show you how to design for real clients." },
+      { start: 4.5, end: 11.0, text: "KR8 Digitals is teaching valuable high-income digital skills completely free." },
+      { start: 11.0, end: 17.5, text: "The mentors review your work thoroughly and show you how to design for real clients." },
+      { start: 17.5, end: 24.0, text: "If you want to transform your creative career, join KR8 Digitals today!" },
     ],
   },
   {
@@ -2428,7 +2430,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Graphic Design",
     caption: "One of the graduate students of KR8 Digitals Design. The tutors take their time to review assignments and ensure you improve daily.",
     img: "/videos/testimonial_new_4_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1Dia0jVpZm0oCZXtsNxlg9y6dp4X2tGP8&export=download&confirm=t",
+    video: "/videos/testimonial_new_4.mp4",
     duration: 137,
     createdAt: 1726000000000 + 460000,
     captions: [
@@ -2444,7 +2446,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Digital Skills & Design",
     caption: "I saw a WhatsApp status about KR8 Digitals and made inquiries. Found out it was completely free — no hidden fees or charges.",
     img: "/videos/testimonial_new_5_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1prlM86ZKaG0bCVJ0OXpXj-NR2m-2w-fj&export=download&confirm=t",
+    video: "/videos/testimonial_new_5.mp4",
     duration: 156,
     createdAt: 1726000000000 + 450000,
     captions: [
@@ -2461,7 +2463,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Content Creation & Design",
     caption: "Before KR8, I had zero digital skills. The structured timetable, assignments, and cohort community gave me the guidance I needed.",
     img: "/videos/testimonial_new_6_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1bbBLRDbfJFyyw9FR44hcb49N_drfHx2k&export=download&confirm=t",
+    video: "/videos/testimonial_new_6.mp4",
     duration: 209,
     createdAt: 1726000000000 + 440000,
     captions: [
@@ -2477,7 +2479,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Web Development",
     caption: "Graduating from KR8 Digitals. I learned practical coding and digital craft with dedicated tutors backing every student.",
     img: "/videos/testimonial_new_7_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1bS4qrV9lGhpJCSa_ieStYTG456PdhzFq&export=download&confirm=t",
+    video: "/videos/testimonial_new_7.mp4",
     duration: 83,
     createdAt: 1726000000000 + 430000,
     captions: [
@@ -2493,7 +2495,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Video Editing & Social Media",
     caption: "I can create high-impact videos myself and I'm proud of it. I was skeptical at first, but KR8 didn't collect a single dime from us.",
     img: "/videos/testimonial_new_8_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1H2KInXBXrkR7hfMKfoiD8CeUL0zntGV4&export=download&confirm=t",
+    video: "/videos/testimonial_new_8.mp4",
     duration: 120,
     createdAt: 1726000000000 + 420000,
     captions: [
@@ -2510,7 +2512,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Graphic Design",
     caption: "I joined KR8 Digitals without knowing what to expect. The assignments and daily tutor feedback pushed me to build real work.",
     img: "/videos/testimonial_new_9_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1KBor3PTM2K_C0BGS48-E4WxLy3FfFZ-7&export=download&confirm=t",
+    video: "/videos/testimonial_new_9.mp4",
     duration: 96,
     createdAt: 1726000000000 + 410000,
     captions: [
@@ -2526,7 +2528,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Digital Skills & Marketing",
     caption: "Saw a flyer on WhatsApp for KR8 Digitals Tribe. The community accountability and live sessions make learning stick.",
     img: "/videos/testimonial_new_10_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1LH993GXoius47aJx8AnZU5p5DjmHZVTB&export=download&confirm=t",
+    video: "/videos/testimonial_new_10.mp4",
     duration: 65,
     createdAt: 1726000000000 + 400000,
     captions: [
@@ -2542,7 +2544,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Social Media Strategy",
     caption: "KR8 Digitals opened my eyes to how digital skills create direct earning power for youth across Africa.",
     img: "/videos/testimonial_new_11_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1zuhzq6fy2OOmxjwZi-RQ8AieWqyuwKl2&export=download&confirm=t",
+    video: "/videos/testimonial_new_11.mp4",
     duration: 44,
     createdAt: 1726000000000 + 390000,
     captions: [
@@ -2558,7 +2560,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Graphic Design & Animation",
     caption: "My name is Blessed Ayemere Well. KR8 Digitals equipped me with professional design skills with 0 cost for certificate or training.",
     img: "/videos/testimonial_new_12_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1v0grNm1P1N3C1yau_9j4YynisVihvPhH&export=download&confirm=t",
+    video: "/videos/testimonial_new_12.mp4",
     duration: 61,
     createdAt: 1726000000000 + 380000,
     captions: [
@@ -2574,7 +2576,7 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
     skill: "Content Creation & Editing",
     caption: "When a friend posted KR8 Digitals on her status, I wondered if free training could be real. Tutors guide you every step of the way!",
     img: "/videos/testimonial_new_13_poster.jpg",
-    video: "https://drive.usercontent.google.com/download?id=1TUR1T1fMiSshk8vfbz6Yp3IsCd53YYPM&export=download&confirm=t",
+    video: "/videos/testimonial_new_13.mp4",
     duration: 161,
     createdAt: 1726000000000 + 370000,
     captions: [
@@ -2670,7 +2672,7 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
   },
 ];
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v10";
+const TESTIMONIAL_KEY = "kr8_testimonials_v12";
 const VIDEO_COMMENT_KEY = "kr8_video_comments_v3";
 
 export function getTestimonials(): Testimonial[] {
@@ -4161,6 +4163,99 @@ export function suspendStreamActivities(streamId: string): void {
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:stream-suspended"));
+  }
+}
+
+export type ClientRequestType = "structured" | "custom_quote" | "brand_audit" | "coaching" | "partnership";
+
+export type ClientRequest = {
+  id: string;
+  type: ClientRequestType;
+  title: string;
+  name: string;
+  email: string;
+  phone: string;
+  details: Record<string, string | number | undefined>;
+  createdAt: string;
+  status: "new" | "contacted" | "closed";
+};
+
+const CLIENT_REQUESTS_KEY = "kr8_client_requests_v1";
+let memoryClientRequests: ClientRequest[] = [];
+
+export function getClientRequests(): ClientRequest[] {
+  if (typeof window === "undefined") return memoryClientRequests;
+  try {
+    const raw = localStorage.getItem(CLIENT_REQUESTS_KEY);
+    return raw ? JSON.parse(raw) : memoryClientRequests;
+  } catch {
+    return memoryClientRequests;
+  }
+}
+
+export function saveClientRequest(data: {
+  type: ClientRequestType;
+  title: string;
+  name: string;
+  email: string;
+  phone: string;
+  details: Record<string, string | number | undefined>;
+}): { success: boolean; id?: string; error?: string } {
+  try {
+    if (!data.name?.trim()) {
+      return { success: false, error: "Full Name or Organization is required." };
+    }
+    if (!data.email?.trim() && !data.phone?.trim()) {
+      return { success: false, error: "Please provide either a valid Email Address or Phone Number so we can reach you." };
+    }
+    const current = getClientRequests();
+    const newReq: ClientRequest = {
+      id: "req_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      type: data.type,
+      title: data.title || "Inbound Client Request",
+      name: data.name.trim(),
+      email: data.email?.trim() || "",
+      phone: data.phone?.trim() || "",
+      details: data.details || {},
+      createdAt: new Date().toISOString(),
+      status: "new",
+    };
+    current.unshift(newReq);
+    memoryClientRequests = current;
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(CLIENT_REQUESTS_KEY, JSON.stringify(current));
+        window.dispatchEvent(new Event("kr8:client-requests-updated"));
+      } catch (storageErr: any) {
+        return { success: false, error: storageErr?.message || "Storage quota exceeded" };
+      }
+    }
+    return { success: true, id: newReq.id };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to save request to database." };
+  }
+}
+
+export function updateClientRequestStatus(id: string, status: "new" | "contacted" | "closed"): void {
+  const current = getClientRequests().map((r) => (r.id === id ? { ...r, status } : r));
+  memoryClientRequests = current;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(CLIENT_REQUESTS_KEY, JSON.stringify(current));
+      window.dispatchEvent(new Event("kr8:client-requests-updated"));
+    } catch {}
+  }
+}
+
+export function deleteClientRequest(id: string): void {
+  const current = getClientRequests().filter((r) => r.id !== id);
+  memoryClientRequests = current;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(CLIENT_REQUESTS_KEY, JSON.stringify(current));
+      window.dispatchEvent(new Event("kr8:client-requests-updated"));
+    } catch {}
   }
 }
 

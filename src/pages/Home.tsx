@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { IMG } from "../data/images";
-import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, DEFAULT_NARRATIVE_LINES, studentCount, tribeCount } from "../data/store";
+import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, studentCount, tribeCount } from "../data/store";
 import Marquee from "../components/Marquee";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
@@ -53,14 +53,14 @@ const pillars = [
     label: "The Academy",
     title: "Zero Tuition. Pure Craft.",
     desc: "Intensive week-by-week cohorts in Graphic Design, Web Engineering, and Video Editing. Real tutors, live feedback, verifiable graduation certificates — 100% free.",
-    to: "/register",
+    to: "/academy",
   },
   {
     icon: "users" as const,
     label: "The Tribe",
     title: "Never Build Alone Again.",
     desc: "An unbroken African creative family. Share messy in-progress drafts, find collaborators, exchange paid gigs, and lift each other into high-income careers.",
-    to: "/tribe#join",
+    to: "/tribe",
   },
   {
     icon: "video" as const,
@@ -79,6 +79,14 @@ const journey = [
   { n: "5", t: "Graduate & Step into Paid Client Work" },
 ];
 
+const PILL_MESSAGES = [
+  "Unified Creative Institution & Agency",
+  "Zero Tuition · 100% Free Cohorts",
+  "Doubt to Proof · We Made It Real",
+  "From Novice to Paid Professional",
+  "Africa's Creative Movement",
+];
+
 function GuestHome() {
   const announcements = getAnnouncements();
   const portfolio = getPortfolio();
@@ -94,109 +102,50 @@ function GuestHome() {
     };
   }, []);
 
-  const narrativeLines = homepageSettings.narrativeLines && homepageSettings.narrativeLines.length
-    ? homepageSettings.narrativeLines
-    : DEFAULT_NARRATIVE_LINES;
-
-  // Subtle animated sliding sequence of skepticism/doubt lines above the headline
-  const [doubtIndex, setDoubtIndex] = useState(0);
-  const [doubtPhase, setDoubtPhase] = useState<"enter" | "active" | "exit">("active");
+  // Top pill badge rotating text (starts on initial institutional branding, then rotates every 3.8s)
+  const [pillIndex, setPillIndex] = useState(0);
+  const [pillFade, setPillFade] = useState(false);
 
   useEffect(() => {
-    if (!narrativeLines.length) return;
-    const holdTimer = setTimeout(() => {
-      setDoubtPhase("exit");
-      const switchTimer = setTimeout(() => {
-        setDoubtIndex((prev) => (prev + 1) % narrativeLines.length);
-        setDoubtPhase("enter");
-        requestAnimationFrame(() => {
-          setTimeout(() => setDoubtPhase("active"), 20);
-        });
-      }, 400);
-      return () => clearTimeout(switchTimer);
-    }, 3200);
-
-    return () => clearTimeout(holdTimer);
-  }, [doubtIndex, narrativeLines.length]);
+    const timer = setInterval(() => {
+      setPillFade(true);
+      setTimeout(() => {
+        setPillIndex((prev) => (prev + 1) % PILL_MESSAGES.length);
+        setPillFade(false);
+      }, 300);
+    }, 3800);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <div>
-      {/* HERO SECTION — Deep Dark Theme Matching Site Tone */}
+      {/* HERO SECTION — Deep Dark Obsidian Theme Matching Site Tone */}
       <section className="hero-section relative min-h-[auto] md:min-h-[82vh] flex items-center overflow-hidden pt-4 pb-12 sm:pt-6 sm:pb-16 md:pt-7 md:pb-20">
-        {/* Ambient Subtle Dark Gradient Atmosphere */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div
-            className="absolute -top-[25%] left-1/2 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-purple-950/25 blur-[140px]"
-          />
-          <div
-            className="absolute top-[35%] -left-[15%] h-[400px] w-[500px] rounded-full bg-purple-950/20 blur-[130px]"
-          />
-          <div
-            className="absolute top-[45%] -right-[15%] h-[400px] w-[500px] rounded-full bg-pink-950/15 blur-[130px]"
-          />
-        </div>
-
-        {/* Ambient Subtle Gradient Ribbon */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 opacity-25">
-          <svg className="absolute w-[200%] h-full -top-10 left-0" viewBox="0 0 1440 600" fill="none">
-            <path
-              d="M-200 350 C 200 150, 500 480, 850 280 C 1200 80, 1400 400, 1700 240"
-              stroke="url(#hero-ribbon-gradient)"
-              strokeWidth="2"
-              strokeDasharray="12 8"
-              strokeLinecap="round"
-            />
-            <defs>
-              <linearGradient id="hero-ribbon-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ec4899" stopOpacity="0.15" />
-                <stop offset="50%" stopColor="#a855f7" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#ec4899" stopOpacity="0.15" />
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-
         {/* Dynamic Interactive Background Canvas & Floating Creative Objects */}
         <HeroInteractiveCanvas />
 
         <div className="hero-container relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6">
-          {/* Institution Badge with live pulsing status — Centered above both columns */}
-          <div className="flex w-full justify-center mb-5 sm:mb-8">
-            <div className="hero-badge inline-flex items-center justify-center gap-2 rounded-full border border-pink-500/30 bg-gradient-to-r from-pink-500/15 via-purple-500/15 to-transparent px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 text-center">
+          {/* Top Pill Badge with Smoothly Rotating Text (Always single-line, never wraps) */}
+          <div className="flex w-full justify-center mb-5 sm:mb-8 px-2">
+            <div className="hero-badge inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full border border-pink-500/30 bg-black/70 px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 whitespace-nowrap max-w-full">
               <span className="relative flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pink-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-pink-500" />
               </span>
-              <span className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 truncate">
-                Unified Creative Institution & Digital Agency
+              <span
+                className={`text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 truncate transition-opacity duration-300 ${
+                  pillFade ? "opacity-0" : "opacity-100"
+                }`}
+              >
+                {PILL_MESSAGES[pillIndex]}
               </span>
             </div>
           </div>
 
           {/* Two-Column Layout: Left Text / Right Image (Stacks vertically on mobile) */}
           <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-12">
-            {/* Left Column: Typography, Supporting Description, Subtle Animated Sequence, All 3 CTAs & Glass Stats */}
+            {/* Left Column: Typography, Supporting Description, All 3 CTAs & Glass Stats */}
             <div className="hero-content rise-in lg:col-span-7">
-              {/* Subtle Animated Skepticism Line Sequence (No static boxed card) */}
-              <div className="h-7 sm:h-8 mb-2 flex items-center overflow-hidden">
-                <div
-                  className={`inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium tracking-wide transition-all duration-400 ease-out ${
-                    doubtPhase === "active"
-                      ? "translate-y-0 opacity-100"
-                      : doubtPhase === "enter"
-                      ? "-translate-y-3 opacity-0"
-                      : "translate-y-3 opacity-0"
-                  }`}
-                >
-                  <span className="text-pink-400/90 text-xs select-none">✦</span>
-                  <span className="text-pink-300 font-serif italic text-xs sm:text-sm select-none">“</span>
-                  <span className="text-[#e2d5f2] font-medium tracking-wide">
-                    {narrativeLines[doubtIndex] || "They said free skills training doesn't exist."}
-                  </span>
-                  <span className="text-pink-300 font-serif italic text-xs sm:text-sm select-none">”</span>
-                </div>
-              </div>
-
               {/* Bold Headline — Resolving Doubt into Proof */}
               <h1 className="hero-headline font-display text-4xl sm:text-6xl lg:text-7xl font-bold leading-tight tracking-tight text-white">
                 {homepageSettings.heroHeadline ? (
@@ -232,17 +181,17 @@ function GuestHome() {
                 </div>
               </div>
 
-              {/* All Three CTA Buttons on a Single Line */}
+              {/* All Three CTA Buttons on a Single Line (Two-Step Exploration Routing) */}
               <div className="hero-actions mt-6 sm:mt-8 flex items-center gap-2 sm:gap-3 flex-nowrap overflow-x-auto pb-1 max-w-full">
                 <GradientButton
-                  to="/register"
+                  to="/academy"
                   className="whitespace-nowrap px-4 sm:px-6 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold shadow-lg shadow-pink-500/25 shrink-0"
                 >
                   <span>Start Learning Free</span>
                   <span className="ml-1 sm:ml-1.5 inline-block">→</span>
                 </GradientButton>
                 <GhostButton
-                  to="/tribe#join"
+                  to="/tribe"
                   className="hero-tribe-cta whitespace-nowrap px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs font-semibold shrink-0 border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 text-[#e4daf2]"
                 >
                   Join the Tribe
@@ -362,7 +311,7 @@ function GuestHome() {
               ))}
             </div>
             <div className="mt-12 text-center">
-              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
+              <GradientButton to="/academy" className="shadow-xl shadow-pink-500/25">
                 Join the Free Cohort Today →
               </GradientButton>
             </div>

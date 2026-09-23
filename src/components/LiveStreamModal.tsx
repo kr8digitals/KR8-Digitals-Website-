@@ -449,10 +449,10 @@ export default function LiveStreamModal() {
                   <Icon name="video" size={28} />
                 </div>
                 <h3 className="font-display text-2xl font-bold text-white sm:text-3xl">
-                  LiveKit Broadcaster Studio
+                  KR8 Live Studio
                 </h3>
                 <p className="mt-1 text-sm text-[#cabfe0] max-w-md">
-                  Broadcast live masterclasses with WebRTC SFU relay, cloud recording, Q&A, and interactive audience participation.
+                  Broadcast live masterclasses with ultra-low latency relay, interactive Q&A, and live audience participation.
                 </p>
 
                 {canHost ? (
