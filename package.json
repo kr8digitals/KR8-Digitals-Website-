@@ -4,8 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "test -d node_modules || npm install",
     "dev": "vite",
+    "prebuild": "test -d node_modules || npm install",
     "build": "tsc -b && vite build",
+    "prepreview": "test -d node_modules || npm install",
     "preview": "vite preview"
   },
   "dependencies": {
