@@ -1,5 +1,7 @@
-import { PDFDocument, rgb } from "pdf-lib";
+import { PDFDocument } from "pdf-lib";
 import QRCode from "qrcode";
+import { getCertificateTemplate, type CertificateTier } from "../data/certificateTemplates";
+import type { Account } from "../data/store";
 
 const DB_NAME = "kr8_certs_db_v1";
 const STORE_NAME = "certificates";
@@ -26,9 +28,36 @@ function openDb(): Promise<IDBDatabase | null> {
 
 export type CertPosition = "bottom-right" | "bottom-left" | "bottom-center";
 
-export async function generateVerifyQrCode(studentId: string, origin?: string): Promise<string> {
-  const baseOrigin = origin || (typeof window !== "undefined" ? window.location.origin : "https://kr8digitals.com");
-  const verifyUrl = `${baseOrigin}/verify?id=${encodeURIComponent(studentId)}`;
+/**
+ * Format student name according to KR8 Digitals standards:
+ * - ALL CAPS
+ * - First name & last name preserved fully
+ * - Middle name(s) abbreviated with initial when 3 or more names exist or length > 22
+ * e.g. "John Thomas Theophilus" -> "JOHN T. THEOPHILUS"
+ */
+export function formatCertificateStudentName(rawName: string): string {
+  if (!rawName) return "";
+  const parts = rawName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return parts[0]?.toUpperCase() || "";
+  }
+  if (parts.length === 2) {
+    return `${parts[0]} ${parts[1]}`.toUpperCase();
+  }
+
+  // 3 or more parts: first and last name fully written, middle name(s) abbreviated with initial
+  // e.g. "John Thomas Theophilus" -> "JOHN T. THEOPHILUS"
+  const firstName = parts[0];
+  const lastName = parts[parts.length - 1];
+  const middleInitials = parts
+    .slice(1, parts.length - 1)
+    .map((m) => `${m[0].toUpperCase()}.`)
+    .join(" ");
+
+  return `${firstName.toUpperCase()} ${middleInitials} ${lastName.toUpperCase()}`;
+}
+
+export async function generateVerifyQrCode(verifyUrl: string): Promise<string> {
   return QRCode.toDataURL(verifyUrl, {
     width: 320,
     margin: 1,
@@ -40,111 +69,199 @@ export async function generateVerifyQrCode(studentId: string, origin?: string): 
   });
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
-  });
-}
-
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = (e) => reject(new Error(`Failed to load certificate template image: ${src} (${e})`));
     img.src = src;
   });
 }
 
-export async function overlayQrOnImage(
-  imageSource: File | string,
-  qrDataUrl: string,
-  studentId: string,
-  position: CertPosition = "bottom-right"
-): Promise<{ imageUrl: string; pdfBytes: Uint8Array }> {
-  const imageSrc = typeof imageSource === "string" ? imageSource : await readFileAsDataUrl(imageSource);
-  const [certImg, qrImg] = await Promise.all([loadImage(imageSrc), loadImage(qrDataUrl)]);
+let fontLoadedPromise: Promise<boolean> | null = null;
+export async function ensureEncodeSansFont(): Promise<boolean> {
+  if (typeof window === "undefined" || typeof document === "undefined") return false;
+  if (fontLoadedPromise) return fontLoadedPromise;
+
+  fontLoadedPromise = (async () => {
+    try {
+      if (document.fonts.check('bold 16px "Encode Sans"')) {
+        return true;
+      }
+      const font = new FontFace("Encode Sans", "url(/fonts/EncodeSans-Bold.ttf)", {
+        weight: "700",
+        style: "normal",
+      });
+      const loaded = await font.load();
+      document.fonts.add(loaded);
+      await document.fonts.ready;
+      return true;
+    } catch (err) {
+      console.warn("Could not load Encode Sans local TTF font, falling back to CSS:", err);
+      return false;
+    }
+  })();
+
+  return fontLoadedPromise;
+}
+
+export interface GeneratedCertificateResult {
+  certId: string;
+  imageUrl: string;
+  pdfBytes: Uint8Array;
+  qrCodeUrl: string;
+  verifyUrl: string;
+  formattedName: string;
+  templateUrl: string;
+  achievementText: string;
+  tier: CertificateTier;
+  skillKey: string;
+  courseName: string;
+}
+
+/**
+ * Automatically creates and generates the student's certificate:
+ * - Selects the correct template for skill and tier
+ * - Formats registered name in ALL CAPS using Encode Sans Bold
+ * - Positions name centered above the designated baseline line
+ * - Automatically generates unique QR code pointing to /verify?id=...&cert=...
+ * - Draws subtle verification badge with KR8 ID and Scan to Verify
+ * - Exports both crisp image and downloadable PDF
+ */
+export async function generateAutomaticCertificate(params: {
+  student: Account;
+  skillKey: string;
+  tier: CertificateTier;
+  additionalNotes?: string;
+  origin?: string;
+  certId?: string;
+}): Promise<GeneratedCertificateResult> {
+  const { student, skillKey, tier, origin } = params;
+
+  // 1. Resolve template configuration
+  const config = getCertificateTemplate(skillKey, tier);
+  const certId =
+    params.certId ||
+    `CERT-KR8-${student.id.replace(/[^A-Za-z0-9]/g, "")}-${Date.now().toString(36).toUpperCase()}`;
+
+  const baseOrigin =
+    origin || (typeof window !== "undefined" ? window.location.origin : "https://kr8digitals.com");
+  const verifyUrl = `${baseOrigin}/verify?id=${encodeURIComponent(student.id)}&cert=${encodeURIComponent(certId)}`;
+
+  // 2. Load font, template image, and QR code in parallel
+  const [, certImg, qrDataUrl] = await Promise.all([
+    ensureEncodeSansFont(),
+    loadImage(config.templateUrl),
+    generateVerifyQrCode(verifyUrl),
+  ]);
+
+  const qrImg = await loadImage(qrDataUrl);
+
+  // 3. Initialize Canvas with native template dimensions
+  const width = certImg.naturalWidth || certImg.width || 2048;
+  const height = certImg.naturalHeight || certImg.height || 1331;
 
   const canvas = document.createElement("canvas");
-  const width = certImg.naturalWidth || certImg.width || 1600;
-  const height = certImg.naturalHeight || certImg.height || 1130;
   canvas.width = width;
   canvas.height = height;
-
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not initialize 2D canvas context.");
+  if (!ctx) throw new Error("Could not initialize 2D canvas context for certificate.");
 
-  // Draw the original certificate image
+  // Draw certificate template
   ctx.drawImage(certImg, 0, 0, width, height);
 
-  // Calculate QR badge sizing (approx 11% of width, bounded between 110 and 220 px)
-  const qrSize = Math.max(110, Math.min(220, Math.round(width * 0.11)));
+  // 4. Format & Render Student Name
+  const formattedName = formatCertificateStudentName(student.name);
+
+  // Baseline at Y = 50.8% of height, centered at X = 50.0% of width
+  const centerX = Math.round(width * config.geometry.nameCenterRatioX);
+  const baselineY = Math.round(height * config.geometry.nameBaselineRatioY);
+  const maxAllowedWidth = Math.round(width * config.geometry.nameMaxRatioWidth);
+
+  // Base font size: approx 3.7% of image width
+  let fontSize = Math.round(width * 0.037);
+  ctx.font = `bold ${fontSize}px "Encode Sans", sans-serif`;
+  let textWidth = ctx.measureText(formattedName).width;
+
+  // Auto-scale font down if name exceeds maximum line width
+  while (textWidth > maxAllowedWidth && fontSize > 24) {
+    fontSize -= 2;
+    ctx.font = `bold ${fontSize}px "Encode Sans", sans-serif`;
+    textWidth = ctx.measureText(formattedName).width;
+  }
+
+  // Draw name text
+  ctx.save();
+  ctx.fillStyle = "#12001f"; // Rich dark obsidian matching template text
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  // Lift 6-12px above baseline so characters do not collide with the drawn line
+  const textY = baselineY - Math.max(6, Math.round(fontSize * 0.12));
+  ctx.fillText(formattedName, centerX, textY);
+  ctx.restore();
+
+  // 5. Draw QR Code Badge in Bottom-Right Corner
+  const qrSize = Math.max(120, Math.min(240, Math.round(width * config.geometry.qrRatioWidth)));
   const padding = Math.round(qrSize * 0.08);
-  const captionHeight = Math.round(qrSize * 0.18);
+  const captionHeight = Math.round(qrSize * 0.22);
   const cardWidth = qrSize + padding * 2;
   const cardHeight = qrSize + padding * 2 + captionHeight;
-  const margin = Math.round(width * 0.035);
 
-  let x = width - cardWidth - margin;
-  if (position === "bottom-left") {
-    x = margin;
-  } else if (position === "bottom-center") {
-    x = Math.round((width - cardWidth) / 2);
-  }
-  const y = height - cardHeight - margin;
+  const marginX = Math.round(width * config.geometry.qrBottomRightMarginRatioX);
+  const marginY = Math.round(height * config.geometry.qrBottomRightMarginRatioY);
 
-  // Draw clean white rounded container with subtle border
-  const cornerRadius = Math.round(cardWidth * 0.06);
+  const qrX = width - cardWidth - marginX;
+  const qrY = height - cardHeight - marginY;
+
   ctx.save();
+  // Card Shadow
   ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
   ctx.shadowBlur = Math.round(qrSize * 0.08);
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = Math.round(qrSize * 0.03);
 
+  // Rounded White Container
+  const cornerRadius = Math.round(cardWidth * 0.06);
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
-  ctx.roundRect(x, y, cardWidth, cardHeight, cornerRadius);
+  ctx.roundRect(qrX, qrY, cardWidth, cardHeight, cornerRadius);
   ctx.fill();
-
   ctx.restore();
 
-  // Subtle border around card
-  ctx.strokeStyle = "rgba(18, 0, 31, 0.15)";
-  ctx.lineWidth = 1.5;
+  // Card Border
+  ctx.strokeStyle = "rgba(18, 0, 31, 0.16)";
+  ctx.lineWidth = Math.max(1, Math.round(width * 0.001));
   ctx.beginPath();
-  ctx.roundRect(x, y, cardWidth, cardHeight, cornerRadius);
+  ctx.roundRect(qrX, qrY, cardWidth, cardHeight, cornerRadius);
   ctx.stroke();
 
-  // Draw QR code image
-  ctx.drawImage(qrImg, x + padding, y + padding, qrSize, qrSize);
+  // Draw QR Image
+  ctx.drawImage(qrImg, qrX + padding, qrY + padding, qrSize, qrSize);
 
-  // Draw "Scan to Verify" label
+  // Draw "SCAN TO VERIFY"
   ctx.fillStyle = "#12001f";
   ctx.font = `bold ${Math.round(qrSize * 0.075)}px sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("SCAN TO VERIFY", x + cardWidth / 2, y + padding + qrSize + captionHeight * 0.35);
+  ctx.fillText(
+    "SCAN TO VERIFY",
+    qrX + cardWidth / 2,
+    qrY + padding + qrSize + captionHeight * 0.35
+  );
 
-  // Draw KR8 ID label
+  // Draw Student ID
   ctx.fillStyle = "#7a1fa8";
-  ctx.font = `${Math.round(qrSize * 0.06)}px monospace`;
-  ctx.fillText(studentId, x + cardWidth / 2, y + padding + qrSize + captionHeight * 0.75);
+  ctx.font = `bold ${Math.round(qrSize * 0.062)}px monospace`;
+  ctx.fillText(
+    student.id,
+    qrX + cardWidth / 2,
+    qrY + padding + qrSize + captionHeight * 0.75
+  );
 
-  const finalImageUrl = canvas.toDataURL("image/jpeg", 0.92);
+  const finalImageUrl = canvas.toDataURL("image/jpeg", 0.94);
 
-  // Generate downloadable PDF with matching dimensions
+  // 6. Generate Downloadable PDF with Exact Dimensions
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([width, height]);
   const imgBytes = await fetch(finalImageUrl).then((r) => r.arrayBuffer());
@@ -157,91 +274,18 @@ export async function overlayQrOnImage(
   });
   const pdfBytes = await pdfDoc.save();
 
-  return { imageUrl: finalImageUrl, pdfBytes };
-}
-
-export async function overlayQrOnPdf(
-  pdfFile: File,
-  qrDataUrl: string,
-  _studentId: string,
-  position: CertPosition = "bottom-right"
-): Promise<{ pdfBytes: Uint8Array; previewUrl: string }> {
-  const arrayBuffer = await readFileAsArrayBuffer(pdfFile);
-  const pdfDoc = await PDFDocument.load(arrayBuffer);
-  const pages = pdfDoc.getPages();
-  const page = pages[0] || pdfDoc.addPage();
-  const { width, height: _height } = page.getSize();
-
-  const qrBase64 = qrDataUrl.split(",")[1];
-  const qrBytes = Uint8Array.from(atob(qrBase64), (c) => c.charCodeAt(0));
-  const qrImage = await pdfDoc.embedPng(qrBytes);
-
-  const qrSize = Math.max(70, Math.min(130, Math.round(width * 0.12)));
-  const padding = Math.round(qrSize * 0.08);
-  const cardWidth = qrSize + padding * 2;
-  const cardHeight = qrSize + padding * 2;
-  const margin = Math.round(width * 0.04);
-
-  let x = width - cardWidth - margin;
-  if (position === "bottom-left") {
-    x = margin;
-  } else if (position === "bottom-center") {
-    x = Math.round((width - cardWidth) / 2);
-  }
-  const y = margin; // In PDF, y=0 is bottom
-
-  // White backing rectangle for QR code
-  page.drawRectangle({
-    x,
-    y,
-    width: cardWidth,
-    height: cardHeight,
-    color: rgb(1, 1, 1),
-    borderColor: rgb(0.8, 0.8, 0.8),
-    borderWidth: 1,
-  });
-
-  page.drawImage(qrImage, {
-    x: x + padding,
-    y: y + padding,
-    width: qrSize,
-    height: qrSize,
-  });
-
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
-  const previewUrl = URL.createObjectURL(blob);
-
-  return { pdfBytes, previewUrl };
-}
-
-export async function processGraduationCertificate(
-  file: File,
-  studentId: string,
-  origin?: string,
-  position: CertPosition = "bottom-right"
-): Promise<{
-  fileType: "image" | "pdf";
-  imageUrl: string;
-  pdfBytes: Uint8Array;
-}> {
-  const qrDataUrl = await generateVerifyQrCode(studentId, origin);
-
-  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    const { pdfBytes, previewUrl } = await overlayQrOnPdf(file, qrDataUrl, studentId, position);
-    return {
-      fileType: "pdf",
-      imageUrl: previewUrl,
-      pdfBytes,
-    };
-  }
-
-  // Otherwise treat as image
-  const { imageUrl, pdfBytes } = await overlayQrOnImage(file, qrDataUrl, studentId, position);
   return {
-    fileType: "image",
-    imageUrl,
+    certId,
+    imageUrl: finalImageUrl,
     pdfBytes,
+    qrCodeUrl: qrDataUrl,
+    verifyUrl,
+    formattedName,
+    templateUrl: config.templateUrl,
+    achievementText: config.achievementText,
+    tier,
+    skillKey: config.skillKey,
+    courseName: config.courseName,
   };
 }
 
@@ -282,6 +326,20 @@ export async function getCertificateData(
   return null;
 }
 
+export async function processGraduationCertificate(
+  _file: File,
+  studentId: string,
+  origin?: string,
+  _position?: CertPosition
+): Promise<{ fileType: "image" | "pdf"; imageUrl: string; pdfBytes: Uint8Array }> {
+  const verifyUrl = `${origin || "https://kr8digitals.com"}/verify?id=${encodeURIComponent(studentId)}`;
+  const qr = await generateVerifyQrCode(verifyUrl);
+  return {
+    fileType: "image",
+    imageUrl: qr,
+    pdfBytes: new Uint8Array(),
+  };
+}
 export function downloadCertificatePdf(studentName: string, pdfBytes: Uint8Array | Blob | string) {
   let blob: Blob;
   if (pdfBytes instanceof Blob) {

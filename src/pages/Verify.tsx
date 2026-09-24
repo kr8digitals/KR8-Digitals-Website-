@@ -1,22 +1,25 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
-import { verifyId, getSkill, COHORT_YEAR, type Account } from "../data/store";
+import { useSearchParams, Link } from "react-router-dom";
+import { verifyId, getSkill, type VerificationResult } from "../data/store";
 import { Pill, GradientButton, Card, Avatar } from "../components/ui";
 import Icon from "../components/Icon";
 
 export default function Verify() {
   const [searchParams] = useSearchParams();
   const [id, setId] = useState("");
-  const [result, setResult] = useState<null | { ok: boolean; account?: Account }>(null);
+  const [certQuery, setCertQuery] = useState("");
+  const [result, setResult] = useState<null | VerificationResult>(null);
   const [searched, setSearched] = useState(false);
 
-  // Auto-verify when URL includes ?id=KR8...
+  // Auto-verify when URL includes ?id=... or ?cert=...
   useEffect(() => {
-    const queryId = searchParams.get("id")?.trim();
-    if (queryId) {
-      setId(queryId);
+    const queryId = searchParams.get("id")?.trim() || "";
+    const queryCert = searchParams.get("cert")?.trim() || "";
+    if (queryId || queryCert) {
+      setId(queryId || queryCert);
+      setCertQuery(queryCert);
       setSearched(true);
-      const res = verifyId(queryId);
+      const res = verifyId(queryId, queryCert);
       setResult(res);
     }
   }, [searchParams]);
@@ -25,21 +28,25 @@ export default function Verify() {
     const target = (searchQuery || id).trim();
     if (!target) return;
     setSearched(true);
-    setResult(verifyId(target));
+    const res = verifyId(target, certQuery);
+    setResult(res);
   };
 
-  const skill = result?.account ? getSkill(result.account!.skill) : null;
+  const activeCert = result?.certificate;
+  const isWithdrawn = result?.isWithdrawn || activeCert?.status === "withdrawn";
+  const skill = result?.account ? getSkill(activeCert?.skill || result.account.skill) : null;
+  const allCerts = result?.certificates || [];
 
   return (
     <div className="section-bg min-h-screen">
       <div className="mx-auto max-w-2xl px-5 py-16">
         <div className="text-center">
-          <Pill>Verify a KR8 Identity</Pill>
+          <Pill>Official KR8 Verification Portal</Pill>
           <h1 className="font-display mt-5 text-4xl text-white sm:text-5xl">
-            Confirm a <span className="text-gradient">KR8 ID.</span>
+            Confirm a <span className="text-gradient">KR8 Identity.</span>
           </h1>
           <p className="mx-auto mt-4 max-w-md text-[#b8aecf]">
-            Paste any KR8 Identity ID to confirm the holder's official training status and certification.
+            Paste any student ID or scan an issued certificate QR code to confirm official credentials and status.
           </p>
         </div>
 
@@ -49,7 +56,7 @@ export default function Verify() {
               value={id}
               onChange={(e) => setId(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && lookup()}
-              placeholder="e.g. KR82026KT0001GDVFD"
+              placeholder="e.g. KR82026KT0001GDVFD or CERT-KR8-..."
               className="flex-1 rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
             />
             <GradientButton onClick={() => lookup()}>Verify →</GradientButton>
@@ -63,18 +70,73 @@ export default function Verify() {
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/15 text-red-300">
                   <Icon name="alert" size={24} />
                 </div>
-                <h3 className="text-lg font-bold text-white">This ID could not be verified</h3>
+                <h3 className="text-lg font-bold text-white">This credential could not be verified</h3>
                 <p className="mt-2 text-sm text-[#b8aecf]">
-                  No active student profile matches <strong className="text-white font-mono">{id}</strong>. Double-check the ID formatting and try again.
+                  No active student profile or certificate record matches <strong className="text-white font-mono">{id}</strong>. Double-check the ID or QR link and try again.
                 </p>
               </Card>
             ) : (
-              <Card>
+              <Card className={isWithdrawn ? "border-amber-500/50 bg-amber-950/20" : ""}>
+                {/* STATUS BANNER */}
+                {isWithdrawn ? (
+                  <div className="mb-6 rounded-2xl border-2 border-amber-500/60 bg-amber-500/15 p-5 text-left shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/30 text-amber-300">
+                        <Icon name="alert" size={22} />
+                      </span>
+                      <div>
+                        <h4 className="text-base font-bold text-amber-200">
+                          ⚠️ Certificate Status: Withdrawn
+                        </h4>
+                        <p className="text-xs text-amber-300/80">
+                          Official Record Updated · Reference: {activeCert?.id || id}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2 border-t border-amber-500/30 pt-3 text-sm text-[#fae8c8]">
+                      <p className="font-semibold text-amber-200">
+                        This certificate has been withdrawn from the user for reasons known to the administrator.
+                      </p>
+                      <p className="text-xs text-[#eed6b4]">
+                        Please make further inquiries directly from the certificate holder or contact KR8 administration.
+                      </p>
+                      {activeCert?.withdrawalReason && (
+                        <div className="mt-2.5 rounded-xl bg-black/40 p-3 text-xs text-amber-200 border border-amber-500/30">
+                          <strong className="text-amber-100">Official Withdrawal Stated Reason:</strong>{" "}
+                          <span className="italic">"{activeCert.withdrawalReason}"</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : activeCert ? (
+                  <div className="mb-6 rounded-2xl border border-green-500/40 bg-green-500/10 p-4 shadow-sm">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-green-300">
+                        <Icon name="check" size={18} />
+                      </span>
+                      <div>
+                        <h4 className="text-sm font-bold text-green-300">
+                          ✓ Official Verified Credential
+                        </h4>
+                        <p className="text-xs text-[#b8aecf]">
+                          Certificate of {activeCert.tier} in {activeCert.skillName} · Valid & In Good Standing
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* HOLDER IDENTITY */}
                 <div className="flex items-center gap-4">
                   <Avatar src={result.account.avatar} name={result.account.name} size={64} />
                   <div>
                     <h3 className="text-xl font-bold text-white">{result.account.name}</h3>
                     <p className="font-mono text-xs text-pink-400">{result.account.id}</p>
+                    {activeCert?.formattedName && (
+                      <p className="text-[11px] font-semibold text-[#8a7ba8] mt-0.5">
+                        Certificate Name: <span className="font-mono text-white">{activeCert.formattedName}</span>
+                      </p>
+                    )}
                   </div>
                   {result.account.type === "founder" ? (
                     <span className="ml-auto rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold text-white shadow-lg glow-pink-sm">
@@ -93,107 +155,124 @@ export default function Verify() {
                   )}
                 </div>
 
+                {/* DETAILS GRID */}
                 <div className="mt-6 grid gap-3 sm:grid-cols-3">
                   <Info
-                    label={result.account.type === "founder" || result.account.type === "co-founder" ? "Executive Role" : "Skill Track"}
-                    value={
-                      result.account.type === "founder"
-                        ? "Founder & CEO · Executive Leadership"
-                        : result.account.type === "co-founder"
-                        ? "Co-Founder · Executive Leadership"
-                        : skill?.name ?? result.account.skill ?? "—"
-                    }
+                    label="Certified Discipline"
+                    value={activeCert?.skillName ?? skill?.name ?? result.account.skill ?? "—"}
                   />
                   <Info
-                    label="Cohort / Origin"
+                    label="Certificate Type"
                     value={
-                      result.account.type === "founder" || result.account.type === "co-founder"
-                        ? "Founding Executive"
-                        : String(result.account.year ?? COHORT_YEAR)
-                    }
-                  />
-                  <Info
-                    label="Status"
-                    value={
-                      result.account.type === "founder"
-                        ? "Verified Founder & CEO ✓"
-                        : result.account.type === "co-founder"
-                        ? "Verified Co-Founder ✓"
+                      activeCert
+                        ? `Certificate of ${activeCert.tier}`
                         : result.account.graduated
-                        ? `Certified ✓ (${result.account.certTier ?? "Completion"})`
+                        ? `Certificate of ${result.account.certTier ?? "Completion"}`
                         : "In Training"
                     }
-                    highlight={result.account.graduated || result.account.type === "founder" || result.account.type === "co-founder"}
+                  />
+                  <Info
+                    label="Standing Status"
+                    value={
+                      isWithdrawn
+                        ? "Withdrawn ✕"
+                        : activeCert
+                        ? "Active & Valid ✓"
+                        : result.account.graduated
+                        ? "Certified ✓"
+                        : "Active Student"
+                    }
+                    highlight={!isWithdrawn && (!!activeCert || result.account.graduated)}
                   />
                 </div>
 
-                {result.account.type === "founder" ? (
-                  <div className="mt-4 rounded-xl border border-pink-400/50 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-lg">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">
-                      ✓ Official KR8 Digitals Executive Leadership
-                    </p>
-                    <p className="mt-1 text-sm text-[#cabfe0]">
-                      This identity confirms <strong className="text-white">{result.account.name}</strong> as the official <strong className="text-white">Founder & Chief Executive Officer</strong> of KR8 Digitals.
-                    </p>
-                  </div>
-                ) : result.account.type === "co-founder" ? (
-                  <div className="mt-4 rounded-xl border border-pink-400/50 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-lg">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">
-                      ✓ Official KR8 Digitals Executive Leadership
-                    </p>
-                    <p className="mt-1 text-sm text-[#cabfe0]">
-                      This identity confirms <strong className="text-white">{result.account.name}</strong> as an official <strong className="text-white">Co-Founder</strong> of KR8 Digitals.
-                    </p>
-                  </div>
-                ) : result.account.graduated && (
-                  <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-green-300">
-                      ✓ Official KR8 Digitals Graduate
-                    </p>
-                    <p className="mt-1 text-sm text-[#cabfe0]">
-                      This holder has successfully graduated and holds a verified{" "}
-                      <strong className="text-white">
-                        Certificate of {result.account.certTier ?? "Completion"}
-                      </strong>{" "}
-                      in {skill?.name ?? "Digital Skills"}.
-                    </p>
-                    {result.account.certificateUrl && (
-                      <div className="mt-3">
-                        <a
-                          href={result.account.certificateUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-pink-300 hover:text-white"
-                        >
-                          <Icon name="certificate" size={14} /> View Verified Certificate Image →
-                        </a>
+                {/* ACHIEVEMENT TEXT & NOTES */}
+                {activeCert && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4 text-xs space-y-2 text-[#cabfe0]">
+                    <div>
+                      <span className="font-semibold text-white">Achievement Citation:</span>
+                      <p className="mt-0.5 italic text-[#e8ddf5]">
+                        "{activeCert.achievementText}"
+                      </p>
+                    </div>
+                    {activeCert.additionalNotes && (
+                      <div className="border-t border-white/10 pt-2">
+                        <span className="font-semibold text-pink-300">Special Honors / Recognition:</span>{" "}
+                        <span className="text-white font-medium">{activeCert.additionalNotes}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-white/10 pt-2 flex flex-wrap justify-between text-[11px] text-[#8a7ba8]">
+                      <span>Reference: <code className="text-pink-400">{activeCert.id}</code></span>
+                      <span>Issued: {new Date(activeCert.issuedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</span>
+                    </div>
+
+                    {/* Certificate Preview Image if active */}
+                    {!isWithdrawn && activeCert.certificateImageUrl && (
+                      <div className="mt-4 pt-3 border-t border-white/10">
+                        <p className="text-[11px] font-semibold text-[#8a7ba8] mb-2">Verified Certificate Document:</p>
+                        <div className="rounded-xl overflow-hidden border border-white/15 bg-black">
+                          <img
+                            src={activeCert.certificateImageUrl}
+                            alt="Certificate"
+                            className="w-full object-contain max-h-[350px]"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
                 )}
 
-                {result.account.expandedVisibility ? (
-                  <div className="mt-6 space-y-3 rounded-2xl border border-pink-400/30 bg-pink-500/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">
-                      Expanded profile (opted in by holder)
-                    </p>
-                    <p className="text-sm text-[#cabfe0]">
-                      Performance: {result.account.points} pts · {result.account.attendanceAccepted} sessions · {result.account.submissions} accepted submissions.
-                    </p>
-                    {result.account.verifyRemark && (
-                      <div className="border-t border-white/10 pt-2 text-sm text-[#cabfe0]">
-                        <span className="font-semibold text-pink-300">Admin Remarks / Notes:</span>{" "}
-                        <span className="italic">{result.account.verifyRemark}</span>
-                      </div>
-                    )}
-                    <p className="text-sm text-[#cabfe0]">
-                      Recommendation: A dependable {skill?.name ?? "creative"} creator with a strong track record inside KR8 Digitals.
-                    </p>
+                {/* MULTI-CERTIFICATE HISTORY (Requirement 7 & 16) */}
+                {allCerts.length > 1 && (
+                  <div className="mt-6 rounded-2xl border border-white/15 bg-black/40 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Icon name="certificate" size={16} className="text-pink-400" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                        Student Certification History ({allCerts.length} Credentials)
+                      </h4>
+                    </div>
+                    <div className="space-y-2">
+                      {allCerts.map((c) => {
+                        const isThisCert = c.id === activeCert?.id;
+                        const cWithdrawn = c.status === "withdrawn";
+                        return (
+                          <div
+                            key={c.id}
+                            className={`flex flex-wrap items-center justify-between gap-2 rounded-xl p-2.5 text-xs border ${
+                              isThisCert
+                                ? "border-pink-500/50 bg-pink-500/10"
+                                : "border-white/5 bg-white/[0.02]"
+                            }`}
+                          >
+                            <div>
+                              <span className="font-bold text-white">{c.skillName}</span>
+                              <span className="text-[#8a7ba8] ml-2">· Certificate of {c.tier}</span>
+                              {isThisCert && <span className="ml-2 font-mono text-[10px] text-pink-300 font-bold">(Viewing)</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                  cWithdrawn
+                                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                    : "bg-green-500/20 text-green-300 border border-green-500/40"
+                                }`}
+                              >
+                                {cWithdrawn ? "Withdrawn" : "Active ✓"}
+                              </span>
+                              {!isThisCert && (
+                                <Link
+                                  to={`/verify?id=${encodeURIComponent(result.account?.id || id)}&cert=${encodeURIComponent(c.id)}`}
+                                  className="text-[11px] font-semibold text-pink-400 hover:text-white"
+                                >
+                                  Inspect →
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                ) : (
-                  <p className="mt-6 rounded-xl bg-white/5 px-4 py-3 text-xs text-[#8a7ba8]">
-                    This holder has kept their expanded profile private. Only core verification data is shown.
-                  </p>
                 )}
               </Card>
             )}

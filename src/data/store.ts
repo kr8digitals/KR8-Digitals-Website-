@@ -507,6 +507,43 @@ export function generateDefaultAvatar(name: string, id: string = ""): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+export type CertificateTier = "Professionalism" | "Completion";
+
+export type CertificateRecord = {
+  id: string; // Unique Certificate reference ID
+  studentId: string; // Student KR8 ID
+  studentName: string; // Registered student name
+  formattedName: string; // Formatted ALL CAPS name
+  skill: string; // e.g. "content_creation"
+  skillName: string; // e.g. "Content Creation"
+  tier: CertificateTier;
+  templateUrl: string;
+  achievementText: string;
+  additionalNotes?: string;
+  issuedAt: number;
+  issuedBy?: string;
+  status: "active" | "withdrawn";
+  withdrawalReason?: string;
+  withdrawnAt?: number;
+  withdrawnBy?: string;
+  certificateImageUrl: string;
+  pdfUrl?: string;
+};
+
+export type StudentNotification = {
+  id: string;
+  type: "graduation" | "withdrawal" | "achievement" | "info";
+  title: string;
+  message: string;
+  reason?: string;
+  certificateId?: string;
+  skill?: string;
+  skillName?: string;
+  tier?: CertificateTier;
+  timestamp: number;
+  read: boolean;
+};
+
 /* ---------------- Accounts ---------------- */
 export type Account = {
   type: "student" | "tribe" | "founder" | "co-founder";
@@ -538,6 +575,8 @@ export type Account = {
   certificateFileType?: "image" | "pdf";
   verifyRemark?: string;
   graduatedAt?: number;
+  certificates?: CertificateRecord[];
+  notifications?: StudentNotification[];
   avatar: string;
   joined: number;
   expandedVisibility?: boolean;
@@ -1953,11 +1992,270 @@ export function getReferralUrl(id: string): string {
   return `${origin}/academy?ref=${encodeURIComponent(id)}`;
 }
 
+
+/* ---------------- Certificate System Management ---------------- */
+
+export function getStudentCertificates(studentId: string): CertificateRecord[] {
+  const acc = findStudent(studentId);
+  if (!acc) return [];
+  if (acc.certificates && acc.certificates.length > 0) {
+    return acc.certificates;
+  }
+  // Synthesize legacy certificate if available
+  if (acc.certificateUrl) {
+    const legacyCert: CertificateRecord = {
+      id: `CERT-LEGACY-${acc.id}`,
+      studentId: acc.id,
+      studentName: acc.name,
+      formattedName: acc.name.toUpperCase(),
+      skill: acc.skill || "graphic",
+      skillName: getSkillName(acc.skill),
+      tier: (acc.certTier as CertificateTier) || "Completion",
+      templateUrl: acc.certificateUrl,
+      achievementText:
+        acc.certTier === "Professionalism"
+          ? "demonstrating excellence and proficiency in turning client requests into client satisfaction."
+          : "gaining hands-on experience in turning client requests into finished designs.",
+      additionalNotes: acc.certRecognition || acc.verifyRemark,
+      issuedAt: acc.graduatedAt || acc.joined || Date.now(),
+      status: "active",
+      certificateImageUrl: acc.certificateUrl,
+    };
+    return [legacyCert];
+  }
+  return [];
+}
+
+export function getCertificateById(certId: string): { certificate?: CertificateRecord; account?: Account } {
+  if (!certId) return {};
+  const accounts = getAccounts();
+  for (const acc of accounts) {
+    const certs = getStudentCertificates(acc.id);
+    const found = certs.find((c) => c.id.toLowerCase() === certId.toLowerCase());
+    if (found) {
+      return { certificate: found, account: acc };
+    }
+  }
+  return {};
+}
+
+export function issueCertificate(
+  studentId: string,
+  cert: CertificateRecord
+): { ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string } {
+  const accounts = getAccounts();
+  const accIndex = accounts.findIndex(
+    (s) => normalizeIdentity(s.id) === normalizeIdentity(studentId)
+  );
+  if (accIndex === -1) {
+    return { ok: false, error: `Student with ID ${studentId} not found.` };
+  }
+
+  const acc = accounts[accIndex];
+  const existingCerts = getStudentCertificates(acc.id);
+
+  // If active certificate for this skill already exists, replace it; otherwise append
+  const existingIdx = existingCerts.findIndex(
+    (c) => c.skill === cert.skill && c.status === "active"
+  );
+  if (existingIdx >= 0) {
+    existingCerts[existingIdx] = cert;
+  } else {
+    existingCerts.push(cert);
+  }
+
+  // Update graduatedSkills set
+  const graduatedSkills = new Set(acc.graduatedSkills || []);
+  if (cert.skill) graduatedSkills.add(cert.skill);
+  if (acc.skill) graduatedSkills.add(acc.skill);
+
+  // Create congratulations notification
+  const notifs = acc.notifications ? [...acc.notifications] : [];
+  notifs.unshift({
+    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type: "graduation",
+    title: `Congratulations! Your Certificate of ${cert.tier} has been issued! 🎓`,
+    message: `You have successfully graduated from ${cert.skillName} at KR8 Digitals! Your verified Certificate of ${cert.tier} is now available in your profile to view, download, and share.`,
+    certificateId: cert.id,
+    skill: cert.skill,
+    skillName: cert.skillName,
+    tier: cert.tier,
+    timestamp: Date.now(),
+    read: false,
+  });
+
+  const updated: Account = {
+    ...acc,
+    graduated: true,
+    certTier: cert.tier,
+    certificateUrl: cert.certificateImageUrl,
+    certRecognition: cert.additionalNotes || acc.certRecognition,
+    graduatedAt: cert.issuedAt,
+    certificates: existingCerts,
+    graduatedSkills: Array.from(graduatedSkills),
+    notifications: notifs,
+  };
+
+  accounts[accIndex] = updated;
+  saveAccounts(accounts);
+
+  addFeed({
+    kind: "graduation",
+    name: updated.name,
+    skill: cert.skillName,
+    avatar: updated.avatar,
+  });
+
+  return { ok: true, account: updated, certificate: cert };
+}
+
+export function withdrawCertificate(
+  studentId: string,
+  certId: string,
+  reason: string,
+  withdrawnBy?: string
+): { ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string } {
+  if (!reason || !reason.trim()) {
+    return { ok: false, error: "A withdrawal reason is required." };
+  }
+
+  const accounts = getAccounts();
+  const accIndex = accounts.findIndex(
+    (s) => normalizeIdentity(s.id) === normalizeIdentity(studentId)
+  );
+  if (accIndex === -1) {
+    return { ok: false, error: `Student with ID ${studentId} not found.` };
+  }
+
+  const acc = accounts[accIndex];
+  const certs = getStudentCertificates(acc.id);
+  const certIndex = certs.findIndex(
+    (c) => c.id.toLowerCase() === certId.toLowerCase()
+  );
+
+  if (certIndex === -1) {
+    return { ok: false, error: `Certificate reference ID "${certId}" not found for student.` };
+  }
+
+  const targetCert = certs[certIndex];
+  const updatedCert: CertificateRecord = {
+    ...targetCert,
+    status: "withdrawn",
+    withdrawalReason: reason.trim(),
+    withdrawnAt: Date.now(),
+    withdrawnBy: withdrawnBy || "Administrator",
+  };
+
+  certs[certIndex] = updatedCert;
+
+  // Add withdrawal notification to student profile
+  const notifs = acc.notifications ? [...acc.notifications] : [];
+  notifs.unshift({
+    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type: "withdrawal",
+    title: `Notice: Certificate of ${targetCert.tier} Withdrawn`,
+    message: `Your Certificate of ${targetCert.tier} in ${targetCert.skillName} has been withdrawn by the administrator.`,
+    reason: reason.trim(),
+    certificateId: targetCert.id,
+    skill: targetCert.skill,
+    skillName: targetCert.skillName,
+    tier: targetCert.tier,
+    timestamp: Date.now(),
+    read: false,
+  });
+
+  // Calculate remaining active certificates
+  const remainingActive = certs.filter((c) => c.status === "active");
+  const stillGraduated = remainingActive.length > 0;
+  const latestActive = stillGraduated ? remainingActive[remainingActive.length - 1] : undefined;
+
+  const updated: Account = {
+    ...acc,
+    certificates: certs,
+    graduated: stillGraduated,
+    certTier: latestActive?.tier || null,
+    certificateUrl: latestActive?.certificateImageUrl || undefined,
+    notifications: notifs,
+  };
+
+  accounts[accIndex] = updated;
+  saveAccounts(accounts);
+
+  return { ok: true, account: updated, certificate: updatedCert };
+}
+
+export function getStudentNotifications(studentId: string): StudentNotification[] {
+  const acc = findStudent(studentId);
+  return acc?.notifications || [];
+}
+
+export function markNotificationRead(studentId: string, notifId: string): void {
+  const accounts = getAccounts();
+  const acc = accounts.find((s) => normalizeIdentity(s.id) === normalizeIdentity(studentId));
+  if (!acc || !acc.notifications) return;
+  const target = acc.notifications.find((n) => n.id === notifId);
+  if (target) {
+    target.read = true;
+    saveAccounts(accounts);
+  }
+}
+
 /* ---------------- Verify ---------------- */
-export function verifyId(id: string): { ok: boolean; account?: Account } {
-  const acc = findStudent(id);
-  if (!acc || (acc.type !== "student" && acc.type !== "founder" && acc.type !== "co-founder")) return { ok: false };
-  return { ok: true, account: acc };
+export type VerificationResult = {
+  ok: boolean;
+  account?: Account;
+  certificate?: CertificateRecord;
+  certificates?: CertificateRecord[];
+  isWithdrawn?: boolean;
+  withdrawalReason?: string;
+  withdrawnAt?: number;
+};
+
+export function verifyId(id: string, certId?: string): VerificationResult {
+  const cleanId = (id || "").trim();
+  const cleanCert = (certId || "").trim();
+
+  // 1. Direct Certificate Reference Lookup
+  const targetCertId = cleanCert || (cleanId.startsWith("CERT-") ? cleanId : "");
+  if (targetCertId) {
+    const { certificate, account } = getCertificateById(targetCertId);
+    if (certificate && account) {
+      return {
+        ok: true,
+        account,
+        certificate,
+        certificates: getStudentCertificates(account.id),
+        isWithdrawn: certificate.status === "withdrawn",
+        withdrawalReason: certificate.withdrawalReason,
+        withdrawnAt: certificate.withdrawnAt,
+      };
+    }
+  }
+
+  // 2. Student Identity Lookup
+  const acc = findStudent(cleanId);
+  if (!acc || (acc.type !== "student" && acc.type !== "founder" && acc.type !== "co-founder")) {
+    return { ok: false };
+  }
+
+  const certs = getStudentCertificates(acc.id);
+  // Match specific certificate or default to active primary
+  let matchedCert = targetCertId
+    ? certs.find((c) => c.id.toLowerCase() === targetCertId.toLowerCase())
+    : undefined;
+  if (!matchedCert && certs.length > 0) {
+    matchedCert = certs.find((c) => c.status === "active") || certs[certs.length - 1];
+  }
+
+  return {
+    ok: true,
+    account: acc,
+    certificate: matchedCert,
+    certificates: certs,
+    isWithdrawn: matchedCert ? matchedCert.status === "withdrawn" : false,
+    withdrawalReason: matchedCert?.withdrawalReason,
+    withdrawnAt: matchedCert?.withdrawnAt,
+  };
 }
 
 /* ---------------- Live feed ---------------- */

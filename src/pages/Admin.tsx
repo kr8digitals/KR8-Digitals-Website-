@@ -2,7 +2,7 @@ import { useState, useEffect, type ChangeEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
 import {
-  getSkills, getSkill, saveCustomSkill, deleteCustomSkill,
+  getSkills, getSkill, getSkillName, saveCustomSkill, deleteCustomSkill,
   getWaitlistWhatsAppUrl, saveWaitlistWhatsAppUrl, areAllRegistrationsClosed,
   type Skill, ATTENDANCE_TYPES, PORTFOLIO,
   getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
@@ -24,10 +24,18 @@ import {
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
-  processGraduationCertificate,
+  generateAutomaticCertificate,
+  formatCertificateStudentName,
+  downloadCertificatePdf,
   saveCertificateData,
-  type CertPosition,
 } from "../utils/certificate";
+import {
+  issueCertificate,
+  withdrawCertificate,
+  getStudentCertificates,
+  type CertificateRecord,
+  type CertificateTier,
+} from "../data/store";
 
 const ATTENDANCE_PW = "KR8@Atd2026";
 
@@ -1173,7 +1181,7 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
   );
 }
 
-/* ---------------- Corrected Graduation Modal (External File Upload + QR Overlay) ---------------- */
+/* ---------------- AUTOMATIC GRADUATION & CERTIFICATE ISSUANCE SYSTEM ---------------- */
 
 function GraduationModal({
   student,
@@ -1184,238 +1192,442 @@ function GraduationModal({
   onClose: () => void;
   onGraduated: (updated: Account) => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string>("");
-  const [tier, setTier] = useState<"Completion" | "Professionalism">(
-    (student.certTier as "Completion" | "Professionalism") || "Completion"
-  );
-  const [remark, setRemark] = useState(student.verifyRemark || "");
-  const [position, setPosition] = useState<CertPosition>("bottom-right");
+  const [tier, setTier] = useState<CertificateTier>("Professionalism");
+  const [selectedSkillKey, setSelectedSkillKey] = useState<string>(() => {
+    return student.skill || (student.skills && student.skills[0]) || "graphic";
+  });
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [issuedCert, setIssuedCert] = useState<CertificateRecord | null>(null);
+  const [generatedPdfBytes, setGeneratedPdfBytes] = useState<Uint8Array | null>(null);
 
-  const skill = getSkill(student.skill);
-  const verifyUrl = `${window.location.origin}/verify?id=${encodeURIComponent(student.id)}`;
+  // Withdrawal Sub-Modal State
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawCertId, setWithdrawCertId] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawError, setWithdrawError] = useState("");
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-    setFile(selected);
-    setError("");
+  const existingCertificates = getStudentCertificates(student.id);
+  const formattedPreviewName = formatCertificateStudentName(student.name);
+  const selectedSkill = getSkill(selectedSkillKey);
 
-    if (selected.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = () => setFilePreview(reader.result as string);
-      reader.readAsDataURL(selected);
-    } else {
-      setFilePreview("");
-    }
-  };
-
-  const handleApprove = async () => {
-    if (!file && !student.certificateUrl) {
-      setError("Please select the externally designed certificate file (image or PDF).");
-      return;
-    }
-
+  const handleIssueCertificate = async () => {
     setProcessing(true);
     setError("");
 
     try {
-      let finalImageUrl = student.certificateUrl || "";
-      let fileType: "image" | "pdf" = student.certificateFileType || "image";
-
-      if (file) {
-        const result = await processGraduationCertificate(
-          file,
-          student.id,
-          window.location.origin,
-          position
-        );
-        finalImageUrl = result.imageUrl;
-        fileType = result.fileType;
-
-        // Persist to IndexedDB
-        await saveCertificateData(student.id, {
-          fileType: result.fileType,
-          imageUrl: result.imageUrl,
-          pdfBytes: result.pdfBytes,
-        });
-      }
-
-      // Update student record
-      const updated = updateAccount(student.id, {
-        graduated: true,
-        certTier: tier,
-        verifyRemark: remark.trim() || undefined,
-        certificateUrl: finalImageUrl,
-        certificateFileType: fileType,
-        graduatedAt: Date.now(),
+      // 1. Generate Automatic Certificate with template, student name, and QR
+      const result = await generateAutomaticCertificate({
+        student,
+        skillKey: selectedSkillKey,
+        tier,
+        additionalNotes: additionalNotes.trim(),
+        origin: window.location.origin,
       });
 
-      if (updated) {
-        saveVerifyRemark(student.id, remark.trim());
-        addFeed({
-          kind: "graduation",
-          name: updated.name,
-          skill: skill?.name ?? "Academy",
-          avatar: updated.avatar,
-        });
-        onGraduated(updated);
+      // 2. Persist to durable IndexedDB
+      await saveCertificateData(student.id, {
+        fileType: "image",
+        imageUrl: result.imageUrl,
+        pdfBytes: result.pdfBytes,
+      });
+
+      // 3. Create persistent CertificateRecord
+      const certRecord: CertificateRecord = {
+        id: result.certId,
+        studentId: student.id,
+        studentName: student.name,
+        formattedName: result.formattedName,
+        skill: selectedSkillKey,
+        skillName: result.courseName,
+        tier: result.tier,
+        templateUrl: result.templateUrl,
+        achievementText: result.achievementText,
+        additionalNotes: additionalNotes.trim() || undefined,
+        issuedAt: Date.now(),
+        issuedBy: "KR8 Administrator",
+        status: "active",
+        certificateImageUrl: result.imageUrl,
+      };
+
+      // 4. Save into Store / Account database
+      const saveRes = issueCertificate(student.id, certRecord);
+      if (!saveRes.ok || !saveRes.account) {
+        throw new Error(saveRes.error || "Failed to issue certificate.");
       }
-    } catch (err) {
+
+      setIssuedCert(certRecord);
+      setGeneratedPdfBytes(result.pdfBytes);
+      onGraduated(saveRes.account);
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to process certificate. Please ensure the file is a valid image or PDF.");
+      setError(err?.message || "Failed to generate certificate. Please try again.");
     } finally {
       setProcessing(false);
     }
   };
 
+  const handleConfirmWithdraw = () => {
+    if (!withdrawReason.trim()) {
+      setWithdrawError("Please state the specific reason for certificate withdrawal.");
+      return;
+    }
+    setWithdrawError("");
+
+    const res = withdrawCertificate(student.id, withdrawCertId, withdrawReason.trim(), "KR8 Administrator");
+    if (!res.ok || !res.account) {
+      setWithdrawError(res.error || "Could not withdraw certificate.");
+      return;
+    }
+
+    setShowWithdrawModal(false);
+    setWithdrawReason("");
+    setWithdrawCertId("");
+    onGraduated(res.account);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
-      <Card className="my-8 w-full max-w-2xl border border-pink-400/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto">
+      <Card className="my-8 w-full max-w-2xl border border-pink-500/40 shadow-2xl bg-[#0f0219]">
+        {/* HEADER */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div>
-            <h3 className="text-xl font-bold text-white">Graduate Student & Issue Certificate</h3>
-            <p className="text-xs text-[#8a7ba8]">
-              {student.name} · <span className="font-mono text-pink-300">{student.id}</span> · {skill?.name}
+            <h3 className="text-xl font-bold text-white">Issue Official KR8 Certificate</h3>
+            <p className="text-xs text-[#b8aecf] mt-0.5">
+              {student.name} · <span className="font-mono text-pink-300">{student.id}</span>
             </p>
           </div>
-          <button onClick={onClose} className="text-[#8a7ba8] hover:text-white">✕</button>
+          <button onClick={onClose} className="rounded-full p-1.5 text-[#8a7ba8] hover:bg-white/10 hover:text-white">✕</button>
         </div>
 
-        <div className="mt-5 space-y-5">
-          {/* Step 1 & 2: Certificate file upload */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
-              1. Upload Certificate File (Image or PDF) *
-            </label>
-            <p className="mt-1 text-xs text-[#b8aecf]">
-              Upload the actual certificate designed externally (Canva, Figma, Photoshop, etc.). The website will overlay a verifiable QR code automatically.
-            </p>
+        {issuedCert ? (
+          /* SUCCESS / ISSUED PREVIEW VIEW */
+          <div className="mt-5 space-y-5 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20 text-green-300">
+              <Icon name="certificate" size={28} />
+            </div>
+            <div>
+              <h4 className="text-xl font-bold text-white">Certificate Successfully Issued! 🎓</h4>
+              <p className="text-xs text-[#b8aecf] mt-1">
+                Certificate of <strong className="text-white">{issuedCert.tier}</strong> in <strong className="text-white">{issuedCert.skillName}</strong> has been generated and delivered to the student profile.
+              </p>
+            </div>
 
-            <label className="mt-3 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-pink-400/40 bg-black/30 p-6 text-center cursor-pointer hover:border-pink-400">
-              {filePreview ? (
-                <div className="space-y-3">
-                  <img src={filePreview} alt="Preview" className="max-h-44 rounded-xl mx-auto object-contain border border-white/10" />
-                  <p className="text-xs text-green-300 font-semibold">✓ {file?.name} ({Math.round((file?.size || 0) / 1024)} KB)</p>
-                </div>
-              ) : file ? (
-                <div className="space-y-2">
-                  <span className="text-4xl">📄</span>
-                  <p className="text-sm font-semibold text-white">{file.name}</p>
-                  <p className="text-xs text-[#8a7ba8]">PDF document ready ({Math.round(file.size / 1024)} KB)</p>
-                </div>
-              ) : student.certificateUrl ? (
-                <div className="space-y-2">
-                  <img src={student.certificateUrl} alt="Existing Cert" className="max-h-36 rounded-xl mx-auto object-contain" />
-                  <p className="text-xs text-[#cabfe0]">Current certificate loaded. Click to replace with a new file.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <span className="text-3xl">📁</span>
-                  <p className="text-sm font-semibold text-white">Choose Certificate File</p>
-                  <p className="text-xs text-[#8a7ba8]">PNG, JPG, JPEG, WEBP or PDF</p>
-                </div>
-              )}
-              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileChange} />
-            </label>
+            {/* LIVE CERTIFICATE PREVIEW */}
+            <div className="overflow-hidden rounded-2xl border border-white/15 bg-black shadow-xl max-h-[300px]">
+              <img src={issuedCert.certificateImageUrl} alt="Issued Certificate" className="w-full h-auto object-contain" />
+            </div>
+
+            <div className="flex flex-wrap justify-center gap-3 pt-2">
+              <button
+                onClick={() => {
+                  if (generatedPdfBytes) {
+                    downloadCertificatePdf(student.name, generatedPdfBytes);
+                  } else {
+                    downloadCertificatePdf(student.name, issuedCert.certificateImageUrl);
+                  }
+                }}
+                className="flex items-center gap-2 rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg glow-pink-sm hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                <Icon name="certificate" size={14} /> Download Certificate PDF
+              </button>
+
+              <button
+                onClick={() => {
+                  setIssuedCert(null);
+                }}
+                className="rounded-full border border-white/20 px-5 py-2.5 text-xs font-semibold text-white hover:bg-white/10"
+              >
+                Issue Another
+              </button>
+
+              <button
+                onClick={onClose}
+                className="rounded-full border border-pink-500/30 px-5 py-2.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/10"
+              >
+                Done
+              </button>
+            </div>
           </div>
-
-          {/* Step 2: Tier */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
-              2. Certificate Tier *
-            </label>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              {(["Completion", "Professionalism"] as const).map((t) => (
+        ) : (
+          /* CERTIFICATE CREATION FORM */
+          <div className="mt-5 space-y-5">
+            {/* 1. WHICH CERTIFICATE IS BEING ISSUED? */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-pink-300 mb-2">
+                1. Which certificate is being issued? *
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* Certificate of Professionalism */}
                 <button
-                  key={t}
                   type="button"
-                  onClick={() => setTier(t)}
-                  className={`rounded-2xl p-4 text-left transition-all ${
-                    tier === t
-                      ? "border border-pink-400 bg-gradient-pink text-white shadow-lg"
-                      : "border border-white/15 bg-black/20 text-[#cabfe0] hover:border-white/30"
+                  onClick={() => setTier("Professionalism")}
+                  className={`rounded-2xl p-4 text-left transition-all relative overflow-hidden border ${
+                    tier === "Professionalism"
+                      ? "border-pink-500 bg-gradient-to-br from-pink-950/40 via-purple-950/30 to-black text-white shadow-lg shadow-pink-500/20 ring-1 ring-pink-500/50"
+                      : "border-white/15 bg-black/30 text-[#cabfe0] hover:border-white/30"
                   }`}
                 >
-                  <div className="font-bold text-sm">Certificate of {t}</div>
-                  <div className="text-[11px] opacity-80 mt-1">
-                    {t === "Completion" ? "Coursework and assignments completed." : "High mastery, exceptional project execution."}
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white">Certificate of Professionalism</span>
+                    {tier === "Professionalism" && <span className="h-2 w-2 rounded-full bg-pink-400 animate-pulse" />}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#d4c6e6]">
+                    "...demonstrating excellence and proficiency in turning client requests into client satisfaction."
+                  </p>
+                  <div className="mt-3 rounded-lg bg-pink-500/10 px-2 py-1 text-[10px] font-semibold text-pink-300">
+                    ⭐ True professional KR8 vouches for anywhere
                   </div>
                 </button>
-              ))}
-            </div>
-          </div>
 
-          {/* Step 3: Extra notes (Verify Remarks) */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
-              3. Extra Notes / Comments (Verify Remarks)
-            </label>
-            <p className="mt-1 text-xs text-[#8a7ba8]">
-              This note is stored directly on the student's profile. It is <strong>only ever shown on the public Verify page if the student separately opts into expanded visibility</strong>; it is private by default.
-            </p>
-            <textarea
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              rows={3}
-              placeholder="e.g. Demonstrated exceptional discipline in brand identity systems. Strongly recommended for real client work."
-              className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
-            />
-          </div>
-
-          {/* Step 4: QR Code overlay options */}
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold text-white">QR Code Verification Overlay</p>
-                <p className="text-[11px] text-[#8a7ba8]">
-                  Encodes: <span className="font-mono text-pink-300">{verifyUrl}</span>
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#8a7ba8]">Position:</span>
-                <select
-                  value={position}
-                  onChange={(e) => setPosition(e.target.value as CertPosition)}
-                  className="rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-xs text-white focus:outline-none"
+                {/* Certificate of Completion */}
+                <button
+                  type="button"
+                  onClick={() => setTier("Completion")}
+                  className={`rounded-2xl p-4 text-left transition-all relative overflow-hidden border ${
+                    tier === "Completion"
+                      ? "border-pink-500 bg-gradient-to-br from-pink-950/40 via-purple-950/30 to-black text-white shadow-lg shadow-pink-500/20 ring-1 ring-pink-500/50"
+                      : "border-white/15 bg-black/30 text-[#cabfe0] hover:border-white/30"
+                  }`}
                 >
-                  <option value="bottom-right">Bottom Right (Default)</option>
-                  <option value="bottom-left">Bottom Left</option>
-                  <option value="bottom-center">Bottom Center</option>
-                </select>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white">Certificate of Completion</span>
+                    {tier === "Completion" && <span className="h-2 w-2 rounded-full bg-pink-400 animate-pulse" />}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#d4c6e6]">
+                    "...gaining hands-on experience in turning client requests into finished designs."
+                  </p>
+                  <div className="mt-3 rounded-lg bg-white/10 px-2 py-1 text-[10px] font-semibold text-[#cabfe0]">
+                    🌱 Finished process, gained real experience
+                  </div>
+                </button>
               </div>
             </div>
+
+            {/* 2. SKILL SELECTION */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-pink-300 mb-1.5">
+                2. Skill Track to Certify *
+              </label>
+              <select
+                value={selectedSkillKey}
+                onChange={(e) => setSelectedSkillKey(e.target.value)}
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-2.5 text-xs text-white focus:border-pink-400 focus:outline-none"
+              >
+                {getSkills().map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.name} ({s.suffix})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-[#8a7ba8]">
+                Template used: <strong className="text-white">{selectedSkill?.name || selectedSkillKey} ({tier})</strong>
+              </p>
+            </div>
+
+            {/* 3. STUDENT NAME AUTOMATIC VERIFICATION */}
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+              <label className="block text-xs font-bold uppercase tracking-wider text-pink-300 mb-1">
+                3. Student Name (Inserted Automatically in Encode Sans Bold · ALL CAPS)
+              </label>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <div>
+                  <p className="text-xs text-[#8a7ba8]">Profile Name: <strong className="text-white">{student.name}</strong></p>
+                  <p className="text-sm font-bold font-mono text-pink-300 mt-0.5">
+                    Printed Name: {formattedPreviewName}
+                  </p>
+                </div>
+                <span className="rounded-full bg-green-500/10 border border-green-500/30 px-2.5 py-1 text-[10px] font-semibold text-green-300 shrink-0">
+                  ✓ Formatted & Centered
+                </span>
+              </div>
+            </div>
+
+            {/* 4. ADDITIONAL NOTES / ACHIEVEMENTS */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-pink-300 mb-1">
+                4. Additional Notes / Achievements (Optional)
+              </label>
+              <input
+                value={additionalNotes}
+                onChange={(e) => setAdditionalNotes(e.target.value)}
+                placeholder="e.g. Three-time Best Performer · Outstanding Performance · Best Student"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-2.5 text-xs text-white focus:border-pink-400 focus:outline-none placeholder:text-[#6a5b82]"
+              />
+              <p className="mt-1 text-[11px] text-[#8a7ba8]">
+                These honors are recorded on the student's profile and certificate record.
+              </p>
+            </div>
+
+            {/* ERROR NOTICE */}
+            {error && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                {error}
+              </div>
+            )}
+
+            {/* ACTION BUTTONS */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+              <div>
+                {existingCertificates.length > 0 && (
+                  <span className="text-xs text-[#8a7ba8]">
+                    {existingCertificates.length} certificate{existingCertificates.length === 1 ? "" : "s"} already on file
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={processing}
+                  onClick={handleIssueCertificate}
+                  className="rounded-full bg-gradient-pink px-7 py-2.5 text-xs font-bold text-white shadow-lg glow-pink-sm hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {processing ? "Generating Certificate…" : "Issue Certificate"}
+                </button>
+              </div>
+            </div>
+
+            {/* EXISTING CERTIFICATES & WITHDRAWAL CONTROLS */}
+            {existingCertificates.length > 0 && (
+              <div className="mt-6 border-t border-white/10 pt-4">
+                <h5 className="text-xs font-bold uppercase tracking-wider text-[#b8aecf] mb-2.5">
+                  Issued Certificates for this Student
+                </h5>
+                <div className="space-y-2">
+                  {existingCertificates.map((cert) => {
+                    const isWithdrawn = cert.status === "withdrawn";
+                    return (
+                      <div
+                        key={cert.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/40 p-3 text-xs"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{cert.skillName}</span>
+                            <span className="font-mono text-[10px] text-pink-300">
+                              Certificate of {cert.tier}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                                isWithdrawn
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  : "bg-green-500/20 text-green-300 border border-green-500/30"
+                              }`}
+                            >
+                              {isWithdrawn ? "Withdrawn" : "Active ✓"}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#8a7ba8] mt-0.5">
+                            ID: <code className="text-white">{cert.id}</code> · Issued: {new Date(cert.issuedAt).toLocaleDateString()}
+                          </p>
+                          {cert.withdrawalReason && (
+                            <p className="text-[10px] text-amber-300 mt-1 italic">
+                              Withdrawn reason: "{cert.withdrawalReason}"
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/verify?id=${encodeURIComponent(student.id)}&cert=${encodeURIComponent(cert.id)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/10"
+                          >
+                            Verify Link
+                          </a>
+                          {!isWithdrawn && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWithdrawCertId(cert.id);
+                                setShowWithdrawModal(true);
+                              }}
+                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/20"
+                            >
+                              Withdraw Certificate
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
+        )}
+      </Card>
 
-          {error && (
-            <p className="rounded-lg bg-red-500/10 px-4 py-2.5 text-xs text-red-300">
-              {error}
-            </p>
-          )}
+      {/* WITHDRAWAL REASON MODAL (Section 13) */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/50 bg-[#160000] p-6 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-red-500/30 pb-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/20 text-red-300">
+                <Icon name="alert" size={20} />
+              </span>
+              <div>
+                <h4 className="text-base font-bold text-white">Withdraw Student Certificate</h4>
+                <p className="text-xs text-red-300/80">Accountability & Stated Reason Required</p>
+              </div>
+            </div>
 
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={handleApprove}
-              disabled={processing || (!file && !student.certificateUrl)}
-              className="flex-1 rounded-full bg-gradient-pink py-3 text-sm font-bold text-white glow-pink-sm hover:opacity-90 disabled:opacity-40"
-            >
-              {processing ? "Generating QR Overlay & Saving..." : "Approve & Issue Certificate →"}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={processing}
-              className="rounded-full border border-white/15 px-6 py-3 text-sm text-[#b8aecf] hover:text-white"
-            >
-              Cancel
-            </button>
+            <div className="mt-4 space-y-3">
+              <p className="text-xs text-[#eed6d6] leading-relaxed">
+                Why are you withdrawing this certificate? The stated reason will be permanently recorded and displayed when someone verifies or scans this certificate's QR code.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-red-300 mb-1">
+                  Reason for Withdrawal *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  placeholder="e.g. Failure to satisfy final project originality standards, plagiarism identified, or breach of code of conduct…"
+                  className="w-full rounded-xl border border-red-500/40 bg-black/50 p-3 text-xs text-white focus:border-red-400 focus:outline-none placeholder:text-red-300/40"
+                />
+              </div>
+
+              {withdrawError && (
+                <p className="text-xs font-semibold text-red-400">{withdrawError}</p>
+              )}
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowWithdrawModal(false)}
+                  className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmWithdraw}
+                  className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white shadow-lg hover:bg-red-500 active:scale-95 transition-all"
+                >
+                  Confirm Withdrawal
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </Card>
+      )}
     </div>
   );
 }
+
 
 /* ---------------- Graduation & Certificates Tab ---------------- */
 
@@ -1426,64 +1638,57 @@ function GraduationManager({ students }: { students: Account[] }) {
 
   return (
     <Card>
-      <h3 className="font-bold text-white text-xl">Graduation & Certificates Manager</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">
-        Upload externally designed certificate files, choose the graduation tier, add private verify remarks, and automatically overlay verifiable QR codes.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-xl font-bold text-white">Graduation & Certification Center</h3>
+          <p className="mt-1 text-sm text-[#b8aecf]">
+            Issue verified certificates (Professionalism or Completion), customize honors, and manage credentials.
+          </p>
+        </div>
+      </div>
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="text-xs font-semibold text-[#8a7ba8]">Select Student to Graduate</label>
+          <label className="text-xs font-semibold text-[#8a7ba8]">Select Student</label>
           <select
             value={sel}
             onChange={(e) => setSel(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+            className="mt-1 w-full rounded-xl border border-white/15 bg-black/30 p-3 text-sm text-white focus:border-pink-400 focus:outline-none"
           >
-            {students.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name} — {x.id} {x.graduated ? `(Graduated: ${x.certTier})` : "(In Training)"}
+            {students.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.id}) · {getSkillName(s.skill)} {s.graduated ? "🎓 Graduated" : "🌱 Enrolled"}
               </option>
             ))}
           </select>
         </div>
 
         {selectedStudent && (
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-lg font-bold text-white">{selectedStudent.name}</h4>
+                <h4 className="font-bold text-white text-base">{selectedStudent.name}</h4>
                 <p className="font-mono text-xs text-pink-400">{selectedStudent.id}</p>
               </div>
-              <div>
-                {selectedStudent.graduated ? (
-                  <span className="rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-300">
-                    ✓ Graduated ({selectedStudent.certTier})
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-pink-500/10 px-3 py-1 text-xs text-pink-300">
-                    In Training
-                  </span>
-                )}
-              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-bold ${
+                  selectedStudent.graduated
+                    ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                    : "bg-pink-500/10 text-pink-300 border border-pink-500/20"
+                }`}
+              >
+                {selectedStudent.graduated
+                  ? `🎓 Certified (${selectedStudent.certTier ?? "Completion"})`
+                  : "Active Student"}
+              </span>
             </div>
-
-            {selectedStudent.certificateUrl && (
-              <div className="mt-3">
-                <p className="text-xs text-[#8a7ba8] mb-2">Attached Certificate (with QR Code):</p>
-                <img
-                  src={selectedStudent.certificateUrl}
-                  alt="Certificate"
-                  className="max-h-56 rounded-xl border border-white/10 object-contain"
-                />
-              </div>
-            )}
 
             <div className="pt-2">
               <button
                 onClick={() => setModalOpen(true)}
                 className="rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white glow-pink-sm"
               >
-                {selectedStudent.graduated ? "Upload / Update Certificate →" : "Graduate Student Now →"}
+                {selectedStudent.graduated ? "Manage / Issue Another Certificate →" : "Graduate Student Now →"}
               </button>
             </div>
           </div>

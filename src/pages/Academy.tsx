@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   getSkills, getSkill, getSkillName, areAllRegistrationsClosed, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
+  getStudentCertificates, getStudentNotifications, markNotificationRead, type CertificateRecord, type StudentNotification,
   registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
   submitAttendance, getStudentAttendance, getAttendanceTypesSettings, type AttendanceSubmission,
   type Account, type Skill,
@@ -575,7 +576,6 @@ function Profile({ student }: { student: Account }) {
   const [profile, setProfile] = useState(student);
   const [expanded, setExpanded] = useState(!!student.expandedVisibility);
   const [password, setPassword] = useState(profile.password ?? "");
-  const [copiedVerify, setCopiedVerify] = useState(false);
   const { signIn, addNotification } = useAuth();
   const skill = getSkill(profile.skill);
   const ranked = getStudents().filter((account) => !account.isPlaceholder).sort((a, b) => b.points - a.points);
@@ -601,13 +601,6 @@ function Profile({ student }: { student: Account }) {
     const reader = new FileReader();
     reader.onload = () => save({ [field]: String(reader.result) });
     reader.readAsDataURL(file);
-  };
-
-  const copyVerifyLink = () => {
-    const url = `${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}`;
-    navigator.clipboard.writeText(url);
-    setCopiedVerify(true);
-    setTimeout(() => setCopiedVerify(false), 2000);
   };
 
   const handleDownload = () => {
@@ -932,67 +925,8 @@ function Profile({ student }: { student: Account }) {
                     Open Public Co-Founder Verification Page ↗
                   </Link>
                 </div>
-              ) : profile.graduated ? (
-                <div className="mt-3 space-y-4">
-                  <div>
-                    <p className="text-sm font-semibold text-white">Certificate of {profile.certTier ?? "Completion"}</p>
-                    <p className="text-xs text-[#8a7ba8]">{skill?.name} · KR8 Digitals</p>
-                    {profile.certRecognition && <p className="mt-1 text-xs text-pink-400">"{profile.certRecognition}"</p>}
-                  </div>
-
-                  {profile.certificateUrl && (
-                    <div className="group relative overflow-hidden rounded-2xl border border-white/15 bg-black/40">
-                      <img
-                        src={profile.certificateUrl}
-                        alt={`Certificate of ${profile.name}`}
-                        className="w-full object-contain"
-                      />
-                      <div className="p-2.5 bg-black/70 text-center border-t border-white/10">
-                        <span className="text-[11px] text-green-300 font-semibold flex items-center justify-center gap-1">
-                          <Icon name="check" size={12} /> Includes verifiable QR code
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <GradientButton onClick={handleDownload} className="w-full flex items-center justify-center gap-2">
-                    <Icon name="certificate" size={15} /> Download Certificate (PDF) →
-                  </GradientButton>
-
-                  {/* Shareable Verification Link */}
-                  <div className="rounded-2xl border border-pink-400/30 bg-pink-500/5 p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-white">Verification Link</p>
-                      <span className="text-[10px] text-pink-300">Direct proof</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-[#b8aecf]">
-                      Share this link with employers, clients or on LinkedIn to confirm your certificate without needing to scan the QR code:
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <input
-                        readOnly
-                        value={`${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}`}
-                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-pink-300 focus:outline-none select-all"
-                      />
-                      <button
-                        onClick={copyVerifyLink}
-                        className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20 whitespace-nowrap"
-                      >
-                        {copiedVerify ? "Copied! ✓" : "Copy Link"}
-                      </button>
-                    </div>
-                    <a
-                      href={`/verify?id=${encodeURIComponent(profile.id)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block text-center text-xs text-pink-300 underline underline-offset-2 hover:text-white pt-1"
-                    >
-                      Open My Verify Page ↗
-                    </a>
-                  </div>
-                </div>
               ) : (
-                <p className="mt-2 text-sm text-[#8a7ba8]">You don't have a certificate yet — complete your training to earn one.</p>
+                <StudentCertificateSection profile={profile} onDownload={handleDownload} />
               )}
             </Card>
             <Card>
@@ -1519,3 +1453,255 @@ function RoleOfferActivationModal({
   );
 }
 
+
+
+/* ---------------- Student Certificate Section (Multiple Certificates & Verification) ---------------- */
+
+function StudentCertificateSection({
+  profile,
+  onDownload,
+}: {
+  profile: Account;
+  onDownload: () => void;
+}) {
+  const [certs, setCerts] = useState<CertificateRecord[]>(() => getStudentCertificates(profile.id));
+  const [notifs, setNotifs] = useState<StudentNotification[]>(() => getStudentNotifications(profile.id));
+  const [selectedCertId, setSelectedCertId] = useState<string>(() => {
+    const list = getStudentCertificates(profile.id);
+    return list[0]?.id || "";
+  });
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const refresh = () => {
+    const list = getStudentCertificates(profile.id);
+    setCerts(list);
+    setNotifs(getStudentNotifications(profile.id));
+    if (!selectedCertId && list.length > 0) {
+      setSelectedCertId(list[0].id);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    window.addEventListener("kr8:accounts-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kr8:accounts-updated", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [profile.id]);
+
+  const activeCert = certs.find((c) => c.id === selectedCertId) || certs[0];
+
+  const handleCopyLink = (certId?: string) => {
+    const cid = certId || activeCert?.id;
+    const url = `${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}${cid ? `&cert=${encodeURIComponent(cid)}` : ""}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleDismissNotif = (nid: string) => {
+    markNotificationRead(profile.id, nid);
+    setNotifs(getStudentNotifications(profile.id));
+  };
+
+  return (
+    <div className="mt-3 space-y-4">
+      {/* 1. NOTIFICATIONS BANNER (Congratulations / Withdrawal) */}
+      {notifs.filter((n) => !n.read).map((n) => (
+        <div
+          key={n.id}
+          className={`rounded-2xl p-4 border transition-all ${
+            n.type === "graduation"
+              ? "border-green-500/40 bg-gradient-to-r from-green-950/40 via-[#0d1f11] to-black text-green-200"
+              : n.type === "withdrawal"
+              ? "border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-[#1f1608] to-black text-amber-200"
+              : "border-pink-500/40 bg-pink-950/30 text-pink-200"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">
+                {n.type === "graduation" ? "🎓" : n.type === "withdrawal" ? "⚠️" : "📢"}
+              </span>
+              <h4 className="font-bold text-sm text-white">{n.title}</h4>
+            </div>
+            <button
+              onClick={() => handleDismissNotif(n.id)}
+              className="text-xs text-white/60 hover:text-white"
+              title="Dismiss notice"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-white/90">{n.message}</p>
+          {n.reason && (
+            <div className="mt-2.5 rounded-xl bg-black/40 p-2.5 text-xs border border-white/10 text-amber-200">
+              <strong>Stated Reason:</strong> <em>"{n.reason}"</em>
+            </div>
+          )}
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={() => handleDismissNotif(n.id)}
+              className="rounded-lg bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20"
+            >
+              Acknowledge ✓
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {/* 2. CERTIFICATES DISPLAY */}
+      {certs.length > 0 ? (
+        <div className="space-y-4">
+          {/* Multi-Certificate Selector Tabs (Requirement 7 & 16) */}
+          {certs.length > 1 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#8a7ba8] mb-1.5">
+                Your Credentials ({certs.length} Certificates)
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {certs.map((c) => {
+                  const isSelected = c.id === activeCert?.id;
+                  const isWithdrawn = c.status === "withdrawn";
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCertId(c.id)}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all border ${
+                        isSelected
+                          ? "border-pink-500 bg-gradient-pink text-white shadow-md glow-pink-sm"
+                          : "border-white/15 bg-black/30 text-[#cabfe0] hover:border-white/30"
+                      }`}
+                    >
+                      {c.skillName} · {c.tier} {isWithdrawn ? "(Withdrawn)" : "✓"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeCert && (
+            <div className="space-y-3">
+              {/* Certificate Metadata */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-base">Certificate of {activeCert.tier}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        activeCert.status === "withdrawn"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-green-500/20 text-green-300 border border-green-500/30"
+                      }`}
+                    >
+                      {activeCert.status === "withdrawn" ? "Withdrawn ✕" : "Active & Valid ✓"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#8a7ba8] mt-0.5">
+                    {activeCert.skillName} · Issued on {new Date(activeCert.issuedAt).toLocaleDateString()}
+                  </p>
+                  {activeCert.additionalNotes && (
+                    <p className="mt-1 text-xs text-pink-300 font-medium">"{activeCert.additionalNotes}"</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Withdrawn Notice */}
+              {activeCert.status === "withdrawn" && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3.5 text-xs text-amber-200 space-y-1">
+                  <p className="font-bold text-amber-300">⚠️ This certificate has been withdrawn</p>
+                  <p className="text-[#fae8c8]">
+                    Reason: <em>"{activeCert.withdrawalReason || "Administrative review"}"</em>
+                  </p>
+                  <p className="text-[11px] text-[#eed6b4] pt-1">
+                    The QR code remains active for verification accountability. If you have questions, please reach out to the KR8 administration team.
+                  </p>
+                </div>
+              )}
+
+              {/* Certificate Image Document */}
+              <div className="group relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-lg">
+                <img
+                  src={activeCert.certificateImageUrl}
+                  alt={`Certificate of ${profile.name}`}
+                  className="w-full object-contain max-h-[380px]"
+                />
+                <div className="p-2.5 bg-black/80 text-center border-t border-white/10 flex items-center justify-between px-4">
+                  <span className="text-[11px] text-green-300 font-semibold flex items-center gap-1">
+                    <Icon name="check" size={12} /> Includes verifiable QR code
+                  </span>
+                  <span className="text-[11px] font-mono text-pink-400">
+                    {activeCert.id}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-1">
+                <GradientButton
+                  onClick={() => downloadCertificatePdf(profile.name, activeCert.certificateImageUrl)}
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  <Icon name="certificate" size={15} /> Download Official PDF →
+                </GradientButton>
+
+                {/* Shareable Verification Link */}
+                <div className="rounded-2xl border border-pink-400/30 bg-pink-500/5 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-white">Shareable Verification Reference</p>
+                    <span className="text-[10px] text-pink-300 font-mono">Live QR Target</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-[#b8aecf]">
+                    Employers, partners, and clients can verify your certificate status instantly:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={`${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}&cert=${encodeURIComponent(activeCert.id)}`}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-pink-300 focus:outline-none select-all"
+                    />
+                    <button
+                      onClick={() => handleCopyLink(activeCert.id)}
+                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20 whitespace-nowrap"
+                    >
+                      {copiedLink ? "Copied! ✓" : "Copy Link"}
+                    </button>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 text-xs">
+                    <a
+                      href={`/verify?id=${encodeURIComponent(profile.id)}&cert=${encodeURIComponent(activeCert.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-pink-300 underline underline-offset-2 hover:text-white"
+                    >
+                      Test My Verification Page ↗
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : profile.graduated && profile.certificateUrl ? (
+        /* Legacy fallback */
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Certificate of {profile.certTier ?? "Completion"}</p>
+          <div className="rounded-xl overflow-hidden border border-white/15 bg-black">
+            <img src={profile.certificateUrl} alt="Certificate" className="w-full object-contain" />
+          </div>
+          <GradientButton onClick={onDownload} className="w-full flex items-center justify-center gap-2">
+            <Icon name="certificate" size={15} /> Download Certificate (PDF) →
+          </GradientButton>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-[#8a7ba8]">
+          You don't have an issued certificate yet — complete your coursework and live attendance to earn one.
+        </p>
+      )}
+    </div>
+  );
+}
