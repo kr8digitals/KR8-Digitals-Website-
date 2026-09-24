@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { updateAccount, getReferralUrl, SKILLS } from "../data/store";
+import { updateAccount, getReferralUrl, getSkill } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
@@ -60,7 +60,7 @@ export default function Settings() {
     );
   }
 
-  const skill = SKILLS.find((s) => s.key === student.skill);
+  const skill = getSkill(student.skill);
 
   const handleToggleExpanded = (val: boolean) => {
     setExpanded(val);

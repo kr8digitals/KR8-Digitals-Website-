@@ -61,7 +61,7 @@ export function saveTeam(team: TeamProfile[]) {
   if (typeof window !== "undefined") window.dispatchEvent(new Event("kr8:team-updated"));
 }
 
-export const SKILLS: Skill[] = [
+export const DEFAULT_SKILLS: Skill[] = [
   {
     key: "graphic",
     name: "Graphic Design",
@@ -71,14 +71,9 @@ export const SKILLS: Skill[] = [
     regOpen: true,
     snippet: "An 8-week programme taking complete beginners from zero design knowledge to a professional portfolio — covering design fundamentals, flyer design, branding & identity, advanced photo manipulation, and responsible AI-assisted design.",
     icon: "palette",
-    instructor: { name: "Stevenson (Motionverse)", photo: INSTRUCTOR_PHOTOS.stevenson, bio: "Stevenson leads Graphic Design at KR8 Digitals under his creative studio, Motionverse. He's spent years turning raw ideas into brand-ready visuals, and brings that same eye for clarity and impact into every lesson he teaches." },
+    instructor: { name: "Stevenson (Motionverse)", photo: INSTRUCTOR_PHOTOS.stevenson, bio: "Stevenson leads Graphic Design at KR8 Digitals under his creative studio, Motionverse. He has spent years turning raw ideas into brand-ready visuals, and brings that same eye for clarity and impact into every lesson he teaches." },
     criteria: "Submit 6 accepted assignments + a final brand identity project.",
-    curriculum: [
-      { week: "Week 1", title: "Design Foundations", points: ["Design thinking & the creative brief", "Colour theory & harmony", "Composition & visual hierarchy"] },
-      { week: "Week 2", title: "Typography & Layout", points: ["Type anatomy & pairing", "Grids & alignment", "Poster & flyer layout"] },
-      { week: "Week 3", title: "Tools Mastery", points: ["Working in your design tool", "Vectors, shapes & masks", "Exporting for print & web"] },
-      { week: "Week 4", title: "Branding & Identity", points: ["Logo systems", "Brand guidelines", "Final capstone project"] },
-    ],
+    curriculum: [],
   },
   {
     key: "video",
@@ -91,12 +86,7 @@ export const SKILLS: Skill[] = [
     icon: "video",
     instructor: { name: "Daniel (Creative Expression)", photo: INSTRUCTOR_PHOTOS.daniel, bio: "Daniel heads up Video Editing & Animation at KR8 Digitals, running his own studio, Creative Expression. From raw footage to polished, scroll-stopping content, he teaches students to edit with intention — not just software skills." },
     criteria: "Submit 6 accepted edits + a final showreel.",
-    curriculum: [
-      { week: "Week 1", title: "Editing Foundations", points: ["The editing workflow", "Cutting to rhythm & pacing", "Storytelling with footage"] },
-      { week: "Week 2", title: "Audio & Colour", points: ["Audio leveling & cleanup", "Colour correction", "Colour grading looks"] },
-      { week: "Week 3", title: "Motion & Effects", points: ["Keyframes & transitions", "Simple 2D motion graphics", "Text animation"] },
-      { week: "Week 4", title: "Short-Form & Delivery", points: ["Viral short-form edits", "Export presets", "Final showreel"] },
-    ],
+    curriculum: [],
   },
   {
     key: "web",
@@ -109,30 +99,33 @@ export const SKILLS: Skill[] = [
     icon: "code",
     instructor: { name: "Timfire (Kenneth Timothy Iziogo)", photo: INSTRUCTOR_PHOTOS.timfire, bio: "Founder & Website Development instructor at KR8 Digitals." },
     criteria: "Submit 6 accepted builds + a final deployed website.",
-    curriculum: [
-      { week: "Week 1", title: "Web Foundations", points: ["How the web works", "HTML structure", "Semantic markup"] },
-      { week: "Week 2", title: "Styling", points: ["CSS fundamentals", "Responsive layouts", "Flexbox & grid"] },
-      { week: "Week 3", title: "Interactivity", points: ["JavaScript basics", "DOM & events", "Forms & validation"] },
-      { week: "Week 4", title: "Build & Deploy", points: ["Multi-page sites", "Hosting & domains", "Final client-style project"] },
-    ],
+    curriculum: [],
   },
   {
-    key: "content",
-    name: "Content Creation & Social Media",
-    suffix: "CCSMVFD",
+    key: "content_creation",
+    name: "Content Creation",
+    suffix: "CCVFD",
     whatsapp: "https://chat.whatsapp.com/KRnuYK0hIhh0lobi7Tl7Kz?s=cl&p=a&mlu=4&ilr=4",
     available: true,
     regOpen: true,
-    snippet: "An 8-week, phone-only programme taking beginners from zero to a live, consistently-posted content account — covering platform setup, editing, ideation, growth, personal branding, and monetization.",
+    snippet: "An 8-week creator programme taking you from zero to a high-retention creator — covering smartphone cinematography, mobile lighting & audio, CapCut editing, Canva visual design, AI B-roll & ideation, short-form vs long-form architecture, personal branding, and creator media kits.",
+    icon: "video",
+    instructor: null,
+    criteria: "Submit 6 accepted content pieces + a 30-day creator calendar and media kit.",
+    curriculum: [],
+  },
+  {
+    key: "smm",
+    name: "Social Media Management",
+    suffix: "SMMVFD",
+    whatsapp: "https://chat.whatsapp.com/KRnuYK0hIhh0lobi7Tl7Kz?s=cl&p=a&mlu=4&ilr=4",
+    available: true,
+    regOpen: true,
+    snippet: "An 8-week business programme training you to manage and scale brand pages professionally — covering social SEO & algorithm mechanics, 30-day editorial calendars, persuasive social copywriting, community management & lead nurture, analytics & ROI reporting, pricing, contracts, and client pitching.",
     icon: "mobile",
     instructor: null,
-    criteria: "Submit 6 accepted content pieces + a 30-day content calendar.",
-    curriculum: [
-      { week: "Week 1", title: "Content Foundations", points: ["Finding your niche & voice", "Platform strategy", "Hooks that stop the scroll"] },
-      { week: "Week 2", title: "Creating Content", points: ["Shooting with a phone", "Captions & copywriting", "Batch creation"] },
-      { week: "Week 3", title: "Growth", points: ["Algorithms & reach", "Community building", "Analytics"] },
-      { week: "Week 4", title: "Monetization", points: ["Brand deals", "Managing pages", "Final content calendar"] },
-    ],
+    criteria: "Submit 30-day brand strategy calendar + professional social media audit.",
+    curriculum: [],
   },
   {
     key: "marketing",
@@ -145,49 +138,12 @@ export const SKILLS: Skill[] = [
     icon: "chart",
     instructor: null,
     criteria: "Submit 6 accepted assignments + a full campaign plan.",
-    curriculum: [
-      { week: "Week 1", title: "Marketing Foundations", points: ["The marketing funnel", "Audience & positioning", "Offer creation"] },
-      { week: "Week 2", title: "Organic & Content", points: ["Content marketing", "SEO basics", "Email marketing"] },
-      { week: "Week 3", title: "Paid Ads", points: ["Meta & Google ads", "Targeting & budgets", "Ad creative"] },
-      { week: "Week 4", title: "Analytics & Scale", points: ["Tracking & attribution", "Optimising campaigns", "Final campaign plan"] },
-    ],
-  },
-  {
-    key: "frontend",
-    name: "Frontend Development",
-    suffix: "FDVFD",
-    whatsapp: "https://chat.whatsapp.com/EqdAOw1TxiM7KqTB5EXh8v?s=cl&p=a&mlu=4&ilr=4",
-    available: false,
-    regOpen: false,
-    snippet: "Not Available (curriculum not yet published).",
-    icon: "spark",
-    instructor: { name: "Chimnonyerem Mercy", photo: INSTRUCTOR_PHOTOS.chimnonyerem, bio: "Frontend Development instructor — track opening to be announced." },
-    criteria: "Restricted access track.",
     curriculum: [],
   },
 ];
 
-const SKILL_SETTINGS_KEY = "kr8_skill_settings_v1";
-type SkillSettings = Record<string, { regOpen: boolean; whatsapp: string }>;
-function skillSettings(): SkillSettings {
-  return load(SKILL_SETTINGS_KEY, Object.fromEntries(SKILLS.map((skill) => [skill.key, { regOpen: skill.regOpen, whatsapp: skill.whatsapp }])));
-}
-export function getSkillRegistration(key: string) {
-  return skillSettings()[key]?.regOpen ?? SKILLS.find((skill) => skill.key === key)?.regOpen ?? false;
-}
-export function getSkillWhatsApp(key: string) {
-  return skillSettings()[key]?.whatsapp ?? SKILLS.find((skill) => skill.key === key)?.whatsapp ?? "";
-}
-export function saveSkillSetting(key: string, patch: Partial<SkillSettings[string]>) {
-  const next = { ...skillSettings(), [key]: { ...skillSettings()[key], ...patch } };
-  save(SKILL_SETTINGS_KEY, next);
-  const skill = SKILLS.find((item) => item.key === key);
-  if (skill) { if (patch.regOpen !== undefined) skill.regOpen = patch.regOpen; if (patch.whatsapp !== undefined) skill.whatsapp = patch.whatsapp; }
-}
-
-/* The full Academy curriculum is intentionally kept as editable content data,
-   so the admin Academy section can replace it without touching the UI. */
-const FULL_CURRICULA: Record<string, Week[]> = {
+/* Curricula definitions */
+export const FULL_CURRICULA: Record<string, Week[]> = {
   graphic: [
     { week: "Week 1", title: "Design Basics", points: ["Intro to Graphic Design & Principles (balance, contrast, alignment, hierarchy, proximity)", "Typography & Color Theory", "Layout, Composition & Tool Setup (Canva, Photoshop)"] },
     { week: "Week 2", title: "Social Media Flyer Design", points: ["Intro to Flyer Design", "Design Hierarchy & Visual Engagement", "Practical Flyer Project (promotional + event flyer)"] },
@@ -218,15 +174,25 @@ const FULL_CURRICULA: Record<string, Week[]> = {
     { week: "Week 7", title: "UGC & AI Ad Video Creation", points: ["UGC Ad Videos", "Stickman Animation Using AI", "Business Advert Video Creation Using AI"] },
     { week: "Week 8", title: "Final Project & Graduation", points: ["Project 1 (Paired) — collaborative short-form viral-style edited video.", "Project 2 (Individual) — an animation piece using any technique learned."] },
   ],
-  content: [
-    { week: "Week 1", title: "Intro to Content Creation", points: ["What it is, opportunities, mindset", "Types of content creation", "Choosing a niche"] },
-    { week: "Week 2", title: "Content Creation Platforms", points: ["Platform overview (TikTok, Instagram, YouTube, Facebook, Threads/X, LinkedIn, Pinterest)", "Creating accounts & basic settings", "Advanced platform settings (analytics, monetization eligibility)"] },
-    { week: "Week 3", title: "Tools of the Trade", points: ["Video Editing for Creators (CapCut)", "Graphic Design & Photo Editing (Canva)", "Introduction to AI in Content Creation"] },
-    { week: "Week 4", title: "Ideation & Content Planning", points: ["Sourcing ideas", "Turning ideas into content (hook/body/CTA)", "Building a content library and calendar"] },
-    { week: "Week 5", title: "Testing Content With Your Audience", points: ["First Post analysis", "Improved Post", "Better Post — iterative, data-backed refinement"] },
-    { week: "Week 6", title: "Growth, Engagement & Consistency", points: ["How platforms work", "Engagement & community building", "Consistency without burnout"] },
-    { week: "Week 7", title: "Personal Branding & Monetization", points: ["Personal branding", "Monetization routes (payouts, brand deals, affiliate, digital products/services)", "Pitching brands & media kits"] },
-    { week: "Week 8", title: "Final Project & Graduation", points: ["Project 1 (Paired) — a 3-part Day in the Life/How-To content series.", "Project 2 (Individual) — a live 7-day content portfolio (optimised bio, 7 posted pieces, performance review, basic media kit)."] },
+  content_creation: [
+    { week: "Week 1", title: "Foundations of Content Creation & Creative Voice", points: ["What makes great content in 2026 & creator mindset", "Choosing your niche & sub-topics", "The 4 Content Pillars (Educational, Entertaining, Inspiring, Relatable)", "High-retention storytelling frameworks"] },
+    { week: "Week 2", title: "Smartphone Cinematography & Mobile Audio", points: ["Phone camera settings, resolution, frame rates (4K vs 1080p, 24fps vs 60fps)", "Rule of thirds, dynamic angles & smooth camera movement", "Budget lighting techniques (natural, ring light, 3-point setups)", "Clear mobile audio, external mics, and noise cancellation"] },
+    { week: "Week 3", title: "Mobile Video Editing for Creators (CapCut & InShot)", points: ["Timeline editing, trimming & split workflows", "Cutting on action, dynamic pacing & pattern interrupts", "Sound effects (SFX), sound bridges & music layering", "Auto-captions, animated kinetic typography & overlays"] },
+    { week: "Week 4", title: "Scriptwriting & The 3-Second Hook", points: ["The psychology of stopping the scroll (visual, verbal, text hooks)", "Structuring the body for maximum viewer retention", "Avoiding mid-video drop-offs & dead air", "Call-to-action (CTA) formulas that drive engagement and follows"] },
+    { week: "Week 5", title: "Visual Design & Thumbnail Mastery", points: ["Canva for content creators: principles & workflows", "Designing high-CTR video thumbnails and cover cards", "Contrast, text hierarchy, emotion, and facial expressions", "Creating reusable branded templates & color palettes"] },
+    { week: "Week 6", title: "AI-Powered Creation & Generative Assets", points: ["AI ideation and script generation with Claude & ChatGPT", "Generative AI B-roll, dynamic b-roll inserts & visual assets", "Voiceover enhancement & ethical AI voice synthesis", "Automating repurposing pipelines with AI"] },
+    { week: "Week 7", title: "Long-Form YouTube & Multi-Platform Repurposing", points: ["Long-form YouTube architecture (concept, title, thumbnail, payoff)", "The 1-to-10 Repurposing Framework: turn 1 long video into 10 viral clips", "Platform adaptations: TikTok vs Reels vs Shorts vs LinkedIn", "Batch production scheduling: film a week's content in 3 hours"] },
+    { week: "Week 8", title: "Personal Branding, Media Kit & Creator Launch", points: ["Project 1 (Paired) — A 3-part viral video series with retention analytics breakdown.", "Project 2 (Individual) — Live 7-day multi-format content portfolio + professional creator media kit.", "Rate card setting, pitching brands for sponsorship & graduation showcase."] },
+  ],
+  smm: [
+    { week: "Week 1", title: "The SMM Profession & Strategic Ecosystem", points: ["Role of a Social Media Manager vs. Content Creator", "Understanding client business models & digital marketing objectives", "Conducting a comprehensive brand profile audit", "Competitor research, benchmarking & SWOT analysis"] },
+    { week: "Week 2", title: "Profile Architecture & Social SEO Optimization", points: ["Crafting high-converting business bios and value propositions", "Optimizing profile handles, SEO keywords & search indexing", "Highlights funnel architecture and lead capture link setups", "Algorithm mechanics across Instagram, TikTok, LinkedIn, Facebook, and X"] },
+    { week: "Week 3", title: "Content Strategy & 30-Day Editorial Calendars", points: ["Defining core content pillars and sub-themes for a brand", "Building comprehensive 30-day editorial content calendars", "Balancing brand awareness, engagement, community trust, and direct sales", "Scheduling automation tools (Meta Business Suite, Buffer, Later)"] },
+    { week: "Week 4", title: "Persuasive Copywriting & Community Management", points: ["Developing and documenting a brand tone of voice", "Writing persuasive captions with clear conversion triggers", "Community engagement strategy: proactive vs reactive engagement", "Direct message (DM) lead qualification, customer service & crisis management"] },
+    { week: "Week 5", title: "Organic Growth Hacking & Trend Hijacking", points: ["Researching trending audios, hashtags & viral formats", "Ethical newsjacking and timely cultural trend integration", "Strategic collaborations, co-author posts & influencer outreach", "Cross-platform audience migration tactics"] },
+    { week: "Week 6", title: "Analytics, Performance Metrics & Client ROI Reporting", points: ["Mastering native analytics dashboards (Meta Insights, TikTok Analytics, LinkedIn)", "Key metrics that matter: Reach, Impressions, ER, CTR, Saves & Shares", "Translating vanity metrics into real business outcomes and sales leads", "Building professional monthly client performance decks with actionable recommendations"] },
+    { week: "Week 7", title: "SMM Business Operations, Pricing & Client Acquisition", points: ["Packaging your SMM services: management, strategy, community only", "Pricing models: monthly retainers vs project fees vs setup packages", "Crafting winning client proposals, contracts & scopes of work (SOW)", "Client onboarding checklists, communication boundaries & managing multiple accounts"] },
+    { week: "Week 8", title: "Capstone Project, Portfolio & SMM Certification", points: ["Project 1 — Complete 30-day brand strategy and content calendar for a real business.", "Project 2 — Full social media audit report and strategic pitch deck ready for client presentation.", "Final client pitch presentation, portfolio review, and Certificate of Social Media Management."] },
   ],
   marketing: [
     { week: "Week 1", title: "Intro to Digital Marketing", points: ["What it is", "Types and requirements", "Choosing your path among the three tracks"] },
@@ -240,20 +206,174 @@ const FULL_CURRICULA: Record<string, Week[]> = {
   ],
 };
 
-SKILLS.forEach((skill) => {
-  if (FULL_CURRICULA[skill.key]) skill.curriculum = FULL_CURRICULA[skill.key];
-});
+// Backward-compatible alias
+FULL_CURRICULA.content = FULL_CURRICULA.content_creation;
 
 export const CERTIFICATION_CRITERIA: Record<string, string> = {
   graphic: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 5+ projects including one AI-assisted piece · passing feedback in ≥2 Thursday review sessions · ≥2 Mindset Shift sessions + 1 Monthly Hangout attended · demonstrated proficiency across fundamentals, branding, advanced editing, and responsible AI collaboration.",
   web: "≥80% live session attendance · both Week 7 final projects submitted · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across AI websites, CMS/WordPress, e-commerce, and landing pages.",
   video: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 6+ pieces covering both editing and animation · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across editing fundamentals, short-form editing, and at least one animation technique.",
-  content: "≥80% live session attendance · both Week 8 projects submitted · an active, consistently-posted account maintained for the full 8 weeks · a completed content library/calendar submitted · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · ability to read basic analytics and explain next improvements.",
+  content_creation: "≥80% live session attendance · both Week 8 projects submitted · an active creator account with a 7-day multi-format portfolio + creator media kit · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency in mobile production, dynamic editing, and audience retention.",
+  content: "≥80% live session attendance · both Week 8 projects submitted · an active creator account with a 7-day multi-format portfolio + creator media kit · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance.",
+  smm: "≥80% live session attendance · complete 30-day brand strategy and content calendar submitted · professional social media audit and pitch deck for a real brand · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated competency in client reporting and KPI analytics.",
   marketing: "≥80% live session attendance · real deliverables completed in ≥2 of the 3 final project tracks · a working 1688 account OR live/approved affiliate account OR active bounty promotion (matching chosen tracks) · passing feedback in ≥2 Thursday review sessions · ≥3 Mindset Shift sessions + 1 Monthly Hangout attended · demonstrated honest, professional communication with customers/suppliers.",
-  frontend: "Not available until the Frontend Development curriculum is published.",
 };
 
-SKILLS.forEach((skill) => { skill.criteria = CERTIFICATION_CRITERIA[skill.key]; });
+const CUSTOM_SKILLS_KEY = "kr8_custom_skills_v3";
+const SKILL_SETTINGS_KEY = "kr8_skill_settings_v3";
+const WAITLIST_WHATSAPP_KEY = "kr8_waitlist_whatsapp_url_v1";
+export const DEFAULT_WAITLIST_WHATSAPP = "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8";
+
+export function getCustomSkills(): Skill[] {
+  return load<Skill[]>(CUSTOM_SKILLS_KEY, []);
+}
+
+export function saveCustomSkill(skill: Skill): void {
+  const current = getCustomSkills();
+  const existingIdx = current.findIndex((s) => s.key === skill.key);
+  if (existingIdx >= 0) {
+    current[existingIdx] = skill;
+  } else {
+    current.push(skill);
+  }
+  save(CUSTOM_SKILLS_KEY, current);
+  saveSkillSetting(skill.key, { regOpen: skill.regOpen, whatsapp: skill.whatsapp, available: skill.available });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+export function deleteCustomSkill(key: string): void {
+  const current = getCustomSkills().filter((s) => s.key !== key);
+  save(CUSTOM_SKILLS_KEY, current);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+type SkillSettings = Record<string, { regOpen?: boolean; whatsapp?: string; available?: boolean }>;
+function skillSettings(): SkillSettings {
+  return load<SkillSettings>(SKILL_SETTINGS_KEY, {});
+}
+
+export function getSkills(): Skill[] {
+  const custom = getCustomSkills();
+  const settings = skillSettings();
+  
+  const baseMap = new Map<string, Skill>();
+  DEFAULT_SKILLS.forEach((s) => baseMap.set(s.key, { ...s }));
+  custom.forEach((s) => baseMap.set(s.key, { ...s }));
+
+  return Array.from(baseMap.values()).map((s) => {
+    const setting = settings[s.key];
+    const curriculum = FULL_CURRICULA[s.key] || s.curriculum || [];
+    const criteria = CERTIFICATION_CRITERIA[s.key] || s.criteria || "Attendance and coursework completion.";
+    return {
+      ...s,
+      regOpen: setting?.regOpen !== undefined ? setting.regOpen : s.regOpen,
+      whatsapp: setting?.whatsapp !== undefined ? setting.whatsapp : s.whatsapp,
+      available: setting?.available !== undefined ? setting.available : s.available,
+      curriculum,
+      criteria,
+    };
+  });
+}
+
+export const SKILLS: Skill[] = getSkills();
+
+export function getSkill(key?: string): Skill | undefined {
+  if (!key) return undefined;
+  const k = key.trim().toLowerCase();
+  const all = getSkills();
+  const direct = all.find((s) => s.key.toLowerCase() === k);
+  if (direct) return direct;
+  if (k === "content") {
+    const legacy = all.find((s) => s.key === "content");
+    if (legacy) return legacy;
+    return {
+      key: "content",
+      name: "Content Creation & Social Media Management",
+      suffix: "CCSMVFD",
+      whatsapp: "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8",
+      available: false,
+      regOpen: false,
+      snippet: "Comprehensive combined track covering content creation and social media management.",
+      icon: "video",
+      instructor: { name: "Iwuagwu Miracle & Ozioma", photo: "", bio: "Senior Mentors" },
+      curriculum: [],
+      criteria: "≥80% live attendance · all assignments submitted · capstone completion.",
+    };
+  }
+  if (k === "content-creation" || k === "content_creation") {
+    return all.find((s) => s.key === "content_creation");
+  }
+  if (k === "smm" || k === "social_media" || k === "social-media" || k === "social-media-management") {
+    return all.find((s) => s.key === "smm");
+  }
+  if (k === "graphic-design" || k === "graphic") {
+    return all.find((s) => s.key === "graphic");
+  }
+  if (k === "video-editing" || k === "video") {
+    return all.find((s) => s.key === "video");
+  }
+  if (k === "website-development" || k === "web") {
+    return all.find((s) => s.key === "web");
+  }
+  if (k === "digital-marketing" || k === "marketing") {
+    return all.find((s) => s.key === "marketing");
+  }
+  return all.find((s) => s.key.toLowerCase().includes(k) || s.name.toLowerCase().includes(k));
+}
+
+export function getSkillName(key?: string): string {
+  const s = getSkill(key);
+  return s?.name ?? key ?? "Digital Skills";
+}
+
+export function getSkillRegistration(key: string): boolean {
+  const setting = skillSettings()[key];
+  if (setting?.regOpen !== undefined) return setting.regOpen;
+  const s = getSkill(key);
+  return s?.regOpen ?? false;
+}
+
+export function getSkillWhatsApp(key: string): string {
+  const setting = skillSettings()[key];
+  if (setting?.whatsapp !== undefined) return setting.whatsapp;
+  const s = getSkill(key);
+  return s?.whatsapp ?? "";
+}
+
+export function saveSkillSetting(key: string, patch: { regOpen?: boolean; whatsapp?: string; available?: boolean }) {
+  const next = { ...skillSettings(), [key]: { ...skillSettings()[key], ...patch } };
+  save(SKILL_SETTINGS_KEY, next);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+export function getWaitlistWhatsAppUrl(): string {
+  return load<string>(WAITLIST_WHATSAPP_KEY, DEFAULT_WAITLIST_WHATSAPP);
+}
+
+export function saveWaitlistWhatsAppUrl(url: string): void {
+  save<string>(WAITLIST_WHATSAPP_KEY, url.trim());
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new Event("kr8:waitlist-updated"));
+      window.dispatchEvent(new Event("storage"));
+    } catch {}
+  }
+}
+
+export function areAllRegistrationsClosed(): boolean {
+  const availableSkills = getSkills().filter((s) => s.available);
+  if (availableSkills.length === 0) return true;
+  return availableSkills.every((s) => !getSkillRegistration(s.key));
+}
 
 const VIP_PHONES = [
   "+2349043870282", "09043870282",
@@ -407,6 +527,11 @@ export type Account = {
   submissions: number;
   referrals: number;
   graduated: boolean;
+  skills?: string[];
+  graduatedSkills?: string[];
+  previousIds?: string[];
+  milestones?: string[];
+  multiSkillCount?: number;
   certTier?: "Completion" | "Professionalism" | null;
   certRecognition?: string;
   certificateUrl?: string;
@@ -563,9 +688,20 @@ export function resetAdminPassword(targetId: string) {
   return adminPassword;
 }
 
+export function getSkillSuffix(skillKey: string): string {
+  const s = getSkill(skillKey);
+  if (s?.suffix) return s.suffix;
+  const clean = (skillKey || "KR8").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  return `${clean}VFD`;
+}
+
+export function getSkillCode(skillKey: string): string {
+  const suffix = getSkillSuffix(skillKey);
+  return suffix.replace(/VFD$/i, "") || skillKey.toUpperCase().slice(0, 3);
+}
+
 function kr8id(name: string, skill: string, serial: number): string {
-  const s = SKILLS.find((x) => x.key === skill)!;
-  return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${s.suffix}`;
+  return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${getSkillSuffix(skill)}`;
 }
 
 // v3 is the durable account namespace.
@@ -1269,16 +1405,76 @@ export function registerStudent(input: { name: string; email: string; phone: str
     };
   }
 
-  // Regular students
-  if (accts.some((s) => normalizeEmail(s.email) === email))
-    return { ok: false, error: "This email is already registered." };
-  if (accts.some((s) => normalizePhone(s.phone) === phone))
-    return { ok: false, error: "This phone number is already registered." };
-  const skill = SKILLS.find((s) => s.key === input.skill);
+  // Progression Rule:
+  // NO STUDENT IS PERMITTED TO REGISTER FOR ANOTHER SKILL UNLESS THEY ARE GRADUATED FROM THEIR CURRENT SKILL.
+  const existing = accts.find(
+    (s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone
+  );
+
+  if (existing) {
+    const targetSkillKey = input.skill;
+    const currentSkillName = getSkillName(existing.skill);
+    const targetSkillName = getSkillName(targetSkillKey);
+
+    // If enrolling in same skill
+    if (existing.skill === targetSkillKey || (existing.skills && existing.skills.includes(targetSkillKey))) {
+      return {
+        ok: false,
+        error: `You are already registered for ${targetSkillName}. Please sign in to your dashboard to access your classes and coursework.`,
+      };
+    }
+
+    // Must be graduated from current skill (proven by certificate)
+    const isGraduated = !!existing.graduated || !!existing.certificateUrl || (existing.graduatedSkills && existing.graduatedSkills.includes(existing.skill || ""));
+    if (!isGraduated) {
+      return {
+        ok: false,
+        error: `Academic Progression Notice: You are currently enrolled in ${currentSkillName}. In accordance with KR8 Academy standards, no student is permitted to register for another skill unless they have graduated from their current skill (proven by certificate). Please complete your coursework and graduate first before enrolling in ${targetSkillName}.`,
+      };
+    }
+
+    // If graduated, allow new registration & append skill code to their existing ID!
+    const newSkill = getSkill(targetSkillKey);
+    if (!newSkill) return { ok: false, error: "Please select a valid skill." };
+    if (!newSkill.available) return { ok: false, error: `${newSkill.name} is currently not available.` };
+    if (!getSkillRegistration(targetSkillKey)) return { ok: false, error: `Registration for ${newSkill.name} is currently closed.` };
+
+    const oldId = existing.id;
+    const newCode = getSkillCode(targetSkillKey);
+    const updatedId = `${oldId}-${newCode}`;
+
+    existing.id = updatedId;
+    existing.previousIds = Array.from(new Set([...(existing.previousIds || []), oldId]));
+    existing.skills = Array.from(new Set([...(existing.skills || [existing.skill || ""]), targetSkillKey]));
+    existing.graduatedSkills = Array.from(new Set([...(existing.graduatedSkills || [existing.skill || ""])]));
+    existing.skill = targetSkillKey; // Active skill track
+    existing.graduated = false; // In training for the new skill track
+    existing.certTier = null;
+    existing.certificateUrl = undefined;
+    existing.points = (existing.points || 0) + 500; // Milestone achievement bonus
+    existing.multiSkillCount = (existing.multiSkillCount || 1) + 1;
+    existing.milestones = Array.from(
+      new Set([
+        ...(existing.milestones || []),
+        `Milestone: Graduated ${currentSkillName} (Certificate Verified) · Enrolled in ${targetSkillName}`,
+      ])
+    );
+
+    updateAccount(oldId, existing);
+    addFeed({
+      kind: "registration",
+      name: existing.name,
+      skill: `${targetSkillName} (Milestone ID: ${updatedId})`,
+      avatar: existing.avatar,
+    });
+    return { ok: true, student: existing };
+  }
+
+  const skill = getSkill(input.skill);
   if (!skill) return { ok: false, error: "Please select a valid skill." };
-  if (!skill.available && !fdAllowed(phone))
-    return { ok: false, error: `${skill.name} is currently restricted.` };
-  if (!getSkillRegistration(input.skill) && !fdAllowed(phone))
+  if (!skill.available)
+    return { ok: false, error: `${skill.name} is currently not available.` };
+  if (!getSkillRegistration(input.skill))
     return { ok: false, error: `Registration for ${skill.name} is currently closed.` };
 
   const serial = nextSerial(input.skill);
@@ -1288,6 +1484,11 @@ export function registerStudent(input: { name: string; email: string; phone: str
     type: "student",
     id: studentId,
     name: input.name.trim(), email, phone, country: input.country || "NG", skill: input.skill,
+    skills: [input.skill],
+    graduatedSkills: [],
+    previousIds: [],
+    milestones: [`Enrolled in ${skill.name}`],
+    multiSkillCount: 1,
     dob: input.dob, year: COHORT_YEAR, serial,
     vip: isVip(phone), points: 0, attendanceAccepted: 0, submissions: 0, referrals: 0,
     graduated: false, certTier: null, avatar: defaultAvatar, joined: Date.now(), expandedVisibility: false, password: input.password,
@@ -1311,7 +1512,7 @@ export function adminRegisterStudent(input: {
 }): { ok: boolean; error?: string; student?: Account } {
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Full name is required." };
-  const skill = SKILLS.find((item) => item.key === input.skill);
+  const skill = getSkill(input.skill);
   if (!skill) return { ok: false, error: "Please select a valid skill." };
   const accounts = getAccounts();
   const email = normalizeEmail(input.email);
@@ -1320,18 +1521,14 @@ export function adminRegisterStudent(input: {
   const isFounder = isFounderAccount(phone, email);
   const isCoFounder = isCoFounderAccount(phone, email);
 
-  if (!isFounder && !isCoFounder) {
-    if (accounts.some((account) => normalizeEmail(account.email) === email)) {
-      return { ok: false, error: "This email is already registered." };
-    }
-    if (accounts.some((account) => normalizePhone(account.phone) === phone)) {
-      return { ok: false, error: "This phone number is already registered." };
-    }
-  }
-
   const password = input.password?.trim() || "TempChangeMe2026";
   if (password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
+  }
+
+  // If existing student, delegate to registerStudent so progression & milestone ID rules apply
+  if (accounts.some((a) => normalizeEmail(a.email) === email || normalizePhone(a.phone) === phone)) {
+    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
   }
 
   if (isFounder) {
@@ -1445,8 +1642,14 @@ export function registerTribe(input: {
 export function findStudent(id: string): Account | undefined {
   const normalized = normalizeIdentity(id);
   const accounts = getAccounts();
-  const direct = accounts.find((s) => normalizeIdentity(s.id) === normalized);
+  const direct = accounts.find((s) => {
+    if (normalizeIdentity(s.id) === normalized) return true;
+    if (s.previousIds && s.previousIds.some((p) => normalizeIdentity(p) === normalized)) return true;
+    return false;
+  });
   if (direct) return direct;
+  const prefixMatch = accounts.find((s) => normalizeIdentity(s.id).startsWith(normalized));
+  if (prefixMatch) return prefixMatch;
   if (normalized.includes("FOUNDER") || normalized.includes("TIMFIRE")) {
     return accounts.find((s) => s.type === "founder");
   }

@@ -2,7 +2,9 @@ import { useState, useEffect, type ChangeEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
 import {
-  SKILLS, ATTENDANCE_TYPES, PORTFOLIO,
+  getSkills, getSkill, saveCustomSkill, deleteCustomSkill,
+  getWaitlistWhatsAppUrl, saveWaitlistWhatsAppUrl, areAllRegistrationsClosed,
+  type Skill, ATTENDANCE_TYPES, PORTFOLIO,
   getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
   getPaymentSettings, savePaymentSettings, getSkillRegistration, getSkillWhatsApp,
   saveSkillSetting, getFounders, saveFounders, getTeam,
@@ -345,7 +347,7 @@ function StudentManager({ students }: { students: Account[] }) {
                   </tr>
                 ) : (
                   filtered.map((s) => {
-                    const skill = SKILLS.find((k) => k.key === s.skill);
+                    const skill = getSkill(s.skill);
                     return (
                       <tr key={s.id} className="border-t border-white/5 text-[#cabfe0] hover:bg-white/[0.02]">
                         <td className="p-3 font-mono text-xs font-semibold text-pink-400">{s.id}</td>
@@ -1116,7 +1118,7 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
                 onChange={(e) => setSkill(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-sm text-white focus:border-pink-400/60 focus:outline-none"
               >
-                {SKILLS.map((s) => (
+                {getSkills().map((s) => (
                   <option key={s.key} value={s.key}>{s.name} ({s.suffix})</option>
                 ))}
               </select>
@@ -1192,7 +1194,7 @@ function GraduationModal({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
 
-  const skill = SKILLS.find((k) => k.key === student.skill);
+  const skill = getSkill(student.skill);
   const verifyUrl = `${window.location.origin}/verify?id=${encodeURIComponent(student.id)}`;
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -1877,7 +1879,7 @@ function XPManager() {
 
 function LinksManager() {
   const [links, setLinks] = useState(() =>
-    Object.fromEntries(SKILLS.filter((s) => s.available).map((s) => [s.key, getSkillWhatsApp(s.key)]))
+    Object.fromEntries(getSkills().filter((s) => s.available).map((s) => [s.key, getSkillWhatsApp(s.key)]))
   );
   const [tribe, setTribe] = useState("https://chat.whatsapp.com/DgnBOEd5CfMHV8CTWgPNLH?s=cl&p=a&mlu=4&ilr=4");
   const [saved, setSaved] = useState(false);
@@ -1894,7 +1896,7 @@ function LinksManager() {
       <h3 className="font-bold text-white text-lg">Links Manager</h3>
       <p className="mt-1 text-sm text-[#b8aecf]">Edit skill and Tribe WhatsApp links, then save to apply them to registration and join flows.</p>
       <div className="mt-4 space-y-2">
-        {SKILLS.filter((s) => s.available).map((s) => (
+        {getSkills().filter((s) => s.available).map((s) => (
           <label key={s.key} className="flex flex-wrap items-center gap-3 rounded-xl bg-black/20 px-4 py-2.5">
             <span className="w-40 shrink-0 text-sm text-white">{s.name}</span>
             <input
@@ -1970,85 +1972,549 @@ function SocialLinksManager() {
 }
 
 function AcademyManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
+  const [skillsList, setSkillsList] = useState<Skill[]>(() => getSkills());
+  const [waitlistUrl, setWaitlistUrl] = useState(() => getWaitlistWhatsAppUrl());
+  const [waitlistSaved, setWaitlistSaved] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [globalNotice, setGlobalNotice] = useState<string | null>(null);
+
+  // New Skill Form State
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillKey, setNewSkillKey] = useState("");
+  const [newSkillCode, setNewSkillCode] = useState("");
+  const [newSkillDesc, setNewSkillDesc] = useState("");
+  const [newSkillIcon, setNewSkillIcon] = useState("spark");
+  const [newSkillWhatsapp, setNewSkillWhatsapp] = useState("");
+  const [newSkillInstructorName, setNewSkillInstructorName] = useState("");
+  const [newSkillInstructorBio, setNewSkillInstructorBio] = useState("");
+  const [newSkillCriteria, setNewSkillCriteria] = useState("");
+  const [newSkillVisible, setNewSkillVisible] = useState(true);
+  const [newSkillRegOpen, setNewSkillRegOpen] = useState(true);
+
+  const refresh = () => {
+    setSkillsList(getSkills());
+    setWaitlistUrl(getWaitlistWhatsAppUrl());
+  };
+
+  useEffect(() => {
+    window.addEventListener("kr8:skills-updated", refresh);
+    window.addEventListener("kr8:waitlist-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kr8:skills-updated", refresh);
+      window.removeEventListener("kr8:waitlist-updated", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  const handleSaveWaitlist = () => {
+    if (!waitlistUrl.trim()) return;
+    saveWaitlistWhatsAppUrl(waitlistUrl.trim());
+    setWaitlistSaved(true);
+    setTimeout(() => setWaitlistSaved(false), 2000);
+  };
+
+  const handleCloseAllRegistrations = () => {
+    if (!window.confirm("Are you sure you want to close registrations for ALL skills? Visitors navigating to register will be redirected to the waitlist.")) return;
+    skillsList.forEach((s) => {
+      saveSkillSetting(s.key, { regOpen: false });
+    });
+    refresh();
+    setGlobalNotice("All skill registrations have been closed. Visitors are now redirected to the waitlist.");
+    setTimeout(() => setGlobalNotice(null), 3500);
+  };
+
+  const handleOpenAllRegistrations = () => {
+    if (!window.confirm("Are you sure you want to open registrations for all visible skills?")) return;
+    skillsList.filter((s) => s.available).forEach((s) => {
+      saveSkillSetting(s.key, { regOpen: true });
+    });
+    refresh();
+    setGlobalNotice("All available skill registrations are now OPEN.");
+    setTimeout(() => setGlobalNotice(null), 3500);
+  };
+
+  const handleCreateSkill = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSkillName.trim()) {
+      alert("Skill name is required.");
+      return;
+    }
+
+    const rawKey = newSkillKey.trim() || newSkillName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    const rawCode = (newSkillCode.trim() || newSkillName.replace(/[^A-Z0-9]/gi, "").slice(0, 3)).toUpperCase();
+    const suffix = rawCode.endsWith("VFD") ? rawCode : `${rawCode}VFD`;
+
+    const newSkillObj: Skill = {
+      key: rawKey,
+      name: newSkillName.trim(),
+      suffix,
+      whatsapp: newSkillWhatsapp.trim() || "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8",
+      available: newSkillVisible,
+      regOpen: newSkillRegOpen,
+      snippet: newSkillDesc.trim() || `An intensive 8-week professional ${newSkillName} track with live mentorship and real deliverables.`,
+      icon: newSkillIcon,
+      instructor: newSkillInstructorName.trim()
+        ? { name: newSkillInstructorName.trim(), photo: "", bio: newSkillInstructorBio.trim() }
+        : null,
+      criteria: newSkillCriteria.trim() || "≥80% live session attendance · all core projects submitted · passing review sessions · Mindset Shift & Monthly Hangout attendance.",
+      curriculum: [
+        { week: "Week 1", title: `${newSkillName} Fundamentals`, points: ["Core principles & terminology", "Tools & environment setup", "Industry workflow overview"] },
+        { week: "Week 2", title: "Core Techniques & Foundations", points: ["Fundamental skills practice", "Working with standard briefs", "Weekly assignment review"] },
+        { week: "Week 3", title: "Intermediate Execution", points: ["Deep-dive into tools", "Efficiency & speed techniques", "Peer review & feedback"] },
+        { week: "Week 4", title: "Client Brief Simulation", points: ["Working on real-world scenarios", "Solving common client challenges", "Mid-cohort milestone project"] },
+        { week: "Week 5", title: "Advanced Mastery & AI Collaboration", points: ["Advanced workflows", "Ethical AI tooling integration", "Quality refinement"] },
+        { week: "Week 6", title: "Professional Standards & Optimization", points: ["Polishing outputs for production", "Performance benchmarking", "Deliverable packaging"] },
+        { week: "Week 7", title: "Portfolio Development & Positioning", points: ["Selecting your best work", "Case study documentation", "Client communication & pricing"] },
+        { week: "Week 8", title: "Capstone Project & Graduation", points: ["Project 1 — Collaborative production deliverable.", "Project 2 — Individual professional portfolio showcase.", "Certificate verification and graduation showcase."] },
+      ],
+    };
+
+    saveCustomSkill(newSkillObj);
+    refresh();
+    setShowAddModal(false);
+
+    // Reset form
+    setNewSkillName("");
+    setNewSkillKey("");
+    setNewSkillCode("");
+    setNewSkillDesc("");
+    setNewSkillWhatsapp("");
+    setNewSkillInstructorName("");
+    setNewSkillInstructorBio("");
+    setNewSkillCriteria("");
+    setGlobalNotice(`Skill "${newSkillObj.name}" added successfully with ID suffix ${suffix}!`);
+    setTimeout(() => setGlobalNotice(null), 3500);
+  };
+
+  const allClosed = areAllRegistrationsClosed();
+  const openCount = skillsList.filter((s) => s.available && getSkillRegistration(s.key)).length;
+  const visibleCount = skillsList.filter((s) => s.available).length;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4">
+    <div className="space-y-6">
+      {/* GLOBAL NOTICE */}
+      {globalNotice && (
+        <div className="rounded-2xl border border-pink-500/40 bg-pink-500/10 p-4 text-sm font-semibold text-pink-300">
+          {globalNotice}
+        </div>
+      )}
+
+      {/* TOP HEADER & CONTROLS */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-5">
         <div>
-          <h4 className="font-bold text-white text-sm">Academy Testimonial Videos</h4>
-          <p className="text-xs text-[#b8aecf]">
-            The student testimonial reels power the Academy page.
+          <h4 className="font-bold text-white text-base">Academy Tracks & Admissions Control</h4>
+          <p className="text-xs text-[#b8aecf] mt-0.5">
+            Manage visible skills, open/close registrations, customize ID suffixes, and update the global waitlist.
           </p>
         </div>
-        {onOpenVideos && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={onOpenVideos}
-            className="flex items-center gap-1.5 rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-lg glow-pink-sm active:scale-95 transition-all"
           >
-            <Icon name="video" size={14} />
-            <span>Open Video Manager</span>
+            <span>+ Add New Skill Track</span>
           </button>
-        )}
+          {onOpenVideos && (
+            <button
+              onClick={onOpenVideos}
+              className="flex items-center gap-1.5 rounded-full border border-pink-500/40 bg-pink-500/10 px-3.5 py-2 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+            >
+              <Icon name="video" size={14} />
+              <span>Video Reels</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {SKILLS.map((s) => (
-        <AcademySkillManager key={s.key} skill={s} />
-      ))}
-      <p className="text-xs text-[#8a7ba8]">
-        Each skill's registration toggle is independent — close any combination while others stay open.
-      </p>
+      {/* GLOBAL WAITLIST & REGISTRATION CARD */}
+      <Card className="border-pink-500/20 bg-gradient-to-r from-purple-950/20 via-[#140624] to-pink-950/20 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2.5">
+            <span className={`h-3 w-3 rounded-full ${allClosed ? "bg-red-500 animate-pulse" : "bg-green-400"}`} />
+            <h5 className="font-bold text-white text-sm">
+              {allClosed
+                ? "🔴 ALL REGISTRATIONS CLOSED — Visitors Redirected to Waitlist"
+                : `🟢 ADMISSIONS ACTIVE: ${openCount} of ${visibleCount} visible skills currently open`}
+            </h5>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCloseAllRegistrations}
+              className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+            >
+              Close All Registrations
+            </button>
+            <button
+              onClick={handleOpenAllRegistrations}
+              className="rounded-xl border border-green-500/40 bg-green-500/10 px-3 py-1.5 text-xs font-semibold text-green-300 hover:bg-green-500/20 active:scale-95 transition-all"
+            >
+              Open All Available
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-[#cabfe0] mb-1.5">
+            VIP WhatsApp Waitlist Group URL (Used when all tracks or a track is closed)
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={waitlistUrl}
+              onChange={(e) => setWaitlistUrl(e.target.value)}
+              placeholder="https://chat.whatsapp.com/..."
+              className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
+            />
+            <button
+              onClick={handleSaveWaitlist}
+              className="rounded-xl bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white shrink-0 hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              Save Waitlist URL
+            </button>
+            <a
+              href={waitlistUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/15 px-3 py-2.5 text-xs font-semibold text-[#b8aecf] hover:text-white shrink-0"
+            >
+              <Icon name="spark" size={12} /> Test Link
+            </a>
+          </div>
+          {waitlistSaved && <p className="mt-2 text-xs text-green-300 font-semibold">✓ Waitlist WhatsApp link saved successfully!</p>}
+        </div>
+      </Card>
+
+      {/* SKILL TRACKS LIST */}
+      <div className="space-y-3">
+        <h5 className="text-xs font-bold uppercase tracking-wider text-[#8a7ba8]">
+          Configured Skills ({skillsList.length})
+        </h5>
+        {skillsList.map((s) => (
+          <AcademySkillManager
+            key={s.key}
+            skill={s}
+            onUpdate={refresh}
+            onDelete={() => {
+              if (window.confirm(`Delete custom skill "${s.name}"? Existing students will keep their record.`)) {
+                deleteCustomSkill(s.key);
+                refresh();
+              }
+            }}
+          />
+        ))}
+      </div>
+
+      {/* ADD NEW SKILL MODAL */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-white/15 bg-[#12001f] p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Add New Skill Track</h3>
+                <p className="text-xs text-[#b8aecf]">
+                  This new skill will follow the standard KR8 ID format and be immediately recognized across registration, academy, verification, and leaderboard.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="rounded-full p-2 text-[#8a7ba8] hover:bg-white/10 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSkill} className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Skill Track Name *
+                  </label>
+                  <input
+                    required
+                    value={newSkillName}
+                    onChange={(e) => {
+                      setNewSkillName(e.target.value);
+                      if (!newSkillKey) {
+                        setNewSkillKey(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
+                      }
+                      if (!newSkillCode) {
+                        setNewSkillCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase());
+                      }
+                    }}
+                    placeholder="e.g. Product Management"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    System Key / Slug *
+                  </label>
+                  <input
+                    required
+                    value={newSkillKey}
+                    onChange={(e) => setNewSkillKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    placeholder="e.g. product_management"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    ID Suffix Code * (e.g. PM {"->"} PMVFD)
+                  </label>
+                  <input
+                    required
+                    value={newSkillCode}
+                    onChange={(e) => setNewSkillCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. PM or PMVFD"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                  <p className="mt-1 text-[10px] text-[#8a7ba8]">
+                    Student IDs will be generated as: <code className="text-pink-300">KR826JD0001{(newSkillCode || "PM").endsWith("VFD") ? newSkillCode : `${newSkillCode || "PM"}VFD`}</code>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Track Icon
+                  </label>
+                  <select
+                    value={newSkillIcon}
+                    onChange={(e) => setNewSkillIcon(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  >
+                    <option value="spark">Spark / Innovation</option>
+                    <option value="code">Code / Development</option>
+                    <option value="palette">Palette / Design</option>
+                    <option value="video">Video / Production</option>
+                    <option value="mobile">Mobile / Social</option>
+                    <option value="chart">Chart / Growth</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                  Track Description & Snippet
+                </label>
+                <textarea
+                  rows={2}
+                  value={newSkillDesc}
+                  onChange={(e) => setNewSkillDesc(e.target.value)}
+                  placeholder="Overview of the 8-week curriculum and learning outcomes…"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                  WhatsApp Class Group URL
+                </label>
+                <input
+                  value={newSkillWhatsapp}
+                  onChange={(e) => setNewSkillWhatsapp(e.target.value)}
+                  placeholder="https://chat.whatsapp.com/..."
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Instructor Name (Optional)
+                  </label>
+                  <input
+                    value={newSkillInstructorName}
+                    onChange={(e) => setNewSkillInstructorName(e.target.value)}
+                    placeholder="e.g. Alex Morgan"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Instructor Bio (Optional)
+                  </label>
+                  <input
+                    value={newSkillInstructorBio}
+                    onChange={(e) => setNewSkillInstructorBio(e.target.value)}
+                    placeholder="e.g. Senior Practitioner at KR8 Studio"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                  Certification Criteria (Optional)
+                </label>
+                <input
+                  value={newSkillCriteria}
+                  onChange={(e) => setNewSkillCriteria(e.target.value)}
+                  placeholder="≥80% attendance, coursework completion, final project submission…"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-6 pt-2 border-t border-white/10">
+                <label className="flex items-center gap-2 text-xs font-semibold text-[#cabfe0] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newSkillVisible}
+                    onChange={(e) => setNewSkillVisible(e.target.checked)}
+                    className="accent-pink-500 h-4 w-4"
+                  />
+                  <span>Make Visible to Visitors</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold text-[#cabfe0] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newSkillRegOpen}
+                    onChange={(e) => setNewSkillRegOpen(e.target.checked)}
+                    className="accent-pink-500 h-4 w-4"
+                  />
+                  <span>Open for Registration</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg glow-pink-sm active:scale-95 transition-all"
+                >
+                  Save & Publish Track
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AcademySkillManager({ skill }: { skill: (typeof SKILLS)[number] }) {
-  const [open, setOpen] = useState(getSkillRegistration(skill.key));
-  const [whatsapp, setWhatsapp] = useState(getSkillWhatsApp(skill.key));
+function AcademySkillManager({
+  skill,
+  onUpdate,
+  onDelete,
+}: {
+  skill: Skill;
+  onUpdate: () => void;
+  onDelete?: () => void;
+}) {
+  const [open, setOpen] = useState(skill.regOpen);
+  const [visible, setVisible] = useState(skill.available);
+  const [whatsapp, setWhatsapp] = useState(skill.whatsapp || "");
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    setOpen(skill.regOpen);
+    setVisible(skill.available);
+    setWhatsapp(skill.whatsapp || "");
+  }, [skill]);
+
   const save = () => {
-    saveSkillSetting(skill.key, { regOpen: open, whatsapp });
+    saveSkillSetting(skill.key, { regOpen: open, available: visible, whatsapp: whatsapp.trim() });
     setSaved(true);
-    setTimeout(() => setSaved(false), 1400);
+    onUpdate();
+    setTimeout(() => setSaved(false), 1600);
   };
 
+  const studentCount = getStudents().filter(
+    (x) => x.skill === skill.key || (x.skills && x.skills.includes(skill.key))
+  ).length;
+
   return (
-    <Card>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <Card className="p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="font-bold text-white">{skill.name}</h3>
-          <p className="text-xs text-[#8a7ba8]">
-            {getStudents().filter((x) => x.skill === skill.key).length} registered · Instructor:{" "}
-            {skill.instructor?.name ?? "To be announced"}
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-white text-base">{skill.name}</h3>
+            <span className="rounded-full bg-pink-500/10 px-2 py-0.5 font-mono text-[10px] text-pink-400">
+              {skill.suffix}
+            </span>
+            {!visible && (
+              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-amber-300">
+                Hidden from Visitors
+              </span>
+            )}
+            {!open && (
+              <span className="rounded-full bg-red-500/10 border border-red-500/30 px-2 py-0.5 text-[9px] font-bold text-red-300">
+                Registration Closed
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-[#8a7ba8] mt-1">
+            {studentCount} enrolled student{studentCount === 1 ? "" : "s"} · Key: <code className="text-pink-300">{skill.key}</code> · Instructor: {skill.instructor?.name ?? "KR8 Master Practitioner"}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-[#cabfe0]">
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* VISIBILITY TOGGLE */}
+          <label className="flex items-center gap-1.5 text-xs text-[#cabfe0] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visible}
+              onChange={(e) => setVisible(e.target.checked)}
+              className="accent-pink-500"
+            />
+            <span>Visible to Visitors</span>
+          </label>
+
+          {/* REGISTRATION TOGGLE */}
+          <label className="flex items-center gap-1.5 text-xs text-[#cabfe0] cursor-pointer">
             <input
               type="checkbox"
               checked={open}
               onChange={(e) => setOpen(e.target.checked)}
-              disabled={!skill.available}
               className="accent-pink-500"
             />
-            Registration {open ? "open" : "closed"}
+            <span>Registration {open ? "Open" : "Closed"}</span>
           </label>
-          <button onClick={save} className="rounded-full bg-gradient-pink px-3 py-1.5 text-xs font-bold text-white">
-            Save
+
+          <button
+            onClick={save}
+            className="rounded-full bg-gradient-pink px-4 py-1.5 text-xs font-bold text-white shadow-md active:scale-95 transition-all"
+          >
+            Save Settings
           </button>
+
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              title="Delete custom track"
+              className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-300 hover:bg-red-500/25 transition-all"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
+
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
         <input
           value={whatsapp}
           onChange={(e) => setWhatsapp(e.target.value)}
           className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-[#cabfe0] focus:border-pink-400/60 focus:outline-none"
-          placeholder="Skill WhatsApp link"
+          placeholder="Skill WhatsApp group link"
         />
-        <span className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#8a7ba8]">
-          Curriculum: {skill.curriculum.length ? `${skill.curriculum.length} weeks` : "Not published"}
+        <span className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#8a7ba8] self-center">
+          Curriculum: {skill.curriculum?.length ? `${skill.curriculum.length} weeks` : "8 weeks"}
         </span>
       </div>
-      {saved && <p className="mt-2 text-xs text-green-300">Skill settings saved and applied to registration.</p>}
+
+      {saved && (
+        <p className="mt-2 text-xs text-green-300 font-semibold">
+          ✓ Track settings saved and updated across the site.
+        </p>
+      )}
     </Card>
   );
 }
@@ -3045,9 +3511,9 @@ function TestimonialVideosManager() {
                 <option value="Graphic Design">Graphic Design</option>
                 <option value="Web Development">Web Development</option>
                 <option value="Video Editing">Video Editing</option>
-                <option value="UI/UX Design">UI/UX Design</option>
-                <option value="AI Prompt Engineering">AI Prompt Engineering</option>
                 <option value="Content Creation">Content Creation</option>
+                <option value="Social Media Management">Social Media Management</option>
+                <option value="Digital Marketing">Digital Marketing</option>
                 <option value="Tech & Design">Tech & Design</option>
               </select>
             </div>

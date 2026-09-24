@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  SKILLS,
+  getSkills,
+  getSkill,
+  areAllRegistrationsClosed,
   registerStudent,
   registerTribe,
   buildPhone,
@@ -26,6 +28,12 @@ export default function RegisterPage() {
   const initialName = searchParams.get("name") || "";
 
   const [tab, setTab] = useState<"student" | "tribe">(initialType);
+
+  const allRegistrationsClosed = areAllRegistrationsClosed();
+
+  if (allRegistrationsClosed && tab === "student") {
+    return <Navigate to="/waitlist" replace />;
+  }
 
   // Student form state
   const [studentForm, setStudentForm] = useState({
@@ -149,7 +157,7 @@ export default function RegisterPage() {
   if (createdAccount) {
     const isFounder = createdAccount.type === "founder";
     const isCoFounder = createdAccount.type === "co-founder";
-    const skillObj = SKILLS.find((s) => s.key === createdAccount.skill);
+    const skillObj = getSkill(createdAccount.skill);
 
     return (
       <div className="section-bg min-h-[85vh] py-16 px-5 flex items-center justify-center">
@@ -355,14 +363,14 @@ export default function RegisterPage() {
                   onChange={(e) => setStudentForm({ ...studentForm, skill: e.target.value })}
                 >
                   <option value="" className="bg-[#12001f] text-white">Choose a skill track…</option>
-                  {SKILLS.map((s) => (
+                  {getSkills().filter((s) => s.available).map((s) => (
                     <option
                       key={s.key}
                       value={s.key}
-                      disabled={!s.available || !getSkillRegistration(s.key)}
+                      disabled={!getSkillRegistration(s.key)}
                       className="bg-[#12001f] text-white"
                     >
-                      {s.name} {!s.available ? "(Not Available)" : !getSkillRegistration(s.key) ? "(Registration Closed)" : "(Cohort Open)"}
+                      {s.name} {!getSkillRegistration(s.key) ? "(Registration Closed)" : "(Cohort Open)"}
                     </option>
                   ))}
                 </select>

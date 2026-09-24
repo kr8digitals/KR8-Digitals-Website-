@@ -7,7 +7,7 @@ const badges = [
   { icon: "heart" as const, t: "Life Changer", d: "5+ successful student referrals" },
   { icon: "certificate" as const, t: "Graduate", d: "Certificate of Completion earned" },
   { icon: "trophy" as const, t: "Pro Specialist", d: "Verified Industry Professional" },
-  { icon: "bolt" as const, t: "Dual Track", d: "Unlocked a second creative discipline" },
+  { icon: "bolt" as const, t: "Multi-Track", d: "Graduated and unlocked additional creative disciplines" },
   { icon: "spark" as const, t: "Top Contributor", d: "Top 10 leaderboard rank this season" },
 ];
 

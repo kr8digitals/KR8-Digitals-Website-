@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
-import { SKILLS, getStudents, getAnnouncements, CONTACT, getReferralUrl } from "../data/store";
+import { getSkill, getStudents, getAnnouncements, CONTACT, getReferralUrl } from "../data/store";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
 import { Pill, Card } from "../components/ui";
@@ -22,7 +22,7 @@ export default function Dashboard() {
   if (!student) return null;
   const isFounder = student.type === "founder";
   const isCoFounder = student.type === "co-founder";
-  const skill = SKILLS.find((s) => s.key === student.skill);
+  const skill = getSkill(student.skill);
   const ranked = [...getStudents()].sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === student.id) + 1;
   const first = student.name.split(" ")[0];

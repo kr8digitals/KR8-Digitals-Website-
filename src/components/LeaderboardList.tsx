@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getStudents, SKILLS } from "../data/store";
+import { getStudents, getSkillName } from "../data/store";
 import { useAuth } from "../context/AuthContext";
 import { Avatar } from "./ui";
 import Icon from "./Icon";
@@ -21,10 +21,12 @@ export default function LeaderboardList({ limit }: { limit?: number }) {
   }, []);
 
   const all = getStudents();
-  // Rank all students by real points earned descending
+  // Rank all students by real points earned descending, factoring multi-track milestones
   const sorted = [...all].sort((a, b) => {
-    const pA = a.points || 0;
-    const pB = b.points || 0;
+    const bonusA = (a.multiSkillCount && a.multiSkillCount > 1) ? (a.multiSkillCount - 1) * 50 : 0;
+    const bonusB = (b.multiSkillCount && b.multiSkillCount > 1) ? (b.multiSkillCount - 1) * 50 : 0;
+    const pA = (a.points || 0) + bonusA;
+    const pB = (b.points || 0) + bonusB;
     if (pB !== pA) return pB - pA;
     // Tie-break: real students before placeholders
     if (!a.isPlaceholder && b.isPlaceholder) return -1;
@@ -37,7 +39,10 @@ export default function LeaderboardList({ limit }: { limit?: number }) {
   return (
     <div className="w-full max-w-full space-y-2 overflow-x-hidden">
       {rows.map((s, i) => {
-        const skill = SKILLS.find((k) => k.key === s.skill)?.name ?? s.skill;
+        const skillLabel = s.skills && s.skills.length > 1
+          ? s.skills.map((k) => getSkillName(k)).join(" · ")
+          : getSkillName(s.skill);
+        const multiCount = s.multiSkillCount || (s.skills ? s.skills.length : 1);
         const isMe = student?.id === s.id;
         return (
           <div
@@ -67,6 +72,11 @@ export default function LeaderboardList({ limit }: { limit?: number }) {
                 {isMe && (
                   <span className="text-[10px] sm:text-xs text-pink-400 font-bold shrink-0">(You)</span>
                 )}
+                {multiCount > 1 && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] text-amber-300 shrink-0 font-bold">
+                    <Icon name="bolt" size={10} /> Multi-Track ({multiCount})
+                  </span>
+                )}
                 {s.graduated && (
                   <span className="inline-flex items-center gap-0.5 rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-[#cabfe0] shrink-0 font-medium">
                     <Icon name="certificate" size={10} /> Grad
@@ -78,7 +88,7 @@ export default function LeaderboardList({ limit }: { limit?: number }) {
                   </span>
                 )}
               </div>
-              <p className="truncate text-[10px] sm:text-xs text-[#8a7ba8] mt-0.5">{skill}</p>
+              <p className="truncate text-[10px] sm:text-xs text-[#8a7ba8] mt-0.5">{skillLabel}</p>
             </div>
 
             {/* Points Column */}

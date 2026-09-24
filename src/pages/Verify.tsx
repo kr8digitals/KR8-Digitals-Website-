@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { verifyId, SKILLS, COHORT_YEAR, type Account } from "../data/store";
+import { verifyId, getSkill, COHORT_YEAR, type Account } from "../data/store";
 import { Pill, GradientButton, Card, Avatar } from "../components/ui";
 import Icon from "../components/Icon";
 
@@ -28,7 +28,7 @@ export default function Verify() {
     setResult(verifyId(target));
   };
 
-  const skill = result?.account ? SKILLS.find((s) => s.key === result.account!.skill) : null;
+  const skill = result?.account ? getSkill(result.account!.skill) : null;
 
   return (
     <div className="section-bg min-h-screen">

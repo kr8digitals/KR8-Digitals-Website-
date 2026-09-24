@@ -21,6 +21,7 @@ import LivePage from "./pages/LivePage";
 import Gallery from "./pages/Gallery";
 import RegisterPage from "./pages/RegisterPage";
 import SignInPage from "./pages/SignInPage";
+import WaitlistPage from "./pages/WaitlistPage";
 
 export default function App() {
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route path="/" element={<Home />} />
+              <Route path="/waitlist" element={<WaitlistPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/signup" element={<RegisterPage />} />
               <Route path="/signin" element={<SignInPage />} />

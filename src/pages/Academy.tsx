@@ -2,7 +2,7 @@ import { useState, useEffect, type ChangeEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  SKILLS, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
+  getSkills, getSkill, getSkillName, areAllRegistrationsClosed, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
   registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
   submitAttendance, getStudentAttendance, getAttendanceTypesSettings, type AttendanceSubmission,
   type Account, type Skill,
@@ -53,22 +53,28 @@ function GuestAcademy() {
               Stop letting expensive bootcamps gatekeep your future. We offer intensive, practical tracks taught by senior practitioners who ship client work every single day. Pick your track, claim your verifiable KR8 ID, and turn your craft into income.
             </p>
             <div className="mt-7 flex flex-wrap gap-3.5">
-              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
-                Join the Free Cohort →
-              </GradientButton>
+              {areAllRegistrationsClosed() ? (
+                <GradientButton to="/waitlist" className="shadow-xl shadow-pink-500/25">
+                  Admissions Full — Join WhatsApp Waitlist 📲
+                </GradientButton>
+              ) : (
+                <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
+                  Join the Free Cohort →
+                </GradientButton>
+              )}
               <GhostButton to="/verify">Verify a Graduate KR8 ID</GhostButton>
             </div>
           </div>
 
           {/* Skill cards */}
           <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {SKILLS.map((s) => (
+            {getSkills().filter((s) => s.available).map((s) => (
               (() => {
                 const founderKey = s.key === "graphic" ? "stevenson" : s.key === "video" ? "daniel" : s.key === "web" ? "timfire" : "";
                 const instructor = founderKey ? getFounders().find((founder) => founder.key === founderKey) : null;
                 const displayInstructor = instructor ? { name: instructor.name, photo: instructor.photo, bio: instructor.bio } : s.instructor;
                 return (
-              <Card key={s.key} className={`flex flex-col ${!s.available ? "opacity-80" : ""}`}>
+              <Card key={s.key} className="flex flex-col">
                 <div className="flex items-center justify-between">
                   <span className="text-pink-300"><Icon name={s.icon as Parameters<typeof Icon>[0]["name"]} size={25} /></span>
                   <span className="rounded-full bg-pink-500/10 px-3 py-1 font-mono text-[11px] text-pink-400">{s.suffix}</span>
@@ -78,7 +84,7 @@ function GuestAcademy() {
 
                 {/* instructor */}
                 <div className="mt-4 flex items-center gap-3 rounded-2xl bg-black/20 p-3">
-                  {s.available && displayInstructor ? (
+                  {displayInstructor ? (
                     <>
                       <InstructorPhoto src={displayInstructor.photo} name={displayInstructor.name} />
                       <div>
@@ -87,28 +93,27 @@ function GuestAcademy() {
                       </div>
                     </>
                   ) : (
-                    <p className="text-sm text-[#8a7ba8]">{s.available ? "Instructor: To be announced" : "Not Available"}</p>
+                    <p className="text-sm text-[#8a7ba8]">Instructor: KR8 Master Practitioner</p>
                   )}
                 </div>
 
                 {/* status */}
-                {s.available && (
-                  <p className={`mt-3 text-xs font-semibold ${getSkillRegistration(s.key) ? "text-green-400" : "text-yellow-300"}`}>
-                    {getSkillRegistration(s.key) ? "● Registration open" : "● Registration closed"}
-                  </p>
-                )}
+                <p className={`mt-3 text-xs font-semibold ${getSkillRegistration(s.key) ? "text-green-400" : "text-yellow-300"}`}>
+                  {getSkillRegistration(s.key) ? "● Registration open" : "● Registration closed"}
+                </p>
 
                 <div className="mt-4 flex gap-2">
                   <button
-                    onClick={() => s.available && setCurriculum(s)}
-                    disabled={!s.available}
-                    className="flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white hover:border-pink-400/60 disabled:opacity-40"
+                    onClick={() => setCurriculum(s)}
+                    className="flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white hover:border-pink-400/60"
                   >View Curriculum</button>
                   <button
                     onClick={() => navigate(`/register?skill=${s.key}`)}
-                    disabled={!s.available || !getSkillRegistration(s.key)}
-                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 hover:scale-[1.02] transition-transform"
-                  >Register</button>
+                    disabled={!getSkillRegistration(s.key)}
+                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] transition-transform"
+                  >
+                    {getSkillRegistration(s.key) ? "Register" : "Closed"}
+                  </button>
                 </div>
               </Card>
                 );
@@ -263,7 +268,7 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
   if (result) {
     const isFounder = result.type === "founder";
     const isCoFounder = result.type === "co-founder";
-    const skill = SKILLS.find((s) => s.key === result.skill)!;
+    const skill = getSkill(result.skill);
 
     return (
       <Card className="text-center">
@@ -342,7 +347,11 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
         <input type="password" className={inputCls} placeholder="Create a password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         <select className={inputCls} value={form.skill} onChange={(e) => setForm({ ...form, skill: e.target.value })}>
           <option value="">Select a skill…</option>
-          {SKILLS.map((s) => <option key={s.key} value={s.key} disabled={!s.available || !getSkillRegistration(s.key)}>{s.name}{!s.available ? " (Not Available)" : !getSkillRegistration(s.key) ? " (Closed)" : ""}</option>)}
+          {getSkills().filter((s) => s.available).map((s) => (
+            <option key={s.key} value={s.key} disabled={!getSkillRegistration(s.key)}>
+              {s.name}{!getSkillRegistration(s.key) ? " (Closed)" : ""}
+            </option>
+          ))}
         </select>
         <div>
           <label className="mb-1.5 block text-xs uppercase tracking-wider text-[#8a7ba8]">Date of birth</label>
@@ -568,7 +577,7 @@ function Profile({ student }: { student: Account }) {
   const [password, setPassword] = useState(profile.password ?? "");
   const [copiedVerify, setCopiedVerify] = useState(false);
   const { signIn, addNotification } = useAuth();
-  const skill = SKILLS.find((s) => s.key === profile.skill);
+  const skill = getSkill(profile.skill);
   const ranked = getStudents().filter((account) => !account.isPlaceholder).sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === profile.id) + 1;
   const studentTestimonial = getTestimonials().find(
@@ -1118,7 +1127,7 @@ function AttendanceWidget({ student }: { student: Account }) {
       return;
     }
     const finalScreenshot = screenshotData || "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800";
-    const skillName = SKILLS.find((s) => s.key === student.skill)?.name ?? "General";
+    const skillName = getSkillName(student.skill);
 
     submitAttendance({
       studentId: student.id,
