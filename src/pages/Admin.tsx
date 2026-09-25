@@ -31,6 +31,7 @@ import {
   downloadCertificatePdf,
   saveCertificateData,
 } from "../utils/certificate";
+import CertificateDocumentView from "../components/CertificateDocumentView";
 import {
   issueCertificate,
   withdrawCertificate,
@@ -592,7 +593,9 @@ function StudentManager({ students }: { students: Account[] }) {
         <GraduationModal
           student={graduatingStudent}
           onClose={() => setGraduatingStudent(null)}
-          onGraduated={() => setGraduatingStudent(null)}
+          onGraduated={() => {
+            window.dispatchEvent(new Event("kr8:accounts-updated"));
+          }}
         />
       )}
 
@@ -1230,11 +1233,15 @@ function GraduationModal({
       });
 
       // 2. Persist to durable IndexedDB
-      await saveCertificateData(student.id, {
-        fileType: "image",
-        imageUrl: result.imageUrl,
-        pdfBytes: result.pdfBytes,
-      });
+      await saveCertificateData(
+        student.id,
+        {
+          fileType: "image",
+          imageUrl: result.imageUrl,
+          pdfBytes: result.pdfBytes,
+        },
+        result.certId
+      );
 
       // 3. Create persistent CertificateRecord
       const certRecord: CertificateRecord = {
@@ -1318,23 +1325,30 @@ function GraduationModal({
             </div>
 
             {/* LIVE CERTIFICATE PREVIEW */}
-            <div className="overflow-hidden rounded-2xl border border-white/15 bg-black shadow-xl max-h-[300px]">
-              <img src={issuedCert.certificateImageUrl} alt="Issued Certificate" className="w-full h-auto object-contain" />
-            </div>
+            <CertificateDocumentView
+              cert={issuedCert}
+              student={student}
+              maxHeight="280px"
+            />
 
             <div className="flex flex-wrap justify-center gap-3 pt-2">
               <button
                 onClick={() => {
-                  if (generatedPdfBytes) {
-                    downloadCertificatePdf(student.name, generatedPdfBytes);
-                  } else {
-                    downloadCertificatePdf(student.name, issuedCert.certificateImageUrl);
-                  }
+                  downloadCertificatePdf(student.name, generatedPdfBytes, issuedCert, student);
                 }}
                 className="flex items-center gap-2 rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg glow-pink-sm hover:scale-[1.02] active:scale-95 transition-all"
               >
                 <Icon name="certificate" size={14} /> Download Certificate PDF
               </button>
+
+              <a
+                href={`/verify?id=${encodeURIComponent(student.id)}&cert=${encodeURIComponent(issuedCert.id)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-full border border-pink-400/50 bg-pink-500/10 px-5 py-2.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 transition-colors"
+              >
+                Test Public Verification ↗
+              </a>
 
               <button
                 onClick={() => {
@@ -1702,7 +1716,9 @@ function GraduationManager({ students }: { students: Account[] }) {
         <GraduationModal
           student={selectedStudent}
           onClose={() => setModalOpen(false)}
-          onGraduated={() => setModalOpen(false)}
+          onGraduated={() => {
+            window.dispatchEvent(new Event("kr8:accounts-updated"));
+          }}
         />
       )}
     </Card>

@@ -141,48 +141,83 @@ export default function Navbar() {
               <>
                 {/* Notifications Bell */}
                 <div className="relative">
-                  <button
-                    onClick={() => setBell((b) => !b)}
-                    className="relative flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white hover:border-pink-400/50 transition-colors"
-                    title="Notifications"
-                    aria-label="Notifications"
-                  >
-                    <Icon name="bell" size={17} />
-                    {notifications.length > 0 && (
-                      <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-pink text-[9px] font-bold text-white ring-2 ring-[#0d0015]">
-                        {notifications.length}
-                      </span>
-                    )}
-                  </button>
-                  {bell && (
-                    <div className="absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl border border-white/10 bg-[#160026] p-3 shadow-2xl z-50">
-                      <div className="mb-2 flex items-center justify-between px-1 border-b border-white/10 pb-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-[#b8aecf]">
-                          Notifications
-                        </span>
+                  {(() => {
+                    const studentNotifs = (student?.notifications || []).map((n) => ({
+                      id: n.id,
+                      text: n.title ? `${n.title}: ${n.message}` : n.message,
+                      ts: n.timestamp,
+                      isGraduation: n.type === "graduation",
+                      read: n.read,
+                    }));
+                    const unreadStudentCount = (student?.notifications || []).filter((n) => !n.read).length;
+                    const generalNotifs = notifications.map((n) => ({
+                      ...n,
+                      isGraduation: false,
+                      read: true,
+                    }));
+                    const allDisplayNotifs = [...studentNotifs, ...generalNotifs];
+                    const totalBadgeCount = unreadStudentCount + notifications.length;
+
+                    return (
+                      <>
                         <button
-                          onClick={clearNotifications}
-                          className="text-[11px] text-pink-400 hover:text-pink-300 font-semibold"
+                          onClick={() => setBell((b) => !b)}
+                          className="relative flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-white/15 bg-white/5 text-[#cabfe0] hover:text-white hover:border-pink-400/50 transition-colors"
+                          title="Notifications"
+                          aria-label="Notifications"
                         >
-                          Clear all
+                          <Icon name="bell" size={17} />
+                          {totalBadgeCount > 0 && (
+                            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gradient-pink text-[9px] font-bold text-white ring-2 ring-[#0d0015] animate-pulse">
+                              {totalBadgeCount}
+                            </span>
+                          )}
                         </button>
-                      </div>
-                      {notifications.length === 0 ? (
-                        <p className="px-1 py-4 text-center text-xs text-[#8a7ba8]">You're all caught up.</p>
-                      ) : (
-                        <div className="max-h-60 overflow-y-auto space-y-1">
-                          {notifications.slice(0, 8).map((n) => (
-                            <div
-                              key={n.id}
-                              className="rounded-xl px-2.5 py-2 text-xs text-[#cabfe0] hover:bg-white/5 transition-colors"
-                            >
-                              {n.text}
+                        {bell && (
+                          <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-white/10 bg-[#160026] p-3 shadow-2xl z-50">
+                            <div className="mb-2 flex items-center justify-between px-1 border-b border-white/10 pb-2">
+                              <span className="text-xs font-semibold uppercase tracking-wider text-[#b8aecf]">
+                                Notifications ({allDisplayNotifs.length})
+                              </span>
+                              <button
+                                onClick={clearNotifications}
+                                className="text-[11px] text-pink-400 hover:text-pink-300 font-semibold"
+                              >
+                                Clear all
+                              </button>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                            {allDisplayNotifs.length === 0 ? (
+                              <p className="px-1 py-4 text-center text-xs text-[#8a7ba8]">You're all caught up.</p>
+                            ) : (
+                              <div className="max-h-72 overflow-y-auto space-y-1.5">
+                                {allDisplayNotifs.slice(0, 10).map((n) => (
+                                  <div
+                                    key={n.id}
+                                    className={`rounded-xl p-2.5 text-xs transition-colors ${
+                                      n.isGraduation
+                                        ? "bg-green-950/40 border border-green-500/30 text-green-200"
+                                        : "text-[#cabfe0] hover:bg-white/5"
+                                    }`}
+                                  >
+                                    <p className="leading-relaxed font-medium">{n.text}</p>
+                                    {n.isGraduation && (
+                                      <Link
+                                        to="/academy"
+                                        onClick={() => setBell(false)}
+                                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-pink-300 hover:text-white underline underline-offset-2"
+                                      >
+                                        View Official Certificate 🎓 →
+                                      </Link>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Dashboard Pill */}

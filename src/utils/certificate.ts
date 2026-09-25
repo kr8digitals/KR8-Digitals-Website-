@@ -399,15 +399,26 @@ export async function generateAutomaticCertificate(params: {
   };
 }
 
+const imageCache = new Map<string, string>();
+
 export async function saveCertificateData(
   studentId: string,
-  data: { fileType: "image" | "pdf"; imageUrl: string; pdfBytes?: Uint8Array }
+  data: { fileType: "image" | "pdf"; imageUrl: string; pdfBytes?: Uint8Array },
+  certId?: string
 ) {
+  if (data.imageUrl) {
+    imageCache.set(studentId, data.imageUrl);
+    if (certId) imageCache.set(certId, data.imageUrl);
+  }
   try {
     const db = await openDb();
     if (db) {
       const tx = db.transaction(STORE_NAME, "readwrite");
-      tx.objectStore(STORE_NAME).put(data, studentId);
+      const store = tx.objectStore(STORE_NAME);
+      store.put(data, studentId);
+      if (certId) {
+        store.put(data, certId);
+      }
       await new Promise((resolve) => {
         tx.oncomplete = resolve;
       });
@@ -418,13 +429,13 @@ export async function saveCertificateData(
 }
 
 export async function getCertificateData(
-  studentId: string
+  key: string
 ): Promise<{ fileType: "image" | "pdf"; imageUrl: string; pdfBytes?: Uint8Array } | null> {
   try {
     const db = await openDb();
     if (db) {
       const tx = db.transaction(STORE_NAME, "readonly");
-      const req = tx.objectStore(STORE_NAME).get(studentId);
+      const req = tx.objectStore(STORE_NAME).get(key);
       return await new Promise((resolve) => {
         req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => resolve(null);
@@ -434,6 +445,95 @@ export async function getCertificateData(
     /* ignore */
   }
   return null;
+}
+
+/**
+ * Resolves the certificate image URL synchronously from cache,
+ * or asynchronously from IndexedDB or dynamic canvas generation.
+ */
+export async function resolveCertificateImageUrl(
+  cert: {
+    id: string;
+    studentId: string;
+    studentName: string;
+    formattedName?: string;
+    skill: string;
+    skillName: string;
+    tier: CertificateTier;
+    templateUrl?: string;
+    achievementText?: string;
+    additionalNotes?: string;
+    certificateImageUrl?: string;
+  },
+  student?: Account,
+  origin?: string
+): Promise<string> {
+  // 1. In-memory cache hit
+  if (imageCache.has(cert.id)) {
+    return imageCache.get(cert.id)!;
+  }
+  if (cert.studentId && imageCache.has(cert.studentId)) {
+    return imageCache.get(cert.studentId)!;
+  }
+
+  // 2. Direct valid data URL or HTTP image
+  if (
+    cert.certificateImageUrl &&
+    (cert.certificateImageUrl.startsWith("data:image/") || cert.certificateImageUrl.startsWith("http"))
+  ) {
+    imageCache.set(cert.id, cert.certificateImageUrl);
+    return cert.certificateImageUrl;
+  }
+
+  // 3. Check IndexedDB by cert.id then studentId
+  try {
+    const idbData =
+      (await getCertificateData(cert.id)) ||
+      (cert.studentId ? await getCertificateData(cert.studentId) : null);
+    if (idbData?.imageUrl && idbData.imageUrl.startsWith("data:image/")) {
+      imageCache.set(cert.id, idbData.imageUrl);
+      return idbData.imageUrl;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // 4. Dynamic on-the-fly rendering using canvas
+  try {
+    const fallbackStudent: Account = student || ({
+      id: cert.studentId,
+      name: cert.studentName,
+      skill: cert.skill,
+    } as Account);
+
+    const rendered = await generateAutomaticCertificate({
+      student: fallbackStudent,
+      skillKey: cert.skill,
+      tier: cert.tier,
+      courseName: cert.skillName,
+      additionalNotes: cert.additionalNotes || "",
+      origin: origin || (typeof window !== "undefined" ? window.location.origin : "https://kr8digitals.com"),
+    });
+
+    if (rendered?.imageUrl) {
+      imageCache.set(cert.id, rendered.imageUrl);
+      saveCertificateData(
+        cert.studentId,
+        {
+          fileType: "image",
+          imageUrl: rendered.imageUrl,
+          pdfBytes: rendered.pdfBytes,
+        },
+        cert.id
+      ).catch(() => {});
+      return rendered.imageUrl;
+    }
+  } catch (err) {
+    console.warn("Could not dynamically render certificate image:", err);
+  }
+
+  // 5. Template fallback
+  return cert.templateUrl || "/certificates/reusable_completion.png";
 }
 
 export async function processGraduationCertificate(
@@ -451,33 +551,89 @@ export async function processGraduationCertificate(
   };
 }
 
-export function downloadCertificatePdf(studentName: string, pdfBytes: Uint8Array | Blob | string) {
-  let blob: Blob;
-  if (pdfBytes instanceof Blob) {
-    blob = pdfBytes;
-  } else if (pdfBytes instanceof Uint8Array) {
-    blob = new Blob([pdfBytes as unknown as BlobPart], { type: "application/pdf" });
-  } else if (typeof pdfBytes === "string" && pdfBytes.startsWith("data:")) {
-    const base64 = pdfBytes.split(",")[1];
+export async function downloadCertificatePdf(
+  studentName: string,
+  pdfBytesOrUrl?: Uint8Array | Blob | string | null,
+  cert?: {
+    id: string;
+    studentId: string;
+    studentName: string;
+    skill: string;
+    skillName: string;
+    tier: CertificateTier;
+    additionalNotes?: string;
+  },
+  student?: Account
+) {
+  let blob: Blob | null = null;
+
+  if (pdfBytesOrUrl instanceof Blob) {
+    blob = pdfBytesOrUrl;
+  } else if (pdfBytesOrUrl instanceof Uint8Array) {
+    blob = new Blob([pdfBytesOrUrl as unknown as BlobPart], { type: "application/pdf" });
+  } else if (typeof pdfBytesOrUrl === "string" && pdfBytesOrUrl.startsWith("data:application/pdf")) {
+    const base64 = pdfBytesOrUrl.split(",")[1];
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     blob = new Blob([bytes], { type: "application/pdf" });
-  } else {
-    // If it's a URL, open or trigger download
+  } else if (typeof pdfBytesOrUrl === "string" && pdfBytesOrUrl.startsWith("data:image/")) {
+    try {
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([1920, 1080]);
+      const imgBytes = await fetch(pdfBytesOrUrl).then((r) => r.arrayBuffer());
+      const embeddedImage = pdfBytesOrUrl.includes("image/png")
+        ? await pdfDoc.embedPng(imgBytes)
+        : await pdfDoc.embedJpg(imgBytes);
+      page.drawImage(embeddedImage, { x: 0, y: 0, width: 1920, height: 1080 });
+      const bytes = await pdfDoc.save();
+      blob = new Blob([bytes as unknown as BlobPart], { type: "application/pdf" });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // If still no blob, check IndexedDB or generate
+  if (!blob && cert) {
+    try {
+      const idb = (await getCertificateData(cert.id)) || (await getCertificateData(cert.studentId));
+      if (idb?.pdfBytes && idb.pdfBytes.length > 0) {
+        blob = new Blob([idb.pdfBytes as unknown as BlobPart], { type: "application/pdf" });
+      } else {
+        const rendered = await generateAutomaticCertificate({
+          student: student || ({ id: cert.studentId, name: cert.studentName, skill: cert.skill } as Account),
+          skillKey: cert.skill,
+          tier: cert.tier,
+          courseName: cert.skillName,
+          additionalNotes: cert.additionalNotes || "",
+          origin: typeof window !== "undefined" ? window.location.origin : "https://kr8digitals.com",
+        });
+        if (rendered?.pdfBytes) {
+          blob = new Blob([rendered.pdfBytes as unknown as BlobPart], { type: "application/pdf" });
+        }
+      }
+    } catch (err) {
+      console.warn("Could not generate PDF for download:", err);
+    }
+  }
+
+  if (blob) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `KR8-Certificate-${studentName.replace(/[^a-zA-Z0-9]/g, "-")}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return;
+  }
+
+  // If it's a URL, open or trigger download
+  if (typeof pdfBytesOrUrl === "string" && !pdfBytesOrUrl.startsWith("data:")) {
     const a = document.createElement("a");
-    a.href = String(pdfBytes);
+    a.href = String(pdfBytesOrUrl);
     a.download = `KR8-Certificate-${studentName.replace(/[^a-zA-Z0-9]/g, "-")}.pdf`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    return;
   }
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `KR8-Certificate-${studentName.replace(/[^a-zA-Z0-9]/g, "-")}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }

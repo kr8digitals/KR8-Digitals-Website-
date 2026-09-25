@@ -471,8 +471,18 @@ function save<T>(key: string, val: T) {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(key, JSON.stringify(val));
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn(`localStorage save error for key ${key}:`, err);
+    try {
+      if (typeof localStorage !== "undefined") {
+        // Clear obsolete scratch/backup keys to immediately recover quota
+        localStorage.removeItem("kr8_accounts_backup");
+        localStorage.removeItem("kr8_accounts_v2");
+        localStorage.setItem(key, JSON.stringify(val));
+      }
+    } catch {
+      /* ignore */
+    }
   }
   memoryStorage.set(key, JSON.stringify(val));
 }
@@ -584,7 +594,7 @@ export type CertificateRecord = {
   withdrawalReason?: string;
   withdrawnAt?: number;
   withdrawnBy?: string;
-  certificateImageUrl: string;
+  certificateImageUrl?: string;
   pdfUrl?: string;
 };
 
@@ -1296,11 +1306,39 @@ export function getAccounts(): Account[] {
   return accounts;
 }
 
+function sanitizeAccountsForStorage(accounts: Account[]): Account[] {
+  return accounts.map((acc) => {
+    // If certificateUrl is a massive data URL (> 15KB), do not keep it in localStorage
+    let cleanCertUrl = acc.certificateUrl;
+    if (cleanCertUrl && cleanCertUrl.startsWith("data:image/") && cleanCertUrl.length > 15000) {
+      cleanCertUrl = `cert-stored:${acc.id}`;
+    }
+
+    const cleanCerts = (acc.certificates || []).map((c) => {
+      let img = c.certificateImageUrl;
+      if (img && img.startsWith("data:image/") && img.length > 15000) {
+        img = `cert-stored:${c.id}`;
+      }
+      return {
+        ...c,
+        certificateImageUrl: img,
+      };
+    });
+
+    return {
+      ...acc,
+      certificateUrl: cleanCertUrl,
+      certificates: cleanCerts,
+    };
+  });
+}
+
 export function saveAccounts(a: Account[]) {
-  save(ACCOUNT_STORAGE_KEY, a);
+  const sanitized = sanitizeAccountsForStorage(a);
+  save(ACCOUNT_STORAGE_KEY, sanitized);
   try {
     // Keep secondary backup in case another key is modified
-    localStorage.setItem("kr8_accounts_backup", JSON.stringify(a));
+    localStorage.setItem("kr8_accounts_backup", JSON.stringify(sanitized));
   } catch {
     /* ignore */
   }
@@ -2059,6 +2097,31 @@ export function getStudentCertificates(studentId: string): CertificateRecord[] {
   if (acc.certificates && acc.certificates.length > 0) {
     return acc.certificates;
   }
+  // Synthesize certificate if account is graduated
+  if (acc.graduated) {
+    const tier = (acc.certTier as CertificateTier) || "Completion";
+    const skillKey = acc.skill || "graphic";
+    const skillName = getSkillName(skillKey);
+    const synthesizedCert: CertificateRecord = {
+      id: `CERT-KR8-${acc.id}-${skillKey.toUpperCase()}`,
+      studentId: acc.id,
+      studentName: acc.name,
+      formattedName: acc.name.toUpperCase(),
+      skill: skillKey,
+      skillName,
+      tier,
+      templateUrl: `/certificates/reusable_${tier.toLowerCase()}.png`,
+      achievementText:
+        tier === "Professionalism"
+          ? "demonstrating excellence and proficiency in turning client requests into client satisfaction."
+          : "gaining hands-on experience in turning client requests into finished designs.",
+      additionalNotes: acc.certRecognition || acc.verifyRemark,
+      issuedAt: acc.graduatedAt || acc.joined || Date.now(),
+      status: "active",
+      certificateImageUrl: acc.certificateUrl && !acc.certificateUrl.startsWith("cert-stored:") ? acc.certificateUrl : undefined,
+    };
+    return [synthesizedCert];
+  }
   // Synthesize legacy certificate if available
   if (acc.certificateUrl) {
     const legacyCert: CertificateRecord = {
@@ -2077,7 +2140,7 @@ export function getStudentCertificates(studentId: string): CertificateRecord[] {
       additionalNotes: acc.certRecognition || acc.verifyRemark,
       issuedAt: acc.graduatedAt || acc.joined || Date.now(),
       status: "active",
-      certificateImageUrl: acc.certificateUrl,
+      certificateImageUrl: acc.certificateUrl && !acc.certificateUrl.startsWith("cert-stored:") ? acc.certificateUrl : undefined,
     };
     return [legacyCert];
   }
@@ -2129,24 +2192,27 @@ export function issueCertificate(
 
   // Create congratulations notification
   const notifs = acc.notifications ? [...acc.notifications] : [];
-  notifs.unshift({
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    type: "graduation",
-    title: `Congratulations! Your Certificate of ${cert.tier} has been issued! 🎓`,
-    message: `You have successfully graduated from ${cert.skillName} at KR8 Digitals! Your verified Certificate of ${cert.tier} is now available in your profile to view, download, and share.`,
-    certificateId: cert.id,
-    skill: cert.skill,
-    skillName: cert.skillName,
-    tier: cert.tier,
-    timestamp: Date.now(),
-    read: false,
-  });
+  const notifExists = notifs.some((n) => n.certificateId === cert.id);
+  if (!notifExists) {
+    notifs.unshift({
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: "graduation",
+      title: `Congratulations! Your Certificate of ${cert.tier} has been issued! 🎓`,
+      message: `You have successfully graduated from ${cert.skillName} at KR8 Digitals! Your verified Certificate of ${cert.tier} is now available in your profile to view, download, and share.`,
+      certificateId: cert.id,
+      skill: cert.skill,
+      skillName: cert.skillName,
+      tier: cert.tier,
+      timestamp: Date.now(),
+      read: false,
+    });
+  }
 
   const updated: Account = {
     ...acc,
     graduated: true,
     certTier: cert.tier,
-    certificateUrl: cert.certificateImageUrl,
+    certificateUrl: `cert-stored:${cert.id}`,
     certRecognition: cert.additionalNotes || acc.certRecognition,
     graduatedAt: cert.issuedAt,
     certificates: existingCerts,
@@ -2156,6 +2222,32 @@ export function issueCertificate(
 
   accounts[accIndex] = updated;
   saveAccounts(accounts);
+
+  // Sync current user session if the graduated student is currently signed in
+  try {
+    const curRaw = localStorage.getItem("kr8_current");
+    if (curRaw) {
+      const cur = JSON.parse(curRaw) as Account;
+      if (normalizeIdentity(cur.id) === normalizeIdentity(studentId)) {
+        localStorage.setItem("kr8_current", JSON.stringify(updated));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // Push to global notifications list so Navbar bell lights up
+  try {
+    const globalNotifs = JSON.parse(localStorage.getItem("kr8_notifs") || "[]");
+    globalNotifs.unshift({
+      id: Math.random().toString(36).slice(2),
+      text: `🎓 Congratulations, ${updated.name}! Your Certificate of ${cert.tier} in ${cert.skillName} has been issued!`,
+      ts: Date.now(),
+    });
+    localStorage.setItem("kr8_notifs", JSON.stringify(globalNotifs.slice(0, 20)));
+  } catch {
+    /* ignore */
+  }
 
   addFeed({
     kind: "graduation",

@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
-import { getSkill, getStudents, getAnnouncements, CONTACT, getReferralUrl } from "../data/store";
+import { getSkill, getStudents, getAnnouncements, CONTACT, getReferralUrl, getStudentCertificates } from "../data/store";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
 import { Pill, Card } from "../components/ui";
 import Icon from "../components/Icon";
+import CertificateDocumentView from "../components/CertificateDocumentView";
+import { downloadCertificatePdf } from "../utils/certificate";
 
 const actions = [
   { icon: "book" as const, label: "Program", title: "Continue Learning", desc: "Pick up your skill track where you left off.", to: "/academy" },
@@ -26,6 +28,8 @@ export default function Dashboard() {
   const ranked = [...getStudents()].sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === student.id) + 1;
   const first = student.name.split(" ")[0];
+  const certs = getStudentCertificates(student.id);
+  const primaryCert = certs[0];
 
   const executiveActions = [
     { icon: "lock" as const, label: "Administration", title: "Admin Portal", desc: "Manage students, certifications, tracks, and settings.", to: "/admin" },
@@ -80,6 +84,8 @@ export default function Dashboard() {
               ? "KR8 Founder & CEO"
               : isCoFounder
               ? "KR8 Co-Founder"
+              : student.graduated
+              ? `🎓 Certified Graduate · ${skill?.name ?? "Design"}`
               : student.type === "tribe"
               ? "Tribe Member"
               : skill?.name ?? "Student"}{" "}
@@ -94,6 +100,60 @@ export default function Dashboard() {
               <>Welcome back, <span className="text-gradient">{first}</span> 👋</>
             )}
           </h1>
+
+          {/* CERTIFIED GRADUATE HERO CELEBRATION CARD */}
+          {student.graduated && !isFounder && !isCoFounder && (
+            <div className="mt-6 overflow-hidden rounded-3xl border-2 border-green-500/50 bg-gradient-to-br from-green-950/40 via-[#0e1f13] to-purple-950/30 p-6 sm:p-8 shadow-2xl backdrop-blur-md">
+              <div className="flex flex-col lg:flex-row gap-6 items-center justify-between">
+                <div className="flex-1 space-y-3">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-green-500/40 bg-green-500/15 px-3.5 py-1 text-xs font-bold text-green-300">
+                    <span>🎓</span> OFFICIAL KR8 CERTIFIED GRADUATE
+                  </div>
+                  <h3 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                    Certificate of {student.certTier ?? "Completion"} Earned!
+                  </h3>
+                  <p className="text-sm leading-relaxed text-[#d4c6e6] max-w-2xl">
+                    Congratulations, <strong className="text-white">{student.name}</strong>! You have successfully graduated from <strong className="text-white">{skill?.name || "Professional Track"}</strong> at KR8 Digitals. Your official credential has been issued with permanent QR verification and is recognized across the platform.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <Link
+                      to="/academy"
+                      className="inline-flex items-center gap-2 rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-xl glow-pink-sm hover:scale-[1.02] active:scale-95 transition-all"
+                    >
+                      <Icon name="certificate" size={14} /> Open Full Credential in Profile →
+                    </Link>
+                    {primaryCert && (
+                      <button
+                        onClick={() => downloadCertificatePdf(student.name, null, primaryCert, student)}
+                        className="inline-flex items-center gap-2 rounded-full border border-pink-500/40 bg-pink-500/10 px-5 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-500/20 transition-colors"
+                      >
+                        <Icon name="certificate" size={14} /> Download Official PDF
+                      </button>
+                    )}
+                    <Link
+                      to={`/verify?id=${encodeURIComponent(student.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-5 py-2.5 text-xs font-semibold text-white hover:bg-white/10 transition-colors"
+                    >
+                      Public QR Verification Page ↗
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Certificate preview document */}
+                {primaryCert && (
+                  <div className="w-full sm:w-80 shrink-0">
+                    <CertificateDocumentView
+                      cert={primaryCert}
+                      student={student}
+                      maxHeight="220px"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {isFounder ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-pink-400/40 bg-gradient-to-r from-pink-500/15 via-[#1a0030] to-purple-600/15 p-4 shadow-xl">
@@ -141,7 +201,7 @@ export default function Dashboard() {
           {[
             { n: student.attendanceAccepted, l: isFounder || isCoFounder ? "Attendance Sessions" : "Attendance Accepted" },
             { n: student.submissions, l: isFounder || isCoFounder ? "Assignments Reviewed" : "Assignments Submitted" },
-            { n: isFounder ? "👑 Founder" : isCoFounder ? "⭐ Co-Founder" : `#${rank}`, l: "Leadership Status" },
+            { n: isFounder ? "👑 Founder" : isCoFounder ? "⭐ Co-Founder" : student.graduated ? "🎓 Certified" : `#${rank}`, l: "Leadership Status" },
             { n: student.points, l: "Points" },
             { n: student.referrals, l: "Referrals" },
           ].map((s) => (

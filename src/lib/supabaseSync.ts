@@ -133,31 +133,45 @@ async function hydrateAccountsFromSupabase() {
     const { data, error } = await supabase.from("accounts").select("*");
     if (!error && data && data.length > 0) {
       const local = getAccounts();
-      const localMap = new Map(local.map((a) => [a.id, a]));
+      const localMap = new Map(local.map((a) => [a.id.toLowerCase().replace(/[\s-]/g, ""), a]));
 
       data.forEach((row: any) => {
+        const key = String(row.id || "").toLowerCase().replace(/[\s-]/g, "");
+        const existing = localMap.get(key);
+
+        // Never downgrade local graduation status or wipe local certificates/notifications
+        const isGraduated = existing?.graduated || !!row.graduated;
+        const certTier = existing?.certTier || row.cert_tier || (isGraduated ? "Completion" : undefined);
+
         const acc: Account = {
+          ...existing,
           id: row.id,
-          type: row.type || "student",
-          name: row.name,
-          email: row.email,
-          phone: row.phone,
-          country: row.country || "NG",
-          skill: row.skill || "",
-          dob: row.dob || "",
-          points: Number(row.points) || 0,
-          vip: !!row.vip,
-          attendanceAccepted: Number(row.attendance_accepted) || 0,
-          submissions: Number(row.submissions) || 0,
-          referrals: Number(row.referrals) || 0,
-          graduated: !!row.graduated,
+          type: row.type || existing?.type || "student",
+          name: row.name || existing?.name,
+          email: row.email || existing?.email,
+          phone: row.phone || existing?.phone,
+          country: row.country || existing?.country || "NG",
+          skill: row.skill || existing?.skill || "",
+          dob: row.dob || existing?.dob || "",
+          points: Number(row.points) || existing?.points || 0,
+          vip: typeof row.vip !== "undefined" ? !!row.vip : (existing?.vip ?? false),
+          attendanceAccepted: Number(row.attendance_accepted) || existing?.attendanceAccepted || 0,
+          submissions: Number(row.submissions) || existing?.submissions || 0,
+          referrals: Number(row.referrals) || existing?.referrals || 0,
+          graduated: isGraduated,
+          certTier,
+          certRecognition: row.cert_recognition || existing?.certRecognition,
+          certificates: existing?.certificates || [],
+          notifications: existing?.notifications || [],
+          graduatedSkills: existing?.graduatedSkills || (isGraduated && (row.skill || existing?.skill) ? [row.skill || existing?.skill] : []),
+          certificateUrl: existing?.certificateUrl,
           avatar: (row.avatar && (row.type === "founder" || !row.avatar.includes("founder_timfire.jpg")))
             ? row.avatar
-            : generateDefaultAvatar(row.name, row.id),
-          executiveRole: row.executive_role,
-          joined: row.created_at || row.joined || new Date().toISOString(),
+            : (existing?.avatar || generateDefaultAvatar(row.name, row.id)),
+          executiveRole: row.executive_role || existing?.executiveRole,
+          joined: row.created_at || row.joined || existing?.joined || new Date().toISOString(),
         };
-        localMap.set(acc.id, acc);
+        localMap.set(key, acc);
       });
 
       saveAccounts(Array.from(localMap.values()));
@@ -243,6 +257,8 @@ export async function syncAccountToSupabase(account: Account) {
       submissions: account.submissions || 0,
       referrals: account.referrals || 0,
       graduated: !!account.graduated,
+      cert_tier: account.certTier || null,
+      cert_recognition: account.certRecognition || null,
       avatar: account.avatar || null,
       executive_role: account.executiveRole || null,
     });

@@ -3,6 +3,8 @@ import { useSearchParams, Link } from "react-router-dom";
 import { verifyId, getSkill, type VerificationResult } from "../data/store";
 import { Pill, GradientButton, Card, Avatar } from "../components/ui";
 import Icon from "../components/Icon";
+import CertificateDocumentView from "../components/CertificateDocumentView";
+import { downloadCertificatePdf } from "../utils/certificate";
 
 export default function Verify() {
   const [searchParams] = useSearchParams();
@@ -207,16 +209,22 @@ export default function Verify() {
                     </div>
 
                     {/* Certificate Preview Image if active */}
-                    {!isWithdrawn && activeCert.certificateImageUrl && (
-                      <div className="mt-4 pt-3 border-t border-white/10">
-                        <p className="text-[11px] font-semibold text-[#8a7ba8] mb-2">Verified Certificate Document:</p>
-                        <div className="rounded-xl overflow-hidden border border-white/15 bg-black">
-                          <img
-                            src={activeCert.certificateImageUrl}
-                            alt="Certificate"
-                            className="w-full object-contain max-h-[350px]"
-                          />
+                    {!isWithdrawn && activeCert && (
+                      <div className="mt-4 pt-3 border-t border-white/10 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] font-semibold text-[#8a7ba8]">Verified Certificate Document:</p>
+                          <button
+                            onClick={() => downloadCertificatePdf(result.account?.name || activeCert.studentName, null, activeCert, result.account)}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-pink-300 hover:text-white underline underline-offset-2"
+                          >
+                            <Icon name="certificate" size={13} /> Download Official PDF →
+                          </button>
                         </div>
+                        <CertificateDocumentView
+                          cert={activeCert}
+                          student={result.account}
+                          maxHeight="350px"
+                        />
                       </div>
                     )}
                   </div>

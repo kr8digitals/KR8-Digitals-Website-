@@ -16,6 +16,7 @@ import Icon from "../components/Icon";
 import CountryPhone from "../components/CountryPhone";
 import { downloadCertificatePdf } from "../utils/certificate";
 import { authenticateWithBiometrics, getRegisteredBiometrics } from "../utils/biometrics";
+import CertificateDocumentView from "../components/CertificateDocumentView";
 
 export default function Academy() {
   const { student } = useAuth();
@@ -651,8 +652,8 @@ function Profile({ student }: { student: Account }) {
                 profile.vip && <span className="rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">VIP</span>
               )}
               {profile.graduated && profile.type === "student" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs text-[#cabfe0]">
-                  <Icon name="certificate" size={13} /> {profile.certTier}
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold text-white shadow-lg glow-pink-sm">
+                  <Icon name="certificate" size={13} /> 🎓 KR8 Certified Graduate · {profile.certTier}
                 </span>
               )}
               {profile.admin && (
@@ -869,7 +870,11 @@ function Profile({ student }: { student: Account }) {
                   <Check>{profile.submissions} assignments submitted & accepted</Check>
                   <Check>{profile.referrals} successful referrals</Check>
                   <Check>{skill?.name} skill track badge earned</Check>
-                  {profile.graduated && <Check>Certificate of {profile.certTier} earned</Check>}
+                  {profile.graduated && (
+                    <Check>
+                      <strong>Certified Graduate:</strong> Official Certificate of {profile.certTier} earned in {skill?.name ?? "Professional Skill"} ({new Date(profile.graduatedAt || Date.now()).getFullYear()})
+                    </Check>
+                  )}
                 </ul>
               </Card>
             )}
@@ -1634,26 +1639,16 @@ function StudentCertificateSection({
               )}
 
               {/* Certificate Image Document */}
-              <div className="group relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-lg">
-                <img
-                  src={activeCert.certificateImageUrl}
-                  alt={`Certificate of ${profile.name}`}
-                  className="w-full object-contain max-h-[380px]"
-                />
-                <div className="p-2.5 bg-black/80 text-center border-t border-white/10 flex items-center justify-between px-4">
-                  <span className="text-[11px] text-green-300 font-semibold flex items-center gap-1">
-                    <Icon name="check" size={12} /> Includes verifiable QR code
-                  </span>
-                  <span className="text-[11px] font-mono text-pink-400">
-                    {activeCert.id}
-                  </span>
-                </div>
-              </div>
+              <CertificateDocumentView
+                cert={activeCert}
+                student={profile}
+                maxHeight="380px"
+              />
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-1">
                 <GradientButton
-                  onClick={() => downloadCertificatePdf(profile.name, activeCert.certificateImageUrl)}
+                  onClick={() => downloadCertificatePdf(profile.name, null, activeCert, profile)}
                   className="w-full flex items-center justify-center gap-2"
                 >
                   <Icon name="certificate" size={15} /> Download Official PDF →
