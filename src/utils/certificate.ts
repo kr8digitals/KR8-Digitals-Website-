@@ -106,6 +106,103 @@ export async function ensureEncodeSansFont(): Promise<boolean> {
   return fontLoadedPromise;
 }
 
+export interface DynamicDescriptionParams {
+  ctx: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+  courseName: string;
+  achievementText: string;
+}
+
+/**
+ * Renders dynamic skill text on the reusable certificate template.
+ * Highlights the skill name in KR8 magenta styling and prints the
+ * achievement description in rich purple, centered at the standard coordinates.
+ */
+export function renderDynamicCertificateDescription({
+  ctx,
+  width,
+  height,
+  courseName,
+  achievementText,
+}: DynamicDescriptionParams) {
+  const descFontSize = Math.max(18, Math.round(height * 0.027)); // ~36px at 1331h, ~57px at 2121h
+  const lineHeight = Math.round(height * 0.0417); // ~55.5px at 1331h
+  const centerX = Math.round(width * 0.3672); // Centered at 36.72% of canvas width
+  const maxLineWidth = Math.round(width * 0.62); // Paragraph bounds
+
+  const purpleColor = "#481650"; // Deep KR8 obsidian purple
+  const magentaColor = "#C72A80"; // KR8 signature magenta highlight
+
+  ctx.save();
+  ctx.font = `bold ${descFontSize}px "Encode Sans", sans-serif`;
+  ctx.textBaseline = "alphabetic";
+
+  // Build word tokens with their respective colors
+  const prefixWords = "For successfully completing a".split(/\s+/);
+  const skillWords = courseName.trim().split(/\s+/);
+  const suffixWords = `course with KR8 Digitals ${achievementText}`.split(/\s+/);
+
+  const tokens: Array<{ word: string; color: string; width: number }> = [];
+
+  for (const w of prefixWords) {
+    tokens.push({ word: w, color: purpleColor, width: ctx.measureText(w).width });
+  }
+  for (const w of skillWords) {
+    tokens.push({ word: w, color: magentaColor, width: ctx.measureText(w).width });
+  }
+  for (const w of suffixWords) {
+    tokens.push({ word: w, color: purpleColor, width: ctx.measureText(w).width });
+  }
+
+  const spaceWidth = ctx.measureText(" ").width;
+
+  // Wrap tokens into balanced lines
+  interface LineData {
+    tokens: Array<{ word: string; color: string; width: number }>;
+    totalWidth: number;
+  }
+  const lines: LineData[] = [];
+  let currentTokens: Array<{ word: string; color: string; width: number }> = [];
+  let currentWidth = 0;
+
+  for (const token of tokens) {
+    const projected = currentWidth === 0 ? token.width : currentWidth + spaceWidth + token.width;
+    if (projected > maxLineWidth && currentTokens.length > 0) {
+      lines.push({ tokens: currentTokens, totalWidth: currentWidth });
+      currentTokens = [token];
+      currentWidth = token.width;
+    } else {
+      currentTokens.push(token);
+      currentWidth = projected;
+    }
+  }
+  if (currentTokens.length > 0) {
+    lines.push({ tokens: currentTokens, totalWidth: currentWidth });
+  }
+
+  // Baseline positioning: for 3 lines, first baseline is at ~53.94% of canvas height
+  let startY = Math.round(height * 0.5394);
+  if (lines.length > 3) {
+    startY = Math.round(height * 0.5394 - (lines.length - 3) * lineHeight * 0.4);
+  }
+
+  // Draw lines centered at centerX
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let lineX = Math.round(centerX - line.totalWidth / 2);
+    const lineY = startY + i * lineHeight;
+
+    for (const token of line.tokens) {
+      ctx.fillStyle = token.color;
+      ctx.fillText(token.word, lineX, lineY);
+      lineX += Math.round(token.width + spaceWidth);
+    }
+  }
+
+  ctx.restore();
+}
+
 export interface GeneratedCertificateResult {
   certId: string;
   imageUrl: string;
@@ -127,20 +224,22 @@ export interface GeneratedCertificateResult {
  * - Positions name centered above the designated baseline line
  * - Automatically generates unique QR code pointing to /verify?id=...&cert=...
  * - Draws subtle verification badge with KR8 ID and Scan to Verify
+ * - Dynamically renders the skill name and description if reusable template is used
  * - Exports both crisp image and downloadable PDF
  */
 export async function generateAutomaticCertificate(params: {
   student: Account;
   skillKey: string;
   tier: CertificateTier;
+  courseName?: string;
   additionalNotes?: string;
   origin?: string;
   certId?: string;
 }): Promise<GeneratedCertificateResult> {
-  const { student, skillKey, tier, origin } = params;
+  const { student, skillKey, tier, origin, courseName } = params;
 
   // 1. Resolve template configuration
-  const config = getCertificateTemplate(skillKey, tier);
+  const config = getCertificateTemplate(skillKey, tier, courseName);
   const certId =
     params.certId ||
     `CERT-KR8-${student.id.replace(/[^A-Za-z0-9]/g, "")}-${Date.now().toString(36).toUpperCase()}`;
@@ -174,7 +273,7 @@ export async function generateAutomaticCertificate(params: {
   // 4. Format & Render Student Name
   const formattedName = formatCertificateStudentName(student.name);
 
-  // Baseline at Y = 50.8% of height, centered at X = 50.0% of width
+  // Baseline at Y = 50.7% of height, centered at X = 50.0% of width
   const centerX = Math.round(width * config.geometry.nameCenterRatioX);
   const baselineY = Math.round(height * config.geometry.nameBaselineRatioY);
   const maxAllowedWidth = Math.round(width * config.geometry.nameMaxRatioWidth);
@@ -196,10 +295,21 @@ export async function generateAutomaticCertificate(params: {
   ctx.fillStyle = "#12001f"; // Rich dark obsidian matching template text
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  // Lift 6-12px above baseline so characters do not collide with the drawn line
+  // Lift above baseline so characters do not collide with the drawn line
   const textY = baselineY - Math.max(6, Math.round(fontSize * 0.12));
   ctx.fillText(formattedName, centerX, textY);
   ctx.restore();
+
+  // 4b. Dynamic Skill Name & Description Rendering for Reusable Template
+  if (config.isDynamicSkillText) {
+    renderDynamicCertificateDescription({
+      ctx,
+      width,
+      height,
+      courseName: config.courseName,
+      achievementText: config.achievementText,
+    });
+  }
 
   // 5. Draw QR Code Badge in Bottom-Right Corner
   const qrSize = Math.max(120, Math.min(240, Math.round(width * config.geometry.qrRatioWidth)));
@@ -340,6 +450,7 @@ export async function processGraduationCertificate(
     pdfBytes: new Uint8Array(),
   };
 }
+
 export function downloadCertificatePdf(studentName: string, pdfBytes: Uint8Array | Blob | string) {
   let blob: Blob;
   if (pdfBytes instanceof Blob) {

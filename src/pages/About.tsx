@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { CONTACT, getFounders, getTeam, PARTNERS } from "../data/store";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Check, ImageWithFallback } from "../components/ui";
 import Icon from "../components/Icon";
@@ -173,11 +174,78 @@ export default function About() {
         </div>
       </section>
 
-      <section className="py-16">
+      {/* The Administrators */}
+      <section className="py-16 border-t border-white/5">
         <div className="mx-auto max-w-7xl px-5">
-          <SectionHead label="Our dedicated team" title="The people who keep KR8" highlight="moving" center />
-          <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {team.map((member) => <Card key={member.key} className="text-center"><ImageWithFallback src={member.photo} alt={member.name} className="mx-auto h-28 w-28 rounded-2xl object-cover ring-2 ring-pink-400/30" fallbackClassName="mx-auto h-28 w-28 rounded-2xl border border-pink-400/40" /><h3 className="mt-4 font-bold text-white">{member.name}</h3><p className="mt-1 text-sm text-pink-400">{member.role}</p><p className="mt-3 text-left text-xs leading-relaxed text-[#b8aecf]">{member.bio}</p></Card>)}
+          <SectionHead
+            label="Institutional & Operational Leadership"
+            title="The"
+            highlight="Administrators"
+            sub="The dedicated leadership team stewarding financial strategy, student accountability, academy workflows, and technical delivery."
+            center
+          />
+          <div className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2">
+            {team.map((member) => (
+              <div
+                key={member.key}
+                className="group relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-5 sm:p-6 transition-all duration-300 hover:border-pink-400/50 hover:shadow-2xl hover:shadow-pink-500/10 flex flex-col justify-between"
+              >
+                {/* Prominent Portrait (Slightly smaller than Co-Founder cards) */}
+                <div className="relative aspect-[4/3.8] w-full overflow-hidden rounded-2xl bg-black/40 ring-1 ring-white/10 shadow-xl">
+                  <ImageWithFallback
+                    src={member.photo}
+                    alt={member.name}
+                    className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                    fallbackClassName="h-full w-full flex items-center justify-center bg-gradient-to-br from-pink-500/20 to-purple-900/40 text-3xl font-display text-pink-300"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0d0015] via-[#0d0015]/30 to-transparent" />
+
+                  {/* Top Role Badge */}
+                  <div className="absolute top-3.5 left-3.5">
+                    <span className="rounded-full bg-gradient-pink px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-md glow-pink-sm">
+                      Administrator
+                    </span>
+                  </div>
+
+                  {/* Bottom Name & Role Overlay */}
+                  <div className="absolute bottom-3.5 left-3.5 right-3.5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-white drop-shadow-md">
+                      {member.name}
+                    </h3>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300 drop-shadow-sm mt-0.5">
+                      {member.role}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Professional Bio & Responsibility Pills */}
+                <div className="mt-4 flex-1 flex flex-col justify-between space-y-3">
+                  <p className="text-sm leading-relaxed text-[#cabfe0]">
+                    {member.bio}
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <span className="rounded-full bg-pink-500/10 px-3 py-1 text-xs font-medium text-pink-300 border border-pink-400/20">
+                      {member.key === "nicodemus"
+                        ? "Financial Strategy"
+                        : member.key === "chimnonyerem"
+                        ? "Frontend Track Leadership"
+                        : member.key === "favour"
+                        ? "Operations & Schedules"
+                        : "Cohort Accountability"}
+                    </span>
+                    <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-[#cabfe0]">
+                      {member.key === "nicodemus"
+                        ? "Fiscal Governance"
+                        : member.key === "chimnonyerem"
+                        ? "Project Coordination"
+                        : member.key === "favour"
+                        ? "Academy Management"
+                        : "Student Mentorship"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -230,6 +298,11 @@ export default function About() {
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                   <GradientButton onClick={() => form.name && setSent(true)} className="flex-1 shadow-lg shadow-pink-500/25">Submit Partnership Proposal →</GradientButton>
                   <GhostButton href={CONTACT.whatsappTeam} className="flex-1">Direct Chat via WhatsApp</GhostButton>
+                </div>
+                <div className="mt-4 text-center">
+                  <Link to="/partner" className="text-xs text-pink-300 hover:text-pink-200 font-semibold hover:underline">
+                    Explore Dedicated Partner With Us Page (All 6 Pathways) →
+                  </Link>
                 </div>
               </Card>
             )}

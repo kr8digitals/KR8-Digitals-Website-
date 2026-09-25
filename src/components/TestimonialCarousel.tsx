@@ -70,7 +70,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const [ordered] = useState<Testimonial[]>(() => {
     if (!items || !items.length) return [];
     try {
-      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v15");
+      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v16");
       if (stored) {
         const parsedIds: string[] = JSON.parse(stored);
         const map = new Map(items.map((it) => [it.id, it]));
@@ -84,7 +84,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     }
     const shuffled = [...items].sort(() => Math.random() - 0.5);
     try {
-      sessionStorage.setItem("kr8_shuffled_testimonials_v15", JSON.stringify(shuffled.map((i) => i.id)));
+      sessionStorage.setItem("kr8_shuffled_testimonials_v16", JSON.stringify(shuffled.map((i) => i.id)));
     } catch {}
     return shuffled;
   });
@@ -151,18 +151,15 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     setCurrentTime(0);
   }, [currentIndex, currentItem]);
 
-  // Sync video source change
+  // Sync video source change with immediate smooth playback
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Load new source
-    video.load();
-
-    // Reset elapsed
     setCurrentTime(0);
+    video.muted = isMuted;
 
-    // If already playing or user initiated next/prev, autoplay muted
+    // Smooth native play
     const playPromise = video.play();
     if (playPromise !== undefined) {
       playPromise
@@ -404,59 +401,61 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
         </div>
       </div>
 
-      {/* REAL SLIDING CAROUSEL STAGE — CENTER ACTIVE + LEFT/RIGHT DIMMED PREVIEWS */}
-      <div
-        className="relative w-full overflow-hidden py-4 select-none"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Desktop Left / Previous Arrow */}
-        <button
-          onClick={handlePrev}
-          aria-label="Previous story"
-          className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 z-40 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-white/30 bg-black/75 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-2xl"
-        >
-          <span className="text-2xl font-bold leading-none -ml-0.5">‹</span>
-        </button>
-
-        {/* Desktop Right / Next Arrow */}
-        <button
-          onClick={handleNext}
-          aria-label="Next story"
-          className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 z-40 flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-white/30 bg-black/75 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-2xl"
-        >
-          <span className="text-2xl font-bold leading-none -mr-0.5">›</span>
-        </button>
-
-        {/* Three-Card Sliding Carousel Row */}
-        <div className="relative flex items-center justify-center gap-2 sm:gap-6 w-full max-w-full">
-          {/* PREVIOUS VIDEO PREVIEW (Partially visible & dimmed on left edge on mobile and desktop) */}
-          {prevItem && (
-            <div
+      {/* RESPONSIVE EXPERIENCE GRID: Side-by-side (VIDEO LEFT | COMMENT RIGHT) on Desktop/Laptop, Stacked on Mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
+        {/* LEFT COLUMN: VIDEO PLAYER & CAROUSEL (Desktop: Left Side | Mobile: Top) */}
+        <div className="lg:col-span-6 xl:col-span-6 flex flex-col items-center w-full">
+          <div
+            className="relative w-full overflow-hidden py-2 select-none flex flex-col items-center"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Navigation Arrows for Mobile and Desktop */}
+            <button
               onClick={handlePrev}
-              className="relative flex flex-col items-center opacity-30 hover:opacity-75 scale-80 sm:scale-90 -mr-12 sm:-mr-8 z-10 cursor-pointer transition-all duration-500 shrink-0 select-none group"
-              title={`Previous: ${prevItem.name}`}
+              aria-label="Previous story"
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-40 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-white/30 bg-black/75 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-2xl"
             >
-              <div className="relative w-[130px] sm:w-[220px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/15 bg-black shadow-lg">
-                <img
-                  src={prevItem.img}
-                  alt={prevItem.name}
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md border border-white/30 group-hover:bg-pink-600 transition-colors">
-                    ‹
-                  </span>
+              <span className="text-2xl font-bold leading-none -ml-0.5">‹</span>
+            </button>
+
+            <button
+              onClick={handleNext}
+              aria-label="Next story"
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-40 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-white/30 bg-black/75 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-2xl"
+            >
+              <span className="text-2xl font-bold leading-none -mr-0.5">›</span>
+            </button>
+
+            {/* Carousel Stage: Mobile 3-Card Row / Desktop Clean Center Player */}
+            <div className="relative flex items-center justify-center gap-2 sm:gap-6 w-full max-w-full">
+              {/* PREVIOUS VIDEO PREVIEW (Mobile Only: dimmed on left edge) */}
+              {prevItem && (
+                <div
+                  onClick={handlePrev}
+                  className="lg:hidden relative flex flex-col items-center opacity-30 hover:opacity-75 scale-80 sm:scale-90 -mr-12 sm:-mr-8 z-10 cursor-pointer transition-all duration-500 shrink-0 select-none group"
+                  title={`Previous: ${prevItem.name}`}
+                >
+                  <div className="relative w-[130px] sm:w-[220px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/15 bg-black shadow-lg">
+                    <img
+                      src={prevItem.img}
+                      alt={prevItem.name}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md border border-white/30 group-hover:bg-pink-600 transition-colors">
+                        ‹
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 left-2.5 right-2.5 text-left">
+                      <p className="text-[11px] sm:text-xs font-bold text-white truncate">{prevItem.name}</p>
+                      <p className="text-[9px] sm:text-[10px] text-pink-300 truncate">{prevItem.skill}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="absolute bottom-3 left-2.5 right-2.5 text-left">
-                  <p className="text-[11px] sm:text-xs font-bold text-white truncate">{prevItem.name}</p>
-                  <p className="text-[9px] sm:text-[10px] text-pink-300 truncate">{prevItem.skill}</p>
-                </div>
-              </div>
-            </div>
-          )}
+              )}
 
           {/* ACTIVE CENTER VIDEO PLAYER (Prominent, Centered, Fully Functional) */}
           <div
@@ -473,7 +472,8 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               src={currentItem.video}
               poster={currentItem.img}
               playsInline
-              preload="metadata"
+              preload="auto"
+              autoPlay
               muted={isMuted}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
@@ -653,108 +653,179 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* SWIPE HINT FOR MOBILE USERS */}
-      <div className="flex sm:hidden items-center justify-center gap-1.5 mt-1 text-[11px] text-[#8a7ba8]">
-        <span>←</span>
-        <span>Swipe left/right or tap side preview to slide</span>
-        <span>→</span>
-      </div>
-
-      {/* COMMUNITY COMMENTS & APPRECIATION */}
-      <div className="mt-8 max-w-2xl mx-auto">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
-          <div className="flex items-center justify-between pb-3 border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <span className="text-pink-400">💬</span>
-              <h4 className="text-sm font-bold text-white">
-                Community Cheers ({comments.length})
-              </h4>
             </div>
-            <span className="text-xs text-[#8a7ba8]">
-              Cheer for {currentItem.name.split(" ")[0]}
-            </span>
-          </div>
 
-          {/* Comment input form */}
-          <form onSubmit={handlePostComment} className="mt-4 flex flex-col gap-2">
-            {!currentUser && (
-              <input
-                type="text"
-                placeholder="Your Name (e.g. Ebuka, Sarah)"
-                value={authorName}
-                onChange={(e) => setAuthorName(e.target.value)}
-                className="rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
-              />
-            )}
-            {currentUser && (
-              <div className="flex items-center gap-2 text-[11px] text-[#b8aecf]">
-                <span>Posting as:</span>
-                <span className="font-bold text-pink-300">{currentUser.name}</span>
-                <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] text-pink-200">
-                  {currentUser.id}
-                </span>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder={`Leave a cheer or question for ${currentItem.name.split(" ")[0]}...`}
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
-              />
+            {/* Desktop Navigation Bar below Video */}
+            <div className="hidden lg:flex items-center justify-between w-full max-w-[380px] mt-4 px-2 text-xs">
               <button
-                type="submit"
-                disabled={!commentText.trim()}
-                className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md disabled:opacity-40 hover:brightness-110 active:scale-95 transition-all"
+                type="button"
+                onClick={handlePrev}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-white hover:bg-pink-600 hover:border-pink-500 active:scale-95 transition-all"
               >
-                Post
+                <span>‹</span>
+                <span>Previous Story</span>
+              </button>
+              <span className="text-[#8a7ba8] font-mono">
+                {currentIndex + 1} of {total}
+              </span>
+              <button
+                type="button"
+                onClick={handleNext}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-white hover:bg-pink-600 hover:border-pink-500 active:scale-95 transition-all"
+              >
+                <span>Next Story</span>
+                <span>›</span>
               </button>
             </div>
-          </form>
 
-          {/* Comments Feed */}
-          <div className="mt-4 max-h-[220px] overflow-y-auto space-y-2.5 pr-1 text-xs">
-            {comments.length === 0 ? (
-              <p className="py-4 text-center text-xs text-[#8a7ba8]">
-                No comments yet. Be the first to congratulate {currentItem.name}!
-              </p>
-            ) : (
-              comments.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-2xl border border-white/5 bg-black/30 p-3 flex flex-col gap-1 transition-all hover:border-white/15"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-white">{c.authorName}</span>
-                      {c.authorId && (
-                        <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-pink-300">
-                          {c.authorId.includes("FOUNDER") ? "Founder" : c.authorId}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-[#7d6f96]">
-                      {timeAgo(c.createdAt)}
+            {/* SWIPE HINT FOR MOBILE USERS */}
+            <div className="flex sm:hidden items-center justify-center gap-1.5 mt-2 text-[11px] text-[#8a7ba8]">
+              <span>←</span>
+              <span>Swipe left/right or tap side preview to slide</span>
+              <span>→</span>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: STUDENT SPOTLIGHT & COMMUNITY COMMENTS (Desktop: Right Side | Mobile: Bottom) */}
+        <div className="lg:col-span-6 xl:col-span-6 flex flex-col gap-5 w-full">
+          {/* Active Student Spotlight Card */}
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 backdrop-blur-md shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3.5">
+                <img
+                  src={currentItem.img}
+                  alt={currentItem.name}
+                  className="h-14 w-14 rounded-2xl object-cover ring-2 ring-pink-500/60 shadow-lg shrink-0"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-white leading-tight">
+                      {currentItem.name}
+                    </h3>
+                    <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-2 py-0.5 text-[10px] font-bold text-pink-300">
+                      ✓ Verified Graduate
                     </span>
                   </div>
-                  <p className="text-[#d8cde8] leading-relaxed mt-0.5">{c.comment}</p>
-                  <div className="mt-1 flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleLike(c.id)}
-                      className="flex items-center gap-1 text-[11px] text-[#8a7ba8] hover:text-pink-400 active:scale-90 transition-all"
-                    >
-                      <span>♥</span>
-                      <span>{c.likes || 0}</span>
-                    </button>
-                  </div>
+                  <p className="text-xs text-pink-300 font-semibold mt-0.5">
+                    {currentItem.skill} {currentItem.schoolOrRole ? `· ${currentItem.schoolOrRole}` : ""}
+                  </p>
                 </div>
-              ))
-            )}
+              </div>
+
+              <button
+                onClick={handleShareActive}
+                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all shadow-sm shrink-0"
+                title="Share this student's story"
+              >
+                <Icon name="share" size={13} />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+            </div>
+
+            {/* Student's Featured Quote */}
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 p-4 relative">
+              <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-md bg-gradient-pink text-[10px] font-bold tracking-wider uppercase text-white shadow">
+                Student Highlight
+              </span>
+              <p className="text-xs sm:text-sm italic text-[#e8ddf5] leading-relaxed pt-1">
+                "{currentItem.caption}"
+              </p>
+            </div>
+          </div>
+
+          {/* COMMUNITY COMMENTS & APPRECIATION */}
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 backdrop-blur-md shadow-xl flex flex-col flex-1">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-pink-400">💬</span>
+                <h4 className="text-sm font-bold text-white">
+                  Community Cheers ({comments.length})
+                </h4>
+              </div>
+              <span className="text-xs text-[#8a7ba8]">
+                Cheer for {currentItem.name.split(" ")[0]}
+              </span>
+            </div>
+
+            {/* Comment input form */}
+            <form onSubmit={handlePostComment} className="mt-4 flex flex-col gap-2">
+              {!currentUser && (
+                <input
+                  type="text"
+                  placeholder="Your Name (e.g. Ebuka, Sarah)"
+                  value={authorName}
+                  onChange={(e) => setAuthorName(e.target.value)}
+                  className="rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
+                />
+              )}
+              {currentUser && (
+                <div className="flex items-center gap-2 text-[11px] text-[#b8aecf]">
+                  <span>Posting as:</span>
+                  <span className="font-bold text-pink-300">{currentUser.name}</span>
+                  <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] text-pink-200">
+                    {currentUser.id}
+                  </span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder={`Leave a cheer or question for ${currentItem.name.split(" ")[0]}...`}
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  className="flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder-[#7d6f96] focus:border-pink-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!commentText.trim()}
+                  className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md disabled:opacity-40 hover:brightness-110 active:scale-95 transition-all"
+                >
+                  Post
+                </button>
+              </div>
+            </form>
+
+            {/* Comments Feed */}
+            <div className="mt-4 max-h-[260px] xl:max-h-[300px] overflow-y-auto space-y-2.5 pr-1 text-xs">
+              {comments.length === 0 ? (
+                <p className="py-4 text-center text-xs text-[#8a7ba8]">
+                  No comments yet. Be the first to congratulate {currentItem.name}!
+                </p>
+              ) : (
+                comments.map((c) => (
+                  <div
+                    key={c.id}
+                    className="rounded-2xl border border-white/5 bg-black/30 p-3 flex flex-col gap-1 transition-all hover:border-white/15"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white">{c.authorName}</span>
+                        {c.authorId && (
+                          <span className="rounded bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-pink-300">
+                            {c.authorId.includes("FOUNDER") ? "Founder" : c.authorId}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-[#7d6f96]">
+                        {timeAgo(c.createdAt)}
+                      </span>
+                    </div>
+                    <p className="text-[#d8cde8] leading-relaxed mt-0.5">{c.comment}</p>
+                    <div className="mt-1 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleLike(c.id)}
+                        className="flex items-center gap-1 text-[11px] text-[#8a7ba8] hover:text-pink-400 active:scale-90 transition-all"
+                      >
+                        <span>♥</span>
+                        <span>{c.likes || 0}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

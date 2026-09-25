@@ -35,9 +35,6 @@ export default defineConfig({
     headers: {
       "Access-Control-Allow-Origin": "*",
     },
-    hmr: {
-      clientPort: 443,
-    },
   },
   preview: {
     host: "0.0.0.0",

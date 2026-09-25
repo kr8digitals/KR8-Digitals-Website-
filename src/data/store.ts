@@ -49,12 +49,36 @@ export function saveFounders(founders: FounderProfile[]) {
 }
 
 const DEFAULT_TEAM: TeamProfile[] = [
-  { key: "nicodemus", name: "Odobe Nicodemus C (BioNicz)", role: "KR8 Financial Strategist", bio: "Supports KR8 Digitals with financial strategy, structure and sustainable growth thinking.", photo: "https://drive.google.com/uc?export=view&id=1Oq4UOw-8us6cbnoWiCs8lx2YwNEA1GlT" },
-  { key: "chimnonyerem", name: "Chimnonyerem Mercy", role: "Project Director & Frontend Coach", bio: "Coordinates projects and coaches builders toward clear, practical frontend execution.", photo: "https://drive.google.com/uc?export=view&id=10WVxXW4M28PPi_91oCBRHl5DClrSrTEK" },
-  { key: "favour", name: "Nwefuru Favour Chizurum", role: "General Manager", bio: "Keeps people, programs and operations moving in one clear direction.", photo: "https://drive.google.com/uc?export=view&id=1zLxtrqh-D_Q6YKWUn5nbFXxHVU8ALXj_" },
-  { key: "covenant", name: "Covenant Afinidi", role: "Accountability Partner", bio: "Helps the KR8 community keep showing up, following through and growing together.", photo: "https://drive.google.com/uc?export=view&id=1_YKIPM1eCuFq9Ebav8Rwe1sT6TmbrE7N" },
+  {
+    key: "nicodemus",
+    name: "Odobe Nicodemus C (BioNicz)",
+    role: "KR8 Financial Strategist",
+    bio: "Supports KR8 Digitals with financial strategy, structure and sustainable growth thinking. Nicodemus ensures the institution's tuition-free mission remains economically sound, scalable, and built for long-term viability.",
+    photo: "/team/nicodemus.png",
+  },
+  {
+    key: "chimnonyerem",
+    name: "Chimnonyerem Mercy",
+    role: "Project Director & Frontend Coach",
+    bio: "Coordinates technical initiatives and coaches builders toward clear, practical frontend execution. Mercy oversees project lifecycles, ensuring student developers bridge theory into real, responsive web interfaces.",
+    photo: "/team/chimnonyerem.jpg",
+  },
+  {
+    key: "favour",
+    name: "Nwefuru Favour Chizurum",
+    role: "General Manager",
+    bio: "Keeps people, programs and academy operations moving in one synchronized direction. Favour manages daily administrative workflows, cohort schedules, and institutional logistics across all skill tracks.",
+    photo: "/team/favour.jpg",
+  },
+  {
+    key: "covenant",
+    name: "Covenant Afinidi",
+    role: "Accountability Partner",
+    bio: "Helps the KR8 community keep showing up, following through and growing together. Covenant works directly with learners to maintain daily momentum, resolve learning blockers, and ensure students follow through to graduation.",
+    photo: "/team/covenant.png",
+  },
 ];
-const TEAM_KEY = "kr8_team_v1";
+const TEAM_KEY = "kr8_team_v2";
 export function getTeam(): TeamProfile[] { return load(TEAM_KEY, DEFAULT_TEAM); }
 export function saveTeam(team: TeamProfile[]) {
   save(TEAM_KEY, team);
@@ -99,6 +123,23 @@ export const DEFAULT_SKILLS: Skill[] = [
     icon: "code",
     instructor: { name: "Timfire (Kenneth Timothy Iziogo)", photo: INSTRUCTOR_PHOTOS.timfire, bio: "Founder & Website Development instructor at KR8 Digitals." },
     criteria: "Submit 6 accepted builds + a final deployed website.",
+    curriculum: [],
+  },
+  {
+    key: "frontend",
+    name: "Front-End Development",
+    suffix: "FEDVFD",
+    whatsapp: "https://chat.whatsapp.com/EqdAOw1TxiM7KqTB5EXh8v?s=cl&p=a&mlu=4&ilr=4",
+    available: true,
+    regOpen: true,
+    snippet: "An 8-week engineering track taking you from semantic foundations to production-ready interfaces — mastering responsive CSS & Tailwind, modern JavaScript ES6+, React component architecture, API data fetching, state management, and real client web application deployment.",
+    icon: "code",
+    instructor: {
+      name: "Nonye Mercy",
+      photo: "/team/chimnonyerem.jpg",
+      bio: "Project Director & Frontend Coach at KR8 Digitals. Coordinates technical initiatives and coaches builders toward clear, practical frontend execution, ensuring student developers bridge theory into real, responsive web interfaces.",
+    },
+    criteria: "Submit 6 accepted frontend builds + a deployed modern web application.",
     curriculum: [],
   },
   {
@@ -212,6 +253,7 @@ FULL_CURRICULA.content = FULL_CURRICULA.content_creation;
 export const CERTIFICATION_CRITERIA: Record<string, string> = {
   graphic: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 5+ projects including one AI-assisted piece · passing feedback in ≥2 Thursday review sessions · ≥2 Mindset Shift sessions + 1 Monthly Hangout attended · demonstrated proficiency across fundamentals, branding, advanced editing, and responsible AI collaboration.",
   web: "≥80% live session attendance · both Week 7 final projects submitted · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across AI websites, CMS/WordPress, e-commerce, and landing pages.",
+  frontend: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 6+ frontend application builds including one React application · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across modern HTML/CSS/Tailwind, JavaScript ES6+, React, and API integration.",
   video: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 6+ pieces covering both editing and animation · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across editing fundamentals, short-form editing, and at least one animation technique.",
   content_creation: "≥80% live session attendance · both Week 8 projects submitted · an active creator account with a 7-day multi-format portfolio + creator media kit · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency in mobile production, dynamic editing, and audience retention.",
   content: "≥80% live session attendance · both Week 8 projects submitted · an active creator account with a 7-day multi-format portfolio + creator media kit · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance.",
@@ -222,7 +264,22 @@ export const CERTIFICATION_CRITERIA: Record<string, string> = {
 const CUSTOM_SKILLS_KEY = "kr8_custom_skills_v3";
 const SKILL_SETTINGS_KEY = "kr8_skill_settings_v3";
 const WAITLIST_WHATSAPP_KEY = "kr8_waitlist_whatsapp_url_v1";
+const DYNAMIC_CURRICULA_KEY = "kr8_dynamic_curricula_v1";
 export const DEFAULT_WAITLIST_WHATSAPP = "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8";
+
+export function getDynamicCurricula(): Record<string, Week[]> {
+  return load<Record<string, Week[]>>(DYNAMIC_CURRICULA_KEY, {});
+}
+
+export function saveDynamicCurriculum(skillKey: string, weeks: Week[]): void {
+  const current = getDynamicCurricula();
+  current[skillKey] = weeks;
+  save(DYNAMIC_CURRICULA_KEY, current);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
 
 export function getCustomSkills(): Skill[] {
   return load<Skill[]>(CUSTOM_SKILLS_KEY, []);
@@ -261,6 +318,7 @@ function skillSettings(): SkillSettings {
 export function getSkills(): Skill[] {
   const custom = getCustomSkills();
   const settings = skillSettings();
+  const dynamicCurricula = getDynamicCurricula();
   
   const baseMap = new Map<string, Skill>();
   DEFAULT_SKILLS.forEach((s) => baseMap.set(s.key, { ...s }));
@@ -268,7 +326,7 @@ export function getSkills(): Skill[] {
 
   return Array.from(baseMap.values()).map((s) => {
     const setting = settings[s.key];
-    const curriculum = FULL_CURRICULA[s.key] || s.curriculum || [];
+    const curriculum = dynamicCurricula[s.key] || FULL_CURRICULA[s.key] || s.curriculum || [];
     const criteria = CERTIFICATION_CRITERIA[s.key] || s.criteria || "Attendance and coursework completion.";
     return {
       ...s,
@@ -3373,6 +3431,23 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
       { start: 18.0, end: 26.0, text: "The instructors are patient, knowledgeable, and always ready to help." },
     ],
   },
+  {
+    id: "vid-new-14",
+    name: "Somtochukwu Favour",
+    schoolOrRole: "Cohort Student",
+    skill: "Graphic Design",
+    caption: "A friend told me about KR8 Digitals Tribe. I showed them my early designs and they pushed me to level up with real feedback!",
+    img: "/videos/testimonial_new_14_poster.jpg",
+    video: "/videos/testimonial_new_14.mp4",
+    duration: 151,
+    createdAt: 1726000000000 + 360000,
+    captions: [
+      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Somtochukwu, learning Graphic Design with KR8 Digitals." },
+      { start: 4.5, end: 12.0, text: "I signed up for KR8 Digitals Tribe after a friend showed me the program." },
+      { start: 12.0, end: 20.0, text: "When I showed my designs, the mentors gave me real practical feedback to improve." },
+      { start: 20.0, end: 30.0, text: "The classes and community helped me level up my skills completely for free." },
+    ],
+  },
 ];
 
 const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
@@ -3459,7 +3534,7 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
   },
 ];
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v15";
+const TESTIMONIAL_KEY = "kr8_testimonials_v16";
 const VIDEO_COMMENT_KEY = "kr8_video_comments_v3";
 
 export function getTestimonials(): Testimonial[] {

@@ -1,4 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
 import {
@@ -19,6 +20,7 @@ import {
   getHomepageSettings, saveHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES,
   revokeStudentRegistration, suspendStudentAccount, getSuspendedAccounts, restoreSuspendedAccount, upholdSuspendedAccount,
   getClientRequests, updateClientRequestStatus, deleteClientRequest,
+  saveDynamicCurriculum, type Week,
   type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount, type ClientRequest,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
@@ -1222,6 +1224,7 @@ function GraduationModal({
         student,
         skillKey: selectedSkillKey,
         tier,
+        courseName: selectedSkill?.name || getSkillName(selectedSkillKey),
         additionalNotes: additionalNotes.trim(),
         origin: window.location.origin,
       });
@@ -2618,6 +2621,7 @@ function AcademySkillManager({
   const [visible, setVisible] = useState(skill.available);
   const [whatsapp, setWhatsapp] = useState(skill.whatsapp || "");
   const [saved, setSaved] = useState(false);
+  const [managingCurriculum, setManagingCurriculum] = useState(false);
 
   useEffect(() => {
     setOpen(skill.regOpen);
@@ -2703,16 +2707,27 @@ function AcademySkillManager({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-        <input
-          value={whatsapp}
-          onChange={(e) => setWhatsapp(e.target.value)}
-          className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-[#cabfe0] focus:border-pink-400/60 focus:outline-none"
-          placeholder="Skill WhatsApp group link"
-        />
-        <span className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#8a7ba8] self-center">
-          Curriculum: {skill.curriculum?.length ? `${skill.curriculum.length} weeks` : "8 weeks"}
-        </span>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5">
+        <div className="flex-1 min-w-[240px]">
+          <input
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-[#cabfe0] focus:border-pink-400/60 focus:outline-none"
+            placeholder="Skill WhatsApp group link"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#8a7ba8]">
+            Curriculum: {skill.curriculum?.length ? `${skill.curriculum.length} weeks` : "None uploaded"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setManagingCurriculum(true)}
+            className="rounded-lg border border-pink-500/40 bg-pink-500/15 px-3 py-2 text-xs font-bold text-pink-300 hover:bg-pink-500/30 active:scale-95 transition-all flex items-center gap-1.5"
+          >
+            <span>📖 Manage Curriculum</span>
+          </button>
+        </div>
       </div>
 
       {saved && (
@@ -2720,7 +2735,300 @@ function AcademySkillManager({
           ✓ Track settings saved and updated across the site.
         </p>
       )}
+
+      {managingCurriculum && (
+        <CurriculumManagerModal
+          skill={skill}
+          onClose={() => setManagingCurriculum(false)}
+          onSave={() => {
+            onUpdate();
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+          }}
+        />
+      )}
     </Card>
+  );
+}
+
+function CurriculumManagerModal({
+  skill,
+  onClose,
+  onSave,
+}: {
+  skill: Skill;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [weeks, setWeeks] = useState<Week[]>(() =>
+    skill.curriculum && skill.curriculum.length > 0 ? JSON.parse(JSON.stringify(skill.curriculum)) : []
+  );
+  const [jsonMode, setJsonMode] = useState(false);
+  const [jsonText, setJsonText] = useState("");
+  const [jsonError, setJsonError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const handleAddWeek = () => {
+    const nextNum = weeks.length + 1;
+    setWeeks([
+      ...weeks,
+      {
+        week: `Week ${nextNum}`,
+        title: "",
+        points: ["Key concepts & fundamentals", "Hands-on project work"],
+      },
+    ]);
+  };
+
+  const handleUpdateWeekTitle = (idx: number, title: string) => {
+    const updated = [...weeks];
+    updated[idx].title = title;
+    setWeeks(updated);
+  };
+
+  const handleUpdateWeekLabel = (idx: number, label: string) => {
+    const updated = [...weeks];
+    updated[idx].week = label;
+    setWeeks(updated);
+  };
+
+  const handleUpdatePointsText = (idx: number, text: string) => {
+    const updated = [...weeks];
+    updated[idx].points = text.split("\n").map((p) => p.trim()).filter(Boolean);
+    setWeeks(updated);
+  };
+
+  const handleDeleteWeek = (idx: number) => {
+    setWeeks(weeks.filter((_, i) => i !== idx));
+  };
+
+  const handleInitTemplate = () => {
+    const template: Week[] = Array.from({ length: 8 }, (_, i) => ({
+      week: `Week ${i + 1}`,
+      title: i === 0 ? `${skill.name} Foundations & Tooling Setup` : i === 7 ? "Final Capstone Project & Portfolio Defense" : `Module ${i + 1}: Core Techniques`,
+      points: [
+        `Core concept ${i + 1}.1`,
+        `Practical exercise ${i + 1}.2`,
+        `Weekly real-world project deliverable`,
+      ],
+    }));
+    setWeeks(template);
+  };
+
+  const handleApplyJson = () => {
+    setJsonError("");
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!Array.isArray(parsed)) {
+        throw new Error("Curriculum must be a JSON array of weeks");
+      }
+      for (const w of parsed) {
+        if (!w.week || !w.title || !Array.isArray(w.points)) {
+          throw new Error("Each week must have 'week', 'title', and an array of 'points'");
+        }
+      }
+      setWeeks(parsed);
+      setJsonMode(false);
+    } catch (e: any) {
+      setJsonError(e.message || "Invalid JSON format");
+    }
+  };
+
+  const handleSave = () => {
+    saveDynamicCurriculum(skill.key, weeks);
+    setSaveSuccess(true);
+    onSave();
+    setTimeout(() => {
+      onClose();
+    }, 800);
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-pink-500/40 bg-gradient-to-b from-[#180026] to-[#0a0012] p-6 sm:p-8 shadow-2xl my-6">
+        <div className="flex items-start justify-between pb-4 border-b border-white/10">
+          <div>
+            <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pink-300">
+              Curriculum Manager
+            </span>
+            <h3 className="font-display text-2xl font-bold text-white mt-1">
+              Manage Curriculum: <span className="text-pink-400">{skill.name}</span>
+            </h3>
+            <p className="text-xs text-[#a594c7] mt-0.5">
+              Add, update, replace, or restructure the weekly learning syllabus for this skill.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all text-xs"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 bg-black/40 p-3 rounded-2xl border border-white/10">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!jsonMode) {
+                  setJsonText(JSON.stringify(weeks, null, 2));
+                }
+                setJsonMode(!jsonMode);
+              }}
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 transition-all"
+            >
+              {jsonMode ? "Switch to Visual Editor" : "Import / Export JSON"}
+            </button>
+            {weeks.length === 0 && !jsonMode && (
+              <button
+                type="button"
+                onClick={handleInitTemplate}
+                className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 transition-all"
+              >
+                + Initialize 8-Week Template
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-[#8a7ba8] font-mono">
+            {weeks.length} Week{weeks.length === 1 ? "" : "s"} Configured
+          </span>
+        </div>
+
+        {jsonMode ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-[#cabfe0]">
+              Paste a JSON array representing weeks, or copy the current curriculum below:
+            </p>
+            {jsonError && (
+              <p className="text-xs text-red-400 font-semibold">{jsonError}</p>
+            )}
+            <textarea
+              rows={12}
+              className="w-full rounded-2xl border border-white/15 bg-black/60 p-4 font-mono text-xs text-pink-200 focus:border-pink-500 focus:outline-none resize-none"
+              value={jsonText}
+              onChange={(e) => setJsonText(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setJsonMode(false)}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyJson}
+                className="rounded-xl bg-pink-600 px-4 py-2 text-xs font-bold text-white hover:bg-pink-500 shadow-md"
+              >
+                Apply JSON to Curriculum
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            {weeks.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center space-y-2">
+                <span className="text-3xl">📭</span>
+                <p className="text-sm font-semibold text-white">No Curriculum Uploaded Yet</p>
+                <p className="text-xs text-[#8a7ba8] max-w-sm mx-auto">
+                  This skill currently has no active syllabus. You can build it week-by-week or initialize an 8-week starter outline.
+                </p>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddWeek}
+                    className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:brightness-110"
+                  >
+                    + Add Week 1
+                  </button>
+                </div>
+              </div>
+            ) : (
+              weeks.map((w, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="text"
+                        value={w.week}
+                        onChange={(e) => handleUpdateWeekLabel(idx, e.target.value)}
+                        className="w-24 rounded-lg border border-pink-500/40 bg-pink-500/10 px-2.5 py-1 text-xs font-bold text-pink-300 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Week Topic / Title (e.g. Modern CSS & Tailwind Frameworks)"
+                        value={w.title}
+                        onChange={(e) => handleUpdateWeekTitle(idx, e.target.value)}
+                        className="flex-1 rounded-lg border border-white/15 bg-black/40 px-3 py-1 text-xs font-semibold text-white focus:border-pink-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteWeek(idx)}
+                      className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-bold text-red-300 hover:bg-red-500/20"
+                      title="Remove week"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#8a7ba8] mb-1">
+                      Learning Outcomes & Practice Deliverables (One per line)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={w.points.join("\n")}
+                      onChange={(e) => handleUpdatePointsText(idx, e.target.value)}
+                      placeholder="Intro to semantic markup&#10;Flexbox and CSS Grid layout algorithms&#10;Hands-on landing page clone"
+                      className="w-full rounded-xl border border-white/10 bg-black/40 p-2.5 text-xs text-[#cabfe0] focus:border-pink-500 focus:outline-none resize-none leading-relaxed"
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+
+            {weeks.length > 0 && (
+              <button
+                type="button"
+                onClick={handleAddWeek}
+                className="w-full rounded-2xl border border-dashed border-white/20 bg-white/[0.02] py-3 text-xs font-bold text-pink-300 hover:border-pink-500/50 hover:bg-pink-500/10 transition-all text-center"
+              >
+                + Add Another Week
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Modal Footer */}
+        <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-all"
+          >
+            Cancel
+          </button>
+          <div className="flex items-center gap-3">
+            {saveSuccess && (
+              <span className="text-xs text-emerald-400 font-bold animate-pulse">
+                ✓ Curriculum Saved!
+              </span>
+            )}
+            <GradientButton onClick={handleSave} className="px-6 py-2 shadow-lg shadow-pink-500/25">
+              <span>Save & Publish Curriculum →</span>
+            </GradientButton>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

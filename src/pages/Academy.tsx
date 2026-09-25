@@ -222,13 +222,23 @@ function CurriculumModal({ skill, onClose, onRegister }: { skill: Skill; onClose
         </div>
         <p className="mt-3 text-sm text-[#b8aecf]">{skill.snippet}</p>
         <div className="mt-6 space-y-4">
-          {skill.curriculum.map((w) => (
-            <div key={w.week} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">{w.week}</p>
-              <h4 className="mt-1 font-bold text-white">{w.title}</h4>
-              <ul className="mt-3 space-y-2">{w.points.map((p) => <Check key={p}>{p}</Check>)}</ul>
+          {skill.curriculum && skill.curriculum.length > 0 ? (
+            skill.curriculum.map((w) => (
+              <div key={w.week} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">{w.week}</p>
+                <h4 className="mt-1 font-bold text-white">{w.title}</h4>
+                <ul className="mt-3 space-y-2">{w.points.map((p) => <Check key={p}>{p}</Check>)}</ul>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-black/30 p-8 text-center">
+              <span className="text-3xl">📋</span>
+              <h4 className="text-base font-bold text-white mt-2">Curriculum Under Final Review</h4>
+              <p className="text-xs text-[#a594c7] mt-1.5 max-w-sm mx-auto leading-relaxed">
+                The detailed weekly syllabus and project roadmap for {skill.name} is being finalized and will be uploaded shortly by {skill.instructor?.name || "the instructional lead"}. You can register now to secure your spot.
+              </p>
             </div>
-          ))}
+          )}
         </div>
         <div className="mt-6 rounded-2xl bg-pink-500/10 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">Certification criteria</p>

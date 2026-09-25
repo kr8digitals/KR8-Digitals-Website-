@@ -11,6 +11,7 @@ const links = [
   { to: "/tribe", label: "Tribe" },
   { to: "/agency", label: "Agency" },
   { to: "/gallery", label: "Gallery" },
+  { to: "/partner", label: "Partner" },
   { to: "/about", label: "About Us" },
   { to: "/ai", label: "KR8 AI" },
 ];

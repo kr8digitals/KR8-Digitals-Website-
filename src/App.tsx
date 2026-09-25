@@ -11,6 +11,7 @@ import Agency from "./pages/Agency";
 import AIPage from "./pages/AIPage";
 import Blog from "./pages/Blog";
 import About from "./pages/About";
+import PartnerPage from "./pages/PartnerPage";
 import Leaderboard from "./pages/Leaderboard";
 import Verify from "./pages/Verify";
 import Admin from "./pages/Admin";
@@ -49,6 +50,8 @@ export default function App() {
               <Route path="/ai" element={<AIPage />} />
               <Route path="/blog" element={<Blog />} />
               <Route path="/about" element={<About />} />
+              <Route path="/partner" element={<PartnerPage />} />
+              <Route path="/partner-with-us" element={<PartnerPage />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/attendance-review" element={<AttendanceReview />} />

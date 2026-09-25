@@ -419,12 +419,12 @@ export default function Tribe() {
                       </p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-white/10">
-                      <button
-                        onClick={() => setPartnerModalOpen(true)}
+                      <Link
+                        to="/partner"
                         className="inline-flex items-center gap-1.5 text-xs font-bold text-cyan-300 hover:text-cyan-200"
                       >
-                        Submit Partnership Pitch →
-                      </button>
+                        Explore Partnership Pathways →
+                      </Link>
                     </div>
                   </div>
 
