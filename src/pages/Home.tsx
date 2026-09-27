@@ -11,6 +11,7 @@ import { Pill, GradientButton, GhostButton, SectionHead, Card, GlowImage } from 
 import Dashboard from "./Dashboard";
 import Icon from "../components/Icon";
 import HeroInteractiveCanvas from "../components/HeroInteractiveCanvas";
+import AnnouncementCard from "../components/AnnouncementCard";
 
 export default function Home() {
   const { student } = useAuth();
@@ -605,13 +606,9 @@ function GuestHome() {
           <div className="mx-auto max-w-7xl px-5">
             <SectionHead label="From the desk" title="Latest" highlight="announcements" />
             <div className="mt-10 grid gap-6 md:grid-cols-2">
-              {announcements.map((a) =>
-                a.type === "text" ? (
-                    <Card key={a.id}><p className="text-xs uppercase tracking-wider text-[#8a7ba8]">{a.date} · {a.author}</p><h3 className="mt-2 text-xl font-bold text-white">{a.title}</h3><p className="mt-3 text-sm text-[#b8aecf]">{a.body}</p></Card>
-                ) : (
-                  <Card key={a.id} className="overflow-hidden !p-0"><div className="aspect-square w-full overflow-hidden"><img src={a.image} alt={a.title} className="h-full w-full object-cover" /></div><div className="p-5"><p className="text-xs uppercase tracking-wider text-[#8a7ba8]">{a.date} · {a.author}</p><h3 className="mt-1 text-lg font-bold text-white">{a.title}</h3><p className="mt-2 text-sm text-[#b8aecf]">{a.caption}</p></div></Card>
-                )
-              )}
+              {announcements.map((a) => (
+                <AnnouncementCard key={a.id} announcement={a} />
+              ))}
             </div>
           </div>
         </section>

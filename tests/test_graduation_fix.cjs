@@ -87,9 +87,9 @@ async function run() {
     await selectStudent.selectOption(testStudentId);
     await page.waitForTimeout(800);
 
-    // 6. Click "Graduate Student Now →"
+    // 6. Click "Graduate Student Now →" or "Manage / Issue Another Certificate →"
     console.log("6. Opening Graduation Modal...");
-    const graduateBtn = page.locator("button:has-text('Graduate Student Now')");
+    const graduateBtn = page.locator("button:has-text('Graduate Student Now'), button:has-text('Manage / Issue Another Certificate')").first();
     await graduateBtn.click();
     await page.waitForTimeout(800);
 

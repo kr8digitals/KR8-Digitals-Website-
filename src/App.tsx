@@ -23,6 +23,7 @@ import Gallery from "./pages/Gallery";
 import RegisterPage from "./pages/RegisterPage";
 import SignInPage from "./pages/SignInPage";
 import WaitlistPage from "./pages/WaitlistPage";
+import MessagesPage from "./pages/MessagesPage";
 
 export default function App() {
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function App() {
               <Route path="/partner" element={<PartnerPage />} />
               <Route path="/partner-with-us" element={<PartnerPage />} />
               <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/messages" element={<MessagesPage />} />
               <Route path="/verify" element={<Verify />} />
               <Route path="/attendance-review" element={<AttendanceReview />} />
               <Route path="/settings" element={<Settings />} />

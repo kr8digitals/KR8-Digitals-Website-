@@ -1,4 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
@@ -6,7 +7,7 @@ import {
   getSkills, getSkill, getSkillName, saveCustomSkill, deleteCustomSkill,
   getWaitlistWhatsAppUrl, saveWaitlistWhatsAppUrl, areAllRegistrationsClosed,
   type Skill, ATTENDANCE_TYPES, PORTFOLIO,
-  getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
+  getAnnouncements, getSocialLinks, saveSocialLinks,
   getPaymentSettings, savePaymentSettings, getSkillRegistration, getSkillWhatsApp,
   saveSkillSetting, getFounders, saveFounders, getTeam,
   getTestimonials, addTestimonial, deleteTestimonial, updateTestimonial,
@@ -16,12 +17,12 @@ import {
   addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
   getStreamReplays, saveStreamReplays,
   canUserHostStream, deleteStreamRecording,
-  getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, archiveAnnouncementToGallery,
+  getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem,
   getHomepageSettings, saveHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES,
   revokeStudentRegistration, suspendStudentAccount, getSuspendedAccounts, restoreSuspendedAccount, upholdSuspendedAccount,
   getClientRequests, updateClientRequestStatus, deleteClientRequest,
   saveDynamicCurriculum, type Week,
-  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount, type ClientRequest,
+  type Account, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount, type ClientRequest,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
@@ -39,17 +40,77 @@ import {
   type CertificateRecord,
   type CertificateTier,
 } from "../data/store";
+import WebsiteContentManager from "../components/admin/WebsiteContentManager";
+import SignatureManager from "../components/admin/SignatureManager";
+import GranularPermissionsManager from "../components/admin/GranularPermissionsManager";
+import AnnouncementManager from "../components/admin/AnnouncementManager";
 
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Client Requests", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Gallery Archive", "Student Management", "Blog",
-  "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
-  "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions", "Supabase Database",
+  "Overview", "Website Content (CMS)", "Announcements", "Blog", "Gallery Archive", "Links Manager",
+  "Student Management", "Attendance Review", "Graduation & Certificates", "Coach & Admin Signatures",
+  "Verify Remarks", "Leaderboard & XP", "Academy", "Home", "Testimonial Videos", "Live Streams & Replays",
+  "Client Requests", "Agency", "Founders & Partners", "Payment Settings", "Moderation", "Admin Permissions", "Supabase Database",
+];
+
+interface NavGroup {
+  name: string;
+  items: { id: string; label: string; badge?: string }[];
+}
+
+const ADMIN_GROUPS: NavGroup[] = [
+  {
+    name: "Analytics",
+    items: [{ id: "Overview", label: "Dashboard Overview" }],
+  },
+  {
+    name: "Website & Content (CMS)",
+    items: [
+      { id: "Website Content (CMS)", label: "Website Content (CMS)", badge: "Live" },
+      { id: "Announcements", label: "Announcements & Media" },
+      { id: "Blog", label: "Blog & Insights" },
+      { id: "Gallery Archive", label: "Gallery Archive" },
+      { id: "Links Manager", label: "Links & Redirects" },
+      { id: "Home", label: "Home Page Settings" },
+    ],
+  },
+  {
+    name: "Academy & Students",
+    items: [
+      { id: "Student Management", label: "Student Registry" },
+      { id: "Attendance Review", label: "Attendance Review", badge: "Atd" },
+      { id: "Graduation & Certificates", label: "Graduation & Certificates" },
+      { id: "Coach & Admin Signatures", label: "Coach & Admin Signatures", badge: "Keys" },
+      { id: "Verify Remarks", label: "Verify Remarks" },
+      { id: "Leaderboard & XP", label: "Leaderboard & XP" },
+      { id: "Academy", label: "Courses & Curriculum" },
+    ],
+  },
+  {
+    name: "Media & Client Agency",
+    items: [
+      { id: "Testimonial Videos", label: "Testimonials" },
+      { id: "Live Streams & Replays", label: "Live Streams & Replays" },
+      { id: "Client Requests", label: "Client Inquiries" },
+      { id: "Agency", label: "Agency Portfolio" },
+    ],
+  },
+  {
+    name: "System & Governance",
+    items: [
+      { id: "Founders & Partners", label: "Founders & Team" },
+      { id: "Payment Settings", label: "Payment & Accounts" },
+      { id: "Moderation", label: "Moderation" },
+      { id: "Admin Permissions", label: "Staff Permissions", badge: "Master" },
+      { id: "Supabase Database", label: "Cloud Sync" },
+    ],
+  },
 ];
 
 export default function Admin() {
-  const { student: currentUser } = useAuth();
+  const { student: currentUser, signOut } = useAuth();
+  const navigate = useNavigate();
   const [pw, setPw] = useState("");
   const [auth, setAuth] = useState(false);
   const [err, setErr] = useState(false);
@@ -70,14 +131,29 @@ export default function Admin() {
     };
   }, []);
 
+  const [isAttendanceReviewerOnly, setIsAttendanceReviewerOnly] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [navSearch, setNavSearch] = useState("");
+
   const unlock = () => {
-    const valid = pw === MAIN_ADMIN_PASSWORD || pw === currentUser?.admin?.adminPassword;
-    if (!valid) {
+    const isMainAdmin = pw === MAIN_ADMIN_PASSWORD;
+    const isAttendancePw = pw === ATTENDANCE_PW;
+    const isUserAdminPw = pw === currentUser?.admin?.adminPassword;
+
+    if (!isMainAdmin && !isAttendancePw && !isUserAdminPw) {
       setErr(true);
       return;
     }
+
     setErr(false);
     setAuth(true);
+
+    if (isAttendancePw || currentUser?.admin?.role === "attendance_reviewer") {
+      setIsAttendanceReviewerOnly(true);
+      setTab("Attendance Review");
+    } else {
+      setIsAttendanceReviewerOnly(false);
+    }
   };
 
   // If user is not logged in or not authorized, block public view completely
@@ -112,14 +188,14 @@ export default function Admin() {
           </div>
           <h1 className="font-display text-2xl text-white">Admin Access</h1>
           <p className="mt-2 text-sm text-[#b8aecf]">
-            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative password.
+            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative or reviewer credentials.
           </p>
           <input
             type="password"
             value={pw}
             onChange={(e) => setPw(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && unlock()}
-            placeholder="Admin password"
+            placeholder="Admin or Reviewer password"
             className="mt-5 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
           />
           {err && <p className="mt-2 text-xs text-red-400">Incorrect password.</p>}
@@ -131,7 +207,63 @@ export default function Admin() {
     );
   }
 
-  const allowedSections = isUltimate ? sections : sections.filter((s) => currentUser?.admin?.permissions.includes(s));
+  // ATTENDANCE REVIEWER QUARANTINE: Strict separation of powers
+  if (isAttendanceReviewerOnly || currentUser?.admin?.role === "attendance_reviewer") {
+    return (
+      <div className="section-bg min-h-screen">
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+          {/* Quarantined Reviewer Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-blue-500/30 bg-blue-500/10 p-6 backdrop-blur-md mb-8">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                <Icon name="check" className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-display text-xl sm:text-2xl font-bold text-white">
+                    Attendance Review <span className="text-gradient">Portal</span>
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    Quarantined Reviewer
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-[#b8aecf]">
+                  Strict limited access: You are authorized exclusively to review, approve, or reject attendance submissions.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setAuth(false);
+                  setIsAttendanceReviewerOnly(false);
+                }}
+                className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#b8aecf] hover:text-white shrink-0"
+              >
+                Lock Reviewer
+              </button>
+              <button
+                onClick={() => {
+                  setAuth(false);
+                  setIsAttendanceReviewerOnly(false);
+                  signOut();
+                  navigate("/");
+                }}
+                className="rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 shrink-0"
+              >
+                Sign Out of Account
+              </button>
+            </div>
+          </div>
+
+          <AttendancePanel initialUnlocked={true} />
+        </div>
+      </div>
+    );
+  }
+
+  const allowedSections = isUltimate ? sections : sections.filter((s) => currentUser?.admin?.permissions?.includes(s));
   const stats = [
     { n: students.length, l: "Registered Students" },
     { n: students.filter((s) => s.graduated).length, l: "Certified Graduates" },
@@ -141,79 +273,232 @@ export default function Admin() {
     { n: getBlogPosts().length, l: "Blog Articles" },
   ];
 
+  // Filter navigation groups by permissions and search
+  const filteredGroups = ADMIN_GROUPS.map((grp) => {
+    const validItems = grp.items.filter((item) => {
+      if (!allowedSections.includes(item.id)) return false;
+      if (navSearch.trim()) {
+        return item.label.toLowerCase().includes(navSearch.toLowerCase()) || item.id.toLowerCase().includes(navSearch.toLowerCase());
+      }
+      return true;
+    });
+    return { ...grp, items: validItems };
+  }).filter((grp) => grp.items.length > 0);
+
   return (
     <div className="section-bg min-h-screen">
-      <div className="mx-auto max-w-7xl px-5 py-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-4xl text-white">
-              Admin <span className="text-gradient">Dashboard</span>
-            </h1>
-            <p className="mt-1 text-xs text-[#8a7ba8]">
-              Logged in as <strong className="text-white">{isUltimate ? "Ultimate Administrator" : currentUser?.name}</strong> · Live site connectivity active
-            </p>
-          </div>
-          <button onClick={() => setAuth(false)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#b8aecf] hover:text-white">
-            Lock Dashboard
-          </button>
-        </div>
-
-        <div className="mt-6 flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-          {allowedSections.map((s) => (
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {/* Top Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+          <div className="flex items-center gap-3">
             <button
-              key={s}
-              onClick={() => setTab(s)}
-              className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                tab === s ? "bg-gradient-pink text-white glow-pink-sm" : "border border-white/15 text-[#b8aecf] hover:text-white"
-              }`}
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              className="lg:hidden p-2 rounded-xl border border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]"
+              title="Toggle Menu"
             >
-              {s}
+              <Icon name="menu" className="h-5 w-5" />
             </button>
-          ))}
+            <img
+              src="/branding/kr8_logo.png"
+              alt="KR8 Digitals Logo"
+              className="h-10 w-10 rounded-xl object-contain shadow-md shadow-pink-500/20 shrink-0"
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                  KR8 Admin <span className="text-gradient">Control Center</span>
+                </h1>
+                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                  {isUltimate ? "Ultimate Administrator" : currentUser?.admin?.title || "Administrator"}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-[#8a7ba8]">
+                Logged in as <strong className="text-white">{currentUser?.name}</strong> · Active section: <span className="text-pink-400 font-semibold">{tab}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAuth(false)}
+              className="rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-[#b8aecf] hover:text-white hover:border-white/30 transition-colors"
+            >
+              Lock Dashboard
+            </button>
+            <button
+              onClick={() => {
+                setAuth(false);
+                signOut();
+                navigate("/");
+              }}
+              className="rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
+            >
+              Sign Out of Account
+            </button>
+          </div>
         </div>
 
-        <div className="mt-8">
-          {tab === "Overview" && (
-            <div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {stats.map((s) => (
-                  <Card key={s.l} className="!p-5">
-                    <div className="font-display text-3xl text-gradient">{s.n}</div>
-                    <div className="mt-1 text-[11px] uppercase tracking-wider text-[#8a7ba8]">{s.l}</div>
-                  </Card>
-                ))}
+        {/* Responsive Dashboard Workspace */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Desktop Sidebar Navigation */}
+          <aside className="hidden lg:block lg:col-span-3 xl:col-span-3 sticky top-6 space-y-4">
+            <Card className="p-4 space-y-4">
+              {/* Quick Filter Search */}
+              <div className="relative">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+                <input
+                  type="text"
+                  value={navSearch}
+                  onChange={(e) => setNavSearch(e.target.value)}
+                  placeholder="Filter sections..."
+                  className="w-full rounded-xl border border-white/10 bg-black/40 pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#8a7ba8] focus:border-pink-500 focus:outline-none"
+                />
               </div>
-              <div className="mt-6">
-                <StudentManager students={students} />
+
+              {/* Categorized Menu */}
+              <nav className="space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+                {filteredGroups.map((grp) => (
+                  <div key={grp.name} className="space-y-1">
+                    <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#7e6d97]">
+                      {grp.name}
+                    </div>
+                    {grp.items.map((item) => {
+                      const isActive = tab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setTab(item.id)}
+                          className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
+                            isActive
+                              ? "bg-gradient-pink text-white shadow-md shadow-pink-500/20 glow-pink-sm"
+                              : "text-[#b8aecf] hover:text-white hover:bg-white/[0.04]"
+                          }`}
+                        >
+                          <span className="truncate">{item.label}</span>
+                          {item.badge && (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                                isActive ? "bg-white/20 text-white" : "bg-pink-500/20 text-pink-300"
+                              }`}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+            </Card>
+          </aside>
+
+          {/* Mobile Drawer (Visible when toggled on small screens) */}
+          {mobileNavOpen && (
+            <div className="fixed inset-0 z-50 lg:hidden flex">
+              <div
+                className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+                onClick={() => setMobileNavOpen(false)}
+              />
+              <div className="relative w-72 max-w-[80vw] bg-[#12001f] border-r border-white/10 p-5 z-10 flex flex-col h-full overflow-y-auto">
+                <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
+                  <h3 className="font-display font-bold text-white text-sm">Dashboard Menu</h3>
+                  <button
+                    onClick={() => setMobileNavOpen(false)}
+                    className="p-1 rounded-lg text-[#8a7ba8] hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-4 flex-1">
+                  {filteredGroups.map((grp) => (
+                    <div key={grp.name} className="space-y-1">
+                      <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#7e6d97]">
+                        {grp.name}
+                      </div>
+                      {grp.items.map((item) => {
+                        const isActive = tab === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setTab(item.id);
+                              setMobileNavOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
+                              isActive
+                                ? "bg-gradient-pink text-white shadow-md shadow-pink-500/20"
+                                : "text-[#b8aecf] hover:text-white hover:bg-white/[0.04]"
+                            }`}
+                          >
+                            <span className="truncate">{item.label}</span>
+                            {item.badge && (
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                                  isActive ? "bg-white/20 text-white" : "bg-pink-500/20 text-pink-300"
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {tab === "Client Requests" && <ClientRequestsManager />}
-          {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
-          {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
-          {tab === "Testimonial Videos" && <TestimonialVideosManager />}
-          {tab === "Live Streams & Replays" && <LiveStreamsManager />}
-          {tab === "Agency" && <AgencyManager />}
-          {tab === "Gallery Archive" && <GalleryManager />}
-          {tab === "Student Management" && <StudentManager students={students} />}
-          {tab === "Blog" && <BlogManager />}
-          {tab === "Announcements" && <AnnouncementManager />}
-          {tab === "Graduation & Certificates" && <GraduationManager students={students} />}
-          {tab === "Leaderboard & XP" && <XPManager />}
-          {tab === "Links Manager" && <LinksManager />}
-          {tab === "Verify Remarks" && <VerifyRemarksManager students={students} />}
-          {tab === "Payment Settings" && <PaymentManager />}
-          {tab === "Founders & Partners" && (
-            <>
-              <FoundersManager />
-              <TeamManager />
-            </>
-          )}
-          {tab === "Attendance Review" && <AttendancePanel />}
-          {tab === "Moderation" && <ModerationManager />}
-          {tab === "Admin Permissions" && isUltimate && <PermissionsManager />}
-          {tab === "Supabase Database" && <SupabaseManager />}
+          {/* Main Content Area */}
+          <main className="lg:col-span-9 xl:col-span-9 space-y-6 min-w-0">
+            {tab === "Overview" && (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {stats.map((s) => (
+                    <Card key={s.l} className="!p-5">
+                      <div className="font-display text-3xl text-gradient">{s.n}</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-wider text-[#8a7ba8]">{s.l}</div>
+                    </Card>
+                  ))}
+                </div>
+                <div>
+                  <StudentManager students={students} />
+                </div>
+              </div>
+            )}
+
+            {tab === "Website Content (CMS)" && <WebsiteContentManager />}
+            {tab === "Coach & Admin Signatures" && <SignatureManager />}
+            {tab === "Admin Permissions" && isUltimate && <GranularPermissionsManager isUltimate={isUltimate} />}
+
+            {tab === "Client Requests" && <ClientRequestsManager />}
+            {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
+            {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
+            {tab === "Testimonial Videos" && <TestimonialVideosManager />}
+            {tab === "Live Streams & Replays" && <LiveStreamsManager />}
+            {tab === "Agency" && <AgencyManager />}
+            {tab === "Gallery Archive" && <GalleryManager />}
+            {tab === "Student Management" && <StudentManager students={students} />}
+            {tab === "Blog" && <BlogManager />}
+            {tab === "Announcements" && <AnnouncementManager />}
+            {tab === "Graduation & Certificates" && <GraduationManager students={students} />}
+            {tab === "Leaderboard & XP" && <XPManager />}
+            {tab === "Links Manager" && <LinksManager />}
+            {tab === "Verify Remarks" && <VerifyRemarksManager students={students} />}
+            {tab === "Payment Settings" && <PaymentManager />}
+            {tab === "Founders & Partners" && (
+              <>
+                <FoundersManager />
+                <TeamManager />
+              </>
+            )}
+            {tab === "Attendance Review" && <AttendancePanel initialUnlocked={isAttendanceReviewerOnly || isUltimate} />}
+            {tab === "Moderation" && <ModerationManager />}
+            {tab === "Supabase Database" && <SupabaseManager />}
+          </main>
         </div>
       </div>
     </div>
@@ -225,6 +510,11 @@ export default function Admin() {
 function StudentManager({ students }: { students: Account[] }) {
   const { student: currentUser, addNotification } = useAuth();
   const [q, setQ] = useState("");
+  const [skillFilter, setSkillFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
+
   const [tab, setTab] = useState<"active" | "suspended">("active");
   const [graduatingStudent, setGraduatingStudent] = useState<Account | null>(null);
   const [manualRegisterOpen, setManualRegisterOpen] = useState(false);
@@ -242,12 +532,34 @@ function StudentManager({ students }: { students: Account[] }) {
     return () => window.removeEventListener("kr8:suspended-updated", refreshSuspended);
   }, []);
 
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(q.toLowerCase()) ||
-      s.id.toLowerCase().includes(q.toLowerCase()) ||
-      (s.skill && s.skill.toLowerCase().includes(q.toLowerCase()))
-  );
+  // Filter students by query, skill, and status
+  const filtered = students.filter((s) => {
+    const qLower = q.toLowerCase().trim();
+    const matchesQuery =
+      !qLower ||
+      s.name.toLowerCase().includes(qLower) ||
+      s.id.toLowerCase().includes(qLower) ||
+      s.email.toLowerCase().includes(qLower) ||
+      s.phone.toLowerCase().includes(qLower) ||
+      (s.skill && s.skill.toLowerCase().includes(qLower));
+
+    const matchesSkill =
+      skillFilter === "all" ||
+      s.skill === skillFilter ||
+      (s.skills && s.skills.includes(skillFilter));
+
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "graduated" && s.graduated) ||
+      (statusFilter === "training" && !s.graduated) ||
+      (statusFilter === "staff" && (!!s.admin || s.type === "founder" || s.type === "co-founder"));
+
+    return matchesQuery && matchesSkill && matchesStatus;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedStudents = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const editName = (student: Account) => {
     const name = window.prompt("Update student display name:", student.name);
@@ -321,12 +633,6 @@ function StudentManager({ students }: { students: Account[] }) {
 
           {tab === "active" && (
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search by name, ID or skill…"
-                className="w-64 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
-              />
               <button
                 onClick={() => setManualRegisterOpen(true)}
                 className="rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white glow-pink-sm"
@@ -336,6 +642,63 @@ function StudentManager({ students }: { students: Account[] }) {
             </div>
           )}
         </div>
+
+        {/* Search & Granular Filter Bar */}
+        {tab === "active" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border-b border-white/10 p-4">
+            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[260px]">
+              {/* Search input */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+                <input
+                  value={q}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search students by name, ID, email, or phone…"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 pl-9 pr-3 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Skill Filter */}
+              <select
+                value={skillFilter}
+                onChange={(e) => {
+                  setSkillFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              >
+                <option value="all">All Skills ({students.length})</option>
+                {getSkills().map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+              >
+                <option value="all">All Statuses</option>
+                <option value="graduated">Certified Graduates Only</option>
+                <option value="training">In Training Only</option>
+                <option value="staff">Faculty & Staff Only</option>
+              </select>
+            </div>
+
+            <div className="text-xs text-[#8a7ba8] shrink-0 font-medium">
+              Showing <strong className="text-white">{filtered.length}</strong> matching students
+            </div>
+          </div>
+        )}
 
         {tab === "active" ? (
           <div className="overflow-x-auto">
@@ -350,14 +713,14 @@ function StudentManager({ students }: { students: Account[] }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paginatedStudents.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-[#8a7ba8]">
-                      No students found matching your search.
+                      No students found matching your filters.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((s) => {
+                  paginatedStudents.map((s) => {
                     const skill = getSkill(s.skill);
                     return (
                       <tr key={s.id} className="border-t border-white/5 text-[#cabfe0] hover:bg-white/[0.02]">
@@ -478,6 +841,55 @@ function StudentManager({ students }: { students: Account[] }) {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/10 p-4 bg-white/[0.01]">
+                <span className="text-xs text-[#8a7ba8]">
+                  Page <strong className="text-white">{currentPage}</strong> of <strong className="text-white">{totalPages}</strong> ({filtered.length} total students)
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-lg border border-white/15 bg-black/40 text-xs text-[#cabfe0] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    ← Previous
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum = i + 1;
+                      if (totalPages > 5 && currentPage > 3) {
+                        pageNum = Math.min(totalPages - 4, currentPage - 2) + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setPage(pageNum)}
+                          className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${
+                            currentPage === pageNum
+                              ? "bg-gradient-pink text-white font-bold"
+                              : "border border-white/10 bg-black/20 text-[#8a7ba8] hover:text-white"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded-lg border border-white/15 bg-black/40 text-xs text-[#cabfe0] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* SUSPENDED ACCOUNTS & APPEALS QUEUE (Phase 8) */
@@ -1940,12 +2352,13 @@ function BlogManager() {
 
 /* ---------------- Attendance Review Panel ---------------- */
 
-function AttendancePanel() {
+function AttendancePanel({ initialUnlocked = false }: { initialUnlocked?: boolean }) {
   const [pw, setPw] = useState("");
-  const [ok, setOk] = useState(false);
+  const [ok, setOk] = useState(initialUnlocked);
   const [err, setErr] = useState(false);
   const [students, setStudents] = useState<Account[]>(getStudents);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const refresh = () => setStudents(getStudents());
@@ -1955,26 +2368,27 @@ function AttendancePanel() {
 
   if (!ok) {
     return (
-      <Card className="max-w-sm">
-        <h3 className="flex items-center gap-2 font-bold text-white">
-          <Icon name="lock" size={17} /> Attendance Review
+      <Card className="max-w-md mx-auto my-8">
+        <h3 className="flex items-center gap-2 font-bold text-white text-base">
+          <Icon name="lock" size={18} /> Attendance Review Access
         </h3>
-        <p className="mt-1 text-sm text-[#b8aecf]">
-          Dedicated coach access. Enter attendance review password.
+        <p className="mt-1 text-xs text-[#b8aecf]">
+          Quarantined Reviewer access. Enter your attendance review password.
         </p>
         <input
           type="password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
-          placeholder="Attendance password"
-          className="mt-4 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+          onKeyDown={(e) => e.key === "Enter" && (pw === ATTENDANCE_PW ? setOk(true) : setErr(true))}
+          placeholder="Attendance review password"
+          className="mt-4 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-xs text-white focus:border-pink-400/60 focus:outline-none"
         />
-        {err && <p className="mt-2 text-xs text-red-400">Incorrect password.</p>}
+        {err && <p className="mt-2 text-xs text-rose-400">Incorrect password.</p>}
         <button
           onClick={() => (pw === ATTENDANCE_PW ? setOk(true) : setErr(true))}
-          className="mt-3 w-full rounded-full bg-gradient-pink py-2.5 text-sm font-bold text-white"
+          className="mt-3 w-full rounded-full bg-gradient-pink py-2.5 text-xs font-bold text-white"
         >
-          Unlock Review
+          Unlock Review Portal
         </button>
       </Card>
     );
@@ -1991,46 +2405,94 @@ function AttendancePanel() {
     }
   };
 
+  const filteredStudents = students.filter((s) => {
+    const q = search.toLowerCase();
+    return s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || (s.skill || "").toLowerCase().includes(q);
+  });
+
   return (
-    <div className="space-y-4">
-      {ATTENDANCE_TYPES.map((t) => (
-        <Card key={t.key}>
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white">{t.name}</h3>
-            <span className="text-xs text-green-300">● Open for Submissions</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {students.slice(0, 4).map((s) => (
-              <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/20 p-3 text-xs">
-                <div>
-                  <span className="font-medium text-white">{s.name}</span> ·{" "}
-                  <span className="font-mono text-pink-300">{s.id}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {feedback[`${t.name}-${s.id}`] ? (
-                    <span className="text-green-300 font-semibold">{feedback[`${t.name}-${s.id}`]}</span>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => approve(s, t.name)}
-                        className="rounded-full bg-green-500/20 px-3 py-1 font-semibold text-green-300 hover:bg-green-500/30"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => setFeedback((p) => ({ ...p, [`${t.name}-${s.id}`]: "Rejected" }))}
-                        className="rounded-full bg-red-500/20 px-3 py-1 text-red-300 hover:bg-red-500/30"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                </div>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/[0.02] border border-white/10 rounded-2xl p-4">
+        <div>
+          <h2 className="font-display font-bold text-lg text-white">Attendance Queue & Verification</h2>
+          <p className="text-xs text-[#8a7ba8]">
+            Review class and hangout attendance logs. Approving awards verified XP to student profiles.
+          </p>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search students or track..."
+            className="w-full rounded-xl border border-white/10 bg-black/40 pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#8a7ba8] focus:border-pink-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {ATTENDANCE_TYPES.map((t) => (
+          <Card key={t.key} className="p-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-sm">{t.name}</h3>
+                <span className="text-[11px] text-[#8a7ba8]">Standard requirement: 80% attendance</span>
               </div>
-            ))}
-          </div>
-        </Card>
-      ))}
+              <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Open for Review
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {filteredStudents.slice(0, 10).map((s) => (
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/30 border border-white/5 p-3 text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center font-bold text-xs shrink-0">
+                      {s.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">{s.name}</div>
+                      <div className="text-[11px] text-[#8a7ba8]">
+                        <span className="font-mono text-purple-300">{s.id}</span> · Track: <span className="text-[#cabfe0]">{s.skill || "General"}</span> · Verified: <strong className="text-emerald-400">{s.attendanceAccepted || 0} sessions</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {feedback[`${t.name}-${s.id}`] ? (
+                      <span className="text-emerald-400 font-semibold text-xs px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                        {feedback[`${t.name}-${s.id}`]}
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => approve(s, t.name)}
+                          className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-1 font-semibold text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+                        >
+                          Approve (+10 pts)
+                        </button>
+                        <button
+                          onClick={() => setFeedback((p) => ({ ...p, [`${t.name}-${s.id}`]: "Rejected" }))}
+                          className="rounded-full bg-rose-500/20 border border-rose-500/40 px-3 py-1 text-rose-300 hover:bg-rose-500/30 transition-colors"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredStudents.length === 0 && (
+                <div className="text-center py-6 text-xs text-[#8a7ba8]">
+                  No students found matching "{search}".
+                </div>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -3323,117 +3785,6 @@ function AgencyManager() {
         ))}
       </div>
     </Card>
-  );
-}
-
-function AnnouncementManager() {
-  const [items, setItems] = useState<Announcement[]>(getAnnouncements());
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [saved, setSaved] = useState(false);
-
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !body.trim()) return;
-    const newA: Announcement = {
-      id: "a-" + Date.now(),
-      title: title.trim(),
-      body: body.trim(),
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      author: "Admin Desk",
-      type: "text",
-    };
-    const updated = [newA, ...items];
-    saveAnnouncements(updated);
-    setItems(updated);
-    setTitle("");
-    setBody("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
-
-  const handleDelete = (id: string) => {
-    const updated = items.filter((a) => a.id !== id);
-    saveAnnouncements(updated);
-    setItems(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
-
-  const handleArchive = (id: string) => {
-    archiveAnnouncementToGallery(id);
-    const updated = items.filter((a) => a.id !== id);
-    saveAnnouncements(updated);
-    setItems(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <h3 className="font-bold text-white text-lg">Post New Announcement</h3>
-        {saved && <p className="mt-2 text-xs text-pink-300 font-semibold">Announcements updated successfully!</p>}
-        <form onSubmit={handleAdd} className="mt-4 space-y-3">
-          <input
-            type="text"
-            required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Announcement Title"
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
-          />
-          <textarea
-            required
-            rows={2}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Announcement details..."
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:brightness-110 active:scale-95 transition-all"
-          >
-            Publish Announcement
-          </button>
-        </form>
-      </Card>
-
-      <Card>
-        <h3 className="font-bold text-white text-lg">Active Announcements ({items.length})</h3>
-        <p className="mt-1 text-sm text-[#b8aecf]">
-          Live announcements displayed on the site. Instead of deleting past milestones, click "Archive to Gallery" to permanently preserve them with their dates.
-        </p>
-        <div className="mt-4 space-y-3">
-          {items.map((item) => (
-            <div key={item.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div>
-                <p className="text-xs text-pink-400 font-semibold">{item.date} · {item.author}</p>
-                <h4 className="text-base font-bold text-white mt-1">{item.title}</h4>
-                <p className="text-xs text-[#cabfe0] mt-1">{item.body || item.caption}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => handleArchive(item.id)}
-                  className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2.5 py-1 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all flex items-center gap-1"
-                  title="Preserve in Gallery rather than deleting"
-                >
-                  <span>📦</span>
-                  <span>Archive to Gallery</span>
-                </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
   );
 }
 
@@ -4965,15 +5316,6 @@ function ModerationManager() {
     <Card>
       <h3 className="font-bold text-white text-lg">Community Moderation</h3>
       <p className="mt-1 text-sm text-[#b8aecf]">No flagged accounts or moderation disputes pending.</p>
-    </Card>
-  );
-}
-
-function PermissionsManager() {
-  return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Admin Permissions & Access Control</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">The Ultimate Administrator account has unconstrained access to all sections.</p>
     </Card>
   );
 }

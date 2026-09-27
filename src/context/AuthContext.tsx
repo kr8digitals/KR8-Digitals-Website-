@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Real-time synchronization when accounts are updated
+  // Real-time synchronization when accounts are updated or logged out
   useEffect(() => {
     const handleSync = () => {
       try {
@@ -83,16 +83,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (fresh) {
             setStudent(fresh);
             localStorage.setItem("kr8_current", JSON.stringify(fresh));
+          } else {
+            setStudent(null);
+            localStorage.removeItem("kr8_current");
           }
+        } else {
+          setStudent(null);
         }
       } catch {
         /* ignore */
       }
     };
+
+    const handleLogout = () => {
+      setStudent(null);
+    };
+
     window.addEventListener("kr8:accounts-updated", handleSync);
+    window.addEventListener("kr8:auth-logout", handleLogout);
     window.addEventListener("storage", handleSync);
     return () => {
       window.removeEventListener("kr8:accounts-updated", handleSync);
+      window.removeEventListener("kr8:auth-logout", handleLogout);
       window.removeEventListener("storage", handleSync);
     };
   }, []);
@@ -165,6 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem("kr8_current");
       localStorage.removeItem(SESSION_KEY);
       localStorage.removeItem(DEVICE_SESSION_DATA);
+      sessionStorage.removeItem("kr8_current");
+      window.dispatchEvent(new CustomEvent("kr8:auth-logout"));
     } catch {
       /* ignore */
     }

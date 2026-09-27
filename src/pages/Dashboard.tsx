@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
-import { getSkill, getStudents, getAnnouncements, CONTACT, getReferralUrl, getStudentCertificates } from "../data/store";
+import { getSkill, getStudents, getAnnouncements, CONTACT, getReferralUrl, getStudentCertificates, type CertificateRecord } from "../data/store";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
 import { Pill, Card } from "../components/ui";
 import Icon from "../components/Icon";
 import CertificateDocumentView from "../components/CertificateDocumentView";
 import { downloadCertificatePdf } from "../utils/certificate";
+import AnnouncementCard from "../components/AnnouncementCard";
+import GraduationShareModal from "../components/GraduationShareModal";
 
 const actions = [
   { icon: "book" as const, label: "Program", title: "Continue Learning", desc: "Pick up your skill track where you left off.", to: "/academy" },
@@ -30,6 +33,7 @@ export default function Dashboard() {
   const first = student.name.split(" ")[0];
   const certs = getStudentCertificates(student.id);
   const primaryCert = certs[0];
+  const [shareCert, setShareCert] = useState<CertificateRecord | null>(null);
 
   const executiveActions = [
     { icon: "lock" as const, label: "Administration", title: "Admin Portal", desc: "Manage students, certifications, tracks, and settings.", to: "/admin" },
@@ -128,6 +132,14 @@ export default function Dashboard() {
                         className="inline-flex items-center gap-2 rounded-full border border-pink-500/40 bg-pink-500/10 px-5 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-500/20 transition-colors"
                       >
                         <Icon name="certificate" size={14} /> Download Official PDF
+                      </button>
+                    )}
+                    {primaryCert && (
+                      <button
+                        onClick={() => setShareCert(primaryCert)}
+                        className="inline-flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-500/10 px-5 py-2.5 text-xs font-bold text-purple-300 hover:bg-purple-500/20 transition-colors"
+                      >
+                        <Icon name="share" size={14} /> Share Graduation Card →
                       </button>
                     )}
                     <Link
@@ -262,11 +274,7 @@ export default function Dashboard() {
           <h2 className="font-display text-2xl font-bold text-white">Announcements</h2>
           <div className="mt-6 grid gap-5 md:grid-cols-2">
             {getAnnouncements().map((a) => (
-              <Card key={a.id}>
-                <p className="text-xs uppercase tracking-wider text-[#8a7ba8]">{a.date}</p>
-                <h3 className="mt-1 text-lg font-bold text-white">{a.title}</h3>
-                <p className="mt-2 text-sm text-[#b8aecf]">{a.type === "text" ? a.body : a.caption}</p>
-              </Card>
+              <AnnouncementCard key={a.id} announcement={a} />
             ))}
           </div>
         </div>
@@ -274,6 +282,15 @@ export default function Dashboard() {
         <p className="mt-10 text-center text-xs text-[#8a7ba8]">
           Need help? Reach the team on WhatsApp: {CONTACT.phone}
         </p>
+
+        {shareCert && (
+          <GraduationShareModal
+            isOpen={true}
+            onClose={() => setShareCert(null)}
+            cert={shareCert}
+            student={student}
+          />
+        )}
       </div>
     </div>
   );

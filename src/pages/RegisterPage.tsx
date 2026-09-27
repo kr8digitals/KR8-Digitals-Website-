@@ -1,25 +1,21 @@
 import { useState, useEffect } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   getSkills,
-  getSkill,
   areAllRegistrationsClosed,
   registerStudent,
   registerTribe,
   buildPhone,
   countryByCode,
   getSkillRegistration,
-  getSkillWhatsApp,
-  getReferralUrl,
-  type Account,
 } from "../data/store";
-import { Card, GradientButton, GhostButton, Pill } from "../components/ui";
+import { Card, GradientButton, Pill } from "../components/ui";
 import CountryPhone from "../components/CountryPhone";
-import Icon from "../components/Icon";
 
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { user, signIn, addNotification } = useAuth();
 
   const initialSkill = searchParams.get("skill") || "";
@@ -59,7 +55,6 @@ export default function RegisterPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
-  const [createdAccount, setCreatedAccount] = useState<Account | null>(null);
 
   useEffect(() => {
     if (initialSkill) {
@@ -116,8 +111,13 @@ export default function RegisterPage() {
     }
 
     signIn(res.student);
+    try {
+      sessionStorage.setItem("kr8_just_registered", res.student.id);
+    } catch {
+      /* ignore */
+    }
     addNotification("Registration successful! Welcome to KR8 Academy.");
-    setCreatedAccount(res.student);
+    navigate("/academy?registered=true");
   };
 
   const handleTribeSubmit = (e: React.FormEvent) => {
@@ -149,69 +149,14 @@ export default function RegisterPage() {
     }
 
     signIn(res.member);
+    try {
+      sessionStorage.setItem("kr8_just_registered", res.member.id);
+    } catch {
+      /* ignore */
+    }
     addNotification("Welcome to the KR8 Tribe family!");
-    setCreatedAccount(res.member);
+    navigate("/tribe?registered=true");
   };
-
-  // If successfully created
-  if (createdAccount) {
-    const isFounder = createdAccount.type === "founder";
-    const isCoFounder = createdAccount.type === "co-founder";
-    const skillObj = getSkill(createdAccount.skill);
-
-    return (
-      <div className="section-bg min-h-[85vh] py-16 px-5 flex items-center justify-center">
-        <div className="w-full max-w-xl">
-          <Card className="text-center p-8">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-pink text-white shadow-lg shadow-pink-500/30">
-              <Icon name="check" size={32} />
-            </div>
-
-            <h2 className="font-display text-2xl sm:text-3xl font-bold text-white">
-              {isFounder ? "Welcome, KR8 Founder & CEO!" : isCoFounder ? "Welcome, KR8 Co-Founder!" : "You're Registered!"}
-            </h2>
-
-            <p className="mt-2 text-sm text-[#cabfe0]">
-              Your official KR8 Identity and 5-day persistent device session have been activated.
-            </p>
-
-            <div className="mx-auto mt-6 rounded-2xl border border-pink-500/40 bg-pink-500/10 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">Your Verifiable KR8 ID</p>
-              <p className="font-mono text-2xl sm:text-3xl font-black text-white mt-1 tracking-wider">{createdAccount.id}</p>
-              <p className="mt-2 text-xs text-[#a594c7]">Save this ID or use your registered email with your password anytime.</p>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              {(isFounder || isCoFounder) && (
-                <GradientButton to="/admin" className="w-full">
-                  Open Executive Admin Portal →
-                </GradientButton>
-              )}
-
-              {skillObj && (
-                <GhostButton href={getSkillWhatsApp(skillObj.key)} className="w-full border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10">
-                  Join {skillObj.name} WhatsApp Cohort Group →
-                </GhostButton>
-              )}
-
-              <GradientButton to="/dashboard" className="w-full shadow-lg shadow-pink-500/25">
-                Go to My Student Dashboard →
-              </GradientButton>
-
-              <div className="pt-2">
-                <a
-                  href={getReferralUrl(createdAccount.id)}
-                  className="block break-all rounded-xl bg-black/40 p-3 text-xs text-pink-300 hover:text-pink-200 underline"
-                >
-                  Your Invite Link: {getReferralUrl(createdAccount.id)}
-                </a>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">

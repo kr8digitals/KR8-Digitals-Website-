@@ -99,6 +99,16 @@ export const CERTIFICATE_TEMPLATES: Record<
   },
 };
 
+export function normalizeCertificateSkillKey(skillKey?: string): string {
+  if (!skillKey) return "graphic";
+  const k = skillKey.toLowerCase().trim().replace(/[-_]+/g, " ");
+  if (k.includes("graphic")) return "graphic";
+  if (k.includes("video")) return "video";
+  if (k.includes("web") || k.includes("wordpress")) return "web";
+  if (k.includes("content") || k.includes("social") || k.includes("smm")) return "content_creation";
+  return skillKey.toLowerCase().trim().replace(/-/g, "_");
+}
+
 /**
  * Returns the exact certificate template configuration for a given skill and tier.
  * Never allows a Completion certificate to use a Professionalism template or vice versa.
@@ -112,7 +122,7 @@ export function getCertificateTemplate(
   tier: CertificateTier,
   customCourseName?: string
 ): CertificateTemplateConfig {
-  const normalizedKey = (skillKey || "graphic").toLowerCase().trim();
+  const normalizedKey = normalizeCertificateSkillKey(skillKey);
   const tierTemplates = CERTIFICATE_TEMPLATES[tier];
 
   // Core skills with pre-existing dedicated templates from Drive
@@ -126,9 +136,9 @@ export function getCertificateTemplate(
       achievementText: ACHIEVEMENT_TEXT[tier],
       isDynamicSkillText: false,
       geometry: {
-        nameCenterRatioX: 0.5,
-        nameBaselineRatioY: 0.507,
-        nameMaxRatioWidth: 0.76,
+        nameCenterRatioX: 0.4185,
+        nameBaselineRatioY: 0.5116,
+        nameMaxRatioWidth: 0.48,
         qrBottomRightMarginRatioX: 0.045,
         qrBottomRightMarginRatioY: 0.055,
         qrRatioWidth: 0.11,
@@ -152,9 +162,9 @@ export function getCertificateTemplate(
     achievementText: ACHIEVEMENT_TEXT[tier],
     isDynamicSkillText: true,
     geometry: {
-      nameCenterRatioX: 0.5,
-      nameBaselineRatioY: 0.507,
-      nameMaxRatioWidth: 0.76,
+      nameCenterRatioX: 0.4185,
+      nameBaselineRatioY: 0.5116,
+      nameMaxRatioWidth: 0.48,
       qrBottomRightMarginRatioX: 0.045,
       qrBottomRightMarginRatioY: 0.055,
       qrRatioWidth: 0.11,

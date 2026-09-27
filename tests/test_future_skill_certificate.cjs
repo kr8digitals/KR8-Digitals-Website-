@@ -100,7 +100,7 @@ async function run() {
         courseName: genResult.courseName,
         tier: genResult.tier,
         verifyUrl: genResult.verifyUrl,
-        hasImage: genResult.imageUrl.startsWith("data:image/jpeg"),
+        hasImage: genResult.imageUrl.startsWith("data:image/"),
         hasPdf: genResult.pdfBytes.length > 1000,
       };
     }, student);

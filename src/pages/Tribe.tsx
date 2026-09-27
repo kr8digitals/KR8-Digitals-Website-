@@ -1,9 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { IMG } from "../data/images";
 import {
   tribeCount,
   registerTribe,
+  registerStudent,
+  getSkills,
+  getSkillName,
+  getSkillRegistration,
   buildPhone,
   updateAccount,
   countryByCode,
@@ -42,8 +46,71 @@ const AVAILABLE_INTERESTS = [
 ];
 
 export default function Tribe() {
-  const { user, signIn, addNotification } = useAuth();
+  const { user, signIn, signOut, addNotification } = useAuth();
+  const navigate = useNavigate();
   const [liveTribeCount, setLiveTribeCount] = useState(() => tribeCount());
+  const [copiedId, setCopiedId] = useState(false);
+
+  const handleCopyId = async () => {
+    if (!user) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(user.id);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = user.id;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopiedId(true);
+      addNotification(`Tribe Citizen ID copied to clipboard: ${user.id}`);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch {
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }
+  };
+
+  // Skills registration availability for Tribe member transitions
+  const openSkills = useMemo(() => {
+    return getSkills().filter((s) => s.available && getSkillRegistration(s.key));
+  }, []);
+  const [targetSkill, setTargetSkill] = useState(openSkills[0]?.key || "graphic");
+  const [transitionLoading, setTransitionLoading] = useState(false);
+  const [transitionErr, setTransitionErr] = useState("");
+
+  const handleTribeTransition = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || user.type !== "tribe") return;
+    setTransitionLoading(true);
+    setTransitionErr("");
+
+    const res = registerStudent({
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      country: user.country || "NG",
+      skill: targetSkill || "graphic",
+      dob: "",
+      password: user.password || "",
+    });
+
+    if (!res.ok || !res.student) {
+      setTransitionErr(res.error || "Could not complete registration.");
+      setTransitionLoading(false);
+      return;
+    }
+
+    addNotification(
+      `🎓 Congratulations ${user.name}! You have transitioned from Tribe Member to Academy Scholar in ${getSkillName(targetSkill || "graphic")}. Your official Student ID has been generated.`
+    );
+
+    signIn(res.student);
+    setTransitionLoading(false);
+    navigate("/academy?onboarding=success");
+  };
 
   useEffect(() => {
     const sync = () => setLiveTribeCount(tribeCount());
@@ -284,10 +351,24 @@ export default function Tribe() {
                       </span>
                     </div>
                     <p className="text-xs text-[#b8aecf] mt-1">{user.email} · {user.country || "Global"}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="rounded bg-white/10 px-2 py-0.5 text-[11px] font-mono text-pink-300">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="rounded bg-white/10 px-2 py-0.5 text-[11px] font-mono text-pink-300 select-all">
                         {user.id}
                       </span>
+                      <button
+                        type="button"
+                        onClick={handleCopyId}
+                        className="inline-flex items-center gap-1 rounded border border-white/20 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold text-white hover:border-pink-500 hover:bg-white/[0.1] active:scale-95 transition-all"
+                      >
+                        {copiedId ? (
+                          <span className="text-emerald-400 font-bold">✓ Copied!</span>
+                        ) : (
+                          <>
+                            <Icon name="paperclip" size={10} className="text-[#cabfe0]" />
+                            <span className="text-[#cabfe0]">Copy ID</span>
+                          </>
+                        )}
+                      </button>
                       {user.type === "student" && (
                         <span className="rounded bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 text-[11px] text-emerald-300">
                           Automatic Academy Enrollment Active
@@ -305,6 +386,24 @@ export default function Tribe() {
                   <div className="flex items-center gap-1.5 text-xs text-pink-300">
                     <Icon name="trophy" size={14} />
                     <span>Good Standing</span>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-white/10 w-full justify-end">
+                    <Link
+                      to="/settings"
+                      className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-white hover:bg-white/[0.08]"
+                    >
+                      <Icon name="cog" size={11} />
+                      <span>Settings</span>
+                    </Link>
+                    <button
+                      onClick={() => {
+                        signOut();
+                        navigate("/");
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-500/20"
+                    >
+                      <span>Sign Out</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -356,6 +455,78 @@ export default function Tribe() {
                   </div>
                 )}
               </div>
+
+              {/* STEP 9: TRIBE MEMBER SKILL REGISTRATION JOURNEY */}
+              {user.type === "tribe" && (
+                <div className="mt-8 overflow-hidden rounded-2xl border border-pink-500/40 bg-gradient-to-r from-pink-500/10 via-[#180028] to-purple-500/10 p-6 shadow-xl">
+                  {openSkills.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-500/20 text-pink-400">
+                              <Icon name="certificate" className="h-4 w-4" />
+                            </span>
+                            <h3 className="font-display font-bold text-lg text-white">
+                              Cohort Skill Admissions Are <span className="text-gradient">Now Open!</span>
+                            </h3>
+                          </div>
+                          <p className="mt-1 text-xs text-[#cabfe0] max-w-xl">
+                            As a verified KR8 Tribe Member, you are eligible for priority enrollment into an Academy Track. Choose your skill to become a full Academy Scholar with live coursework and verified graduation certification.
+                          </p>
+                        </div>
+
+                        <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0 self-start sm:self-auto">
+                          ● Priority Onboarding
+                        </span>
+                      </div>
+
+                      <form onSubmit={handleTribeTransition} className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                        <select
+                          value={targetSkill}
+                          onChange={(e) => setTargetSkill(e.target.value)}
+                          className="flex-1 rounded-xl border border-white/20 bg-black/60 px-4 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
+                        >
+                          {openSkills.map((s) => (
+                            <option key={s.key} value={s.key} className="bg-[#12001f] text-white">
+                              {s.name} (Free Academy Track)
+                            </option>
+                          ))}
+                        </select>
+
+                        <button
+                          type="submit"
+                          disabled={transitionLoading}
+                          className="rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg shadow-pink-500/25 hover:opacity-90 active:scale-95 transition-all shrink-0"
+                        >
+                          {transitionLoading ? "Enrolling..." : "Enroll in Academy Track →"}
+                        </button>
+                      </form>
+
+                      {transitionErr && (
+                        <p className="text-xs text-rose-400 font-semibold mt-1">{transitionErr}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-amber-400">🔒</span>
+                          <h3 className="font-display font-bold text-base text-white">
+                            Next Cohort Admissions Coming Soon
+                          </h3>
+                        </div>
+                        <p className="mt-1 text-xs text-[#cabfe0]">
+                          Skill registrations are currently closed. You are on the priority Tribe onboarding list and will be automatically invited the moment admissions unlock!
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                        Priority Status
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* THE 5 DISTINCTIVE MEMBER ACTIONS ("THE URGES") */}
               <div className="mt-8">

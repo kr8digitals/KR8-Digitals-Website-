@@ -1,7 +1,13 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { verifyId, getSkill, type VerificationResult } from "../data/store";
-import { Pill, GradientButton, Card, Avatar } from "../components/ui";
+import {
+  verifyId,
+  getSkill,
+  areAllRegistrationsClosed,
+  getWaitlistWhatsAppUrl,
+  type VerificationResult,
+} from "../data/store";
+import { Pill, GradientButton, GhostButton, Card, Avatar } from "../components/ui";
 import Icon from "../components/Icon";
 import CertificateDocumentView from "../components/CertificateDocumentView";
 import { downloadCertificatePdf } from "../utils/certificate";
@@ -12,6 +18,18 @@ export default function Verify() {
   const [certQuery, setCertQuery] = useState("");
   const [result, setResult] = useState<null | VerificationResult>(null);
   const [searched, setSearched] = useState(false);
+  const [allClosed, setAllClosed] = useState(() => areAllRegistrationsClosed());
+  const waitlistUrl = getWaitlistWhatsAppUrl();
+
+  useEffect(() => {
+    const handleUpdate = () => setAllClosed(areAllRegistrationsClosed());
+    window.addEventListener("kr8:skills-updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("kr8:skills-updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
 
   // Auto-verify when URL includes ?id=... or ?cert=...
   useEffect(() => {
@@ -43,6 +61,13 @@ export default function Verify() {
     <div className="section-bg min-h-screen">
       <div className="mx-auto max-w-2xl px-5 py-16">
         <div className="text-center">
+          <div className="mx-auto mb-4 flex justify-center">
+            <img
+              src="/branding/kr8_logo.png"
+              alt="KR8 Digitals Logo"
+              className="h-16 w-16 rounded-2xl object-contain shadow-xl shadow-pink-500/30"
+            />
+          </div>
           <Pill>Official KR8 Verification Portal</Pill>
           <h1 className="font-display mt-5 text-4xl text-white sm:text-5xl">
             Confirm a <span className="text-gradient">KR8 Identity.</span>
@@ -286,6 +311,72 @@ export default function Verify() {
             )}
           </div>
         )}
+
+        {/* STEP 8: DYNAMIC CONVERSION CTA (Registration Open vs Closed) */}
+        <div className="mt-12 overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-b from-white/[0.05] via-[#160026] to-[#0d0017] p-6 sm:p-8 text-center shadow-2xl backdrop-blur-md">
+          {!allClosed ? (
+            /* REGISTRATION OPEN STATE */
+            <div className="space-y-4 max-w-lg mx-auto">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-emerald-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Applications Open · Cohort Onboarding Ongoing
+              </span>
+              <h2 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                Inspired by this credential? <span className="text-gradient">Learn completely free.</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-[#b8aecf] leading-relaxed">
+                KR8 Digitals trains African youth and global creatives in high-income digital skills completely free — with 0 cost for certificate or training. Join the upcoming cohort today.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <GradientButton
+                  to="/academy?register=true"
+                  className="w-full sm:w-auto px-6 py-3 text-xs font-bold shadow-lg shadow-pink-500/25"
+                >
+                  Register for Next Cohort →
+                </GradientButton>
+                <GhostButton
+                  to="/academy"
+                  className="w-full sm:w-auto px-5 py-3 text-xs font-semibold border-white/20 hover:border-pink-500/40"
+                >
+                  Explore Skill Tracks
+                </GhostButton>
+              </div>
+            </div>
+          ) : (
+            /* REGISTRATION CLOSED STATE */
+            <div className="space-y-4 max-w-lg mx-auto">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-300">
+                <span>🔒</span>
+                Cohort Full · Registration Currently Closed
+              </span>
+              <h2 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                Be First in Line for <span className="text-gradient">the Next Cohort.</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-[#b8aecf] leading-relaxed">
+                Skill registrations are currently closed. Join the vibrant KR8 Tribe community of 5,000+ creators and get instant priority notifications the moment admissions unlock.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <GradientButton
+                  to="/tribe"
+                  className="w-full sm:w-auto px-6 py-3 text-xs font-bold shadow-lg shadow-pink-500/25"
+                >
+                  Join the KR8 Tribe →
+                </GradientButton>
+                {waitlistUrl && (
+                  <a
+                    href={waitlistUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-5 py-3 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-colors"
+                  >
+                    <span>💬</span>
+                    <span>Join WhatsApp Waitlist ↗</span>
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

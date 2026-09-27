@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { updateAccount, getReferralUrl, getSkill } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
@@ -15,6 +15,7 @@ import {
 
 export default function Settings() {
   const { student, signIn, signOut } = useAuth();
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(!!student?.expandedVisibility);
   const [bio, setBio] = useState(student?.bio ?? "");
   const [password, setPassword] = useState("");
@@ -35,12 +36,63 @@ export default function Settings() {
   const [bioSuccess, setBioSuccess] = useState(false);
   const [supportInfo, setSupportInfo] = useState<{ supported: boolean; hasPlatformSensor: boolean; reason: string } | null>(null);
 
+  // Google Sign-In Enablement State (User-Enabled Security Model)
+  const [googleEmailInput, setGoogleEmailInput] = useState(student?.googleAuth?.linkedEmail || student?.email || "");
+  const [googlePasswordConfirm, setGooglePasswordConfirm] = useState("");
+  const [googleLinkOpen, setGoogleLinkOpen] = useState(false);
+  const [googleMsg, setGoogleMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   useEffect(() => {
     if (student) {
       setBiometric(getBiometricForStudent(student.id));
+      if (student.googleAuth?.linkedEmail) {
+        setGoogleEmailInput(student.googleAuth.linkedEmail);
+      }
     }
     checkBiometricSupport().then(setSupportInfo);
   }, [student]);
+
+  const handleEnableGoogleAuth = (e: React.FormEvent) => {
+    e.preventDefault();
+    setGoogleMsg(null);
+    if (!student) return;
+    if (!googleEmailInput.trim().includes("@")) {
+      setGoogleMsg({ type: "error", text: "Please enter a valid Google Account email." });
+      return;
+    }
+    if (student.password && student.password !== googlePasswordConfirm) {
+      setGoogleMsg({ type: "error", text: "Incorrect password. You must verify your account password to authorize Google Sign-In." });
+      return;
+    }
+
+    const updated = updateAccount(student.id, {
+      googleAuth: {
+        enabled: true,
+        linkedEmail: googleEmailInput.trim().toLowerCase(),
+        linkedAt: Date.now(),
+        verifiedToken: "kr8_gauth_" + Math.random().toString(36).substring(2, 10),
+      },
+    });
+
+    if (updated) {
+      signIn(updated);
+      setGoogleLinkOpen(false);
+      setGooglePasswordConfirm("");
+      setGoogleMsg({ type: "success", text: `Google Sign-In successfully enabled and bound to ${googleEmailInput.trim().toLowerCase()}!` });
+    }
+  };
+
+  const handleDisableGoogleAuth = () => {
+    if (!student) return;
+    if (!window.confirm("Are you sure you want to disable Google Sign-In for your account? You will need your password to log in.")) return;
+    const updated = updateAccount(student.id, {
+      googleAuth: undefined,
+    });
+    if (updated) {
+      signIn(updated);
+      setGoogleMsg({ type: "success", text: "Google Sign-In has been disabled for your account." });
+    }
+  };
 
   if (!student) {
     return (
@@ -469,6 +521,142 @@ export default function Settings() {
           </div>
         </Card>
 
+        {/* STEP 11: USER-ENABLED GOOGLE SIGN-IN SECURITY */}
+        <Card className="mt-6">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/[0.06] border border-white/15 text-lg">
+                🌐
+              </span>
+              <div>
+                <h2 className="font-bold text-white text-lg">Google Account Authentication</h2>
+                <p className="text-xs text-[#b8aecf]">
+                  Explicit user enablement required. Prevent unauthorized access by binding your verified Google email.
+                </p>
+              </div>
+            </div>
+
+            <span
+              className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                student.googleAuth?.enabled
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                  : "bg-white/10 text-[#8a7ba8] border border-white/10"
+              }`}
+            >
+              {student.googleAuth?.enabled ? "● Enabled & Linked" : "Disabled (Protected)"}
+            </span>
+          </div>
+
+          <div className="pt-4">
+            {student.googleAuth?.enabled ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#8a7ba8]">
+                      Authorized Google Address
+                    </span>
+                    <p className="font-semibold text-sm text-white mt-0.5">
+                      {student.googleAuth.linkedEmail}
+                    </p>
+                    <p className="text-[11px] text-[#8a7ba8] mt-1">
+                      Linked on {new Date(student.googleAuth.linkedAt).toLocaleDateString()} · You can now sign in with Google seamlessly.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleDisableGoogleAuth}
+                    className="px-4 py-2 rounded-xl border border-rose-500/40 bg-rose-500/10 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors self-start sm:self-auto"
+                  >
+                    Disable Google Login
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-[#b8aecf] leading-relaxed">
+                  In accordance with KR8 security standards, Google Sign-In is strictly disabled by default until you explicitly authorize it with your account password. Once linked, you can use one-click Google Sign-In on any device.
+                </p>
+
+                {googleLinkOpen ? (
+                  <form onSubmit={handleEnableGoogleAuth} className="mt-4 p-4 rounded-2xl border border-white/15 bg-black/40 space-y-3">
+                    <h4 className="font-bold text-white text-xs uppercase tracking-wider">
+                      Authorize Google Account Association
+                    </h4>
+
+                    <div>
+                      <label className="block text-[11px] text-[#8a7ba8] mb-1">
+                        Your Google Email Address *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={googleEmailInput}
+                        onChange={(e) => setGoogleEmailInput(e.target.value)}
+                        placeholder="yourname@gmail.com"
+                        className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] text-[#8a7ba8] mb-1">
+                        Confirm Current KR8 Password (for security verification) *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={googlePasswordConfirm}
+                        onChange={(e) => setGooglePasswordConfirm(e.target.value)}
+                        placeholder="Enter your current password"
+                        className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2">
+                      <button
+                        type="submit"
+                        className="rounded-full bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20 hover:opacity-90"
+                      >
+                        Verify & Enable Google Sign-In →
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGoogleLinkOpen(false);
+                          setGoogleMsg(null);
+                        }}
+                        className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#8a7ba8] hover:text-white"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => setGoogleLinkOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-5 py-2.5 text-xs font-bold text-white hover:bg-white/[0.08] hover:border-pink-500/40 transition-all"
+                  >
+                    <span>🌐</span>
+                    <span>Enable & Link Google Account →</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {googleMsg && (
+              <div
+                className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium flex items-center gap-2 ${
+                  googleMsg.type === "success"
+                    ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300"
+                    : "bg-rose-500/15 border border-rose-500/30 text-rose-300"
+                }`}
+              >
+                <span>{googleMsg.type === "success" ? "✓" : "⚠️"}</span>
+                <span>{googleMsg.text}</span>
+              </div>
+            )}
+          </div>
+        </Card>
+
         {/* Referral Link */}
         <Card className="mt-6">
           <h2 className="font-bold text-white text-lg">My Referral Program Link</h2>
@@ -494,7 +682,10 @@ export default function Settings() {
             ← Return to My Academy Profile
           </Link>
           <button
-            onClick={signOut}
+            onClick={() => {
+              signOut();
+              navigate("/");
+            }}
             className="rounded-full border border-red-500/30 bg-red-500/10 px-5 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20"
           >
             Sign Out of Account

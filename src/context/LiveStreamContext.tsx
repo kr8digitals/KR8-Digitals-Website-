@@ -372,6 +372,10 @@ export function LiveStreamProvider({ children }: { children: ReactNode }) {
         break;
       case "stream_ended":
         syncStream();
+        setIsStageOpen(false);
+        setIsMiniPlayerOpen(false);
+        stopMediaTracks();
+        addNotification("The live broadcast has ended. Replay will be available shortly.");
         break;
     }
   };

@@ -2,6 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import QRCode from "qrcode";
 import { getCertificateTemplate, type CertificateTier } from "../data/certificateTemplates";
 import type { Account } from "../data/store";
+import { getCoachSignatureForSkill, getAdminSignature } from "../data/signatureStore";
 
 const DB_NAME = "kr8_certs_db_v1";
 const STORE_NAME = "certificates";
@@ -39,7 +40,7 @@ export function formatCertificateStudentName(rawName: string): string {
   if (!rawName) return "";
   const parts = rawName.trim().split(/\s+/).filter(Boolean);
   if (parts.length <= 1) {
-    return parts[0]?.toUpperCase() || "";
+    return (parts[0] || "").toUpperCase();
   }
   if (parts.length === 2) {
     return `${parts[0]} ${parts[1]}`.toUpperCase();
@@ -47,25 +48,33 @@ export function formatCertificateStudentName(rawName: string): string {
 
   // 3 or more parts: first and last name fully written, middle name(s) abbreviated with initial
   // e.g. "John Thomas Theophilus" -> "JOHN T. THEOPHILUS"
+  // e.g. "Nicodemus O. Chukwuka" -> "NICODEMUS O. CHUKWUKA"
+  // e.g. "Chukwuemeka Kingsley Theophilus Nnamdi" -> "CHUKWUEMEKA K. T. NNAMDI"
   const firstName = parts[0];
   const lastName = parts[parts.length - 1];
   const middleInitials = parts
     .slice(1, parts.length - 1)
-    .map((m) => `${m[0].toUpperCase()}.`)
+    .map((m) => {
+      const clean = m.replace(/[^A-Za-z]/g, "");
+      return clean.length > 0 ? `${clean[0].toUpperCase()}.` : "";
+    })
+    .filter(Boolean)
     .join(" ");
 
-  return `${firstName.toUpperCase()} ${middleInitials} ${lastName.toUpperCase()}`;
+  return middleInitials.length > 0
+    ? `${firstName.toUpperCase()} ${middleInitials} ${lastName.toUpperCase()}`
+    : `${firstName.toUpperCase()} ${lastName.toUpperCase()}`;
 }
 
 export async function generateVerifyQrCode(verifyUrl: string): Promise<string> {
   return QRCode.toDataURL(verifyUrl, {
-    width: 320,
-    margin: 1,
+    width: 400,
+    margin: 4, // Strict ISO 18004 4-module quiet zone for reliable mobile camera scanning
     color: {
-      dark: "#12001f",
+      dark: "#000000", // Pure black for maximum optical contrast
       light: "#ffffff",
     },
-    errorCorrectionLevel: "H",
+    errorCorrectionLevel: "M", // Medium 15% error correction -> clean, chunky 37x37 modules instead of dense 49x49
   });
 }
 
@@ -217,6 +226,80 @@ export interface GeneratedCertificateResult {
   courseName: string;
 }
 
+export async function renderDynamicSignatures({
+  ctx,
+  width,
+  height,
+  skillKey,
+  isDynamicTemplate,
+}: {
+  ctx: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+  skillKey: string;
+  isDynamicTemplate?: boolean;
+}) {
+  try {
+    const coachSig = getCoachSignatureForSkill(skillKey);
+    const adminSig = getAdminSignature();
+
+    const coachLineCx = Math.round(width * 0.1475);
+    const adminLineCx = Math.round(width * 0.4841);
+    const lineY = Math.round(height * 0.8092);
+
+    const maxSigWidth = Math.round(width * 0.16);
+    const maxSigHeight = Math.round(height * 0.095);
+
+    // If it's a dynamic template or custom skill, stamp the registered coach signature
+    if (coachSig?.signatureUrl && isDynamicTemplate) {
+      try {
+        const coachImg = await loadImage(coachSig.signatureUrl);
+        const naturalW = coachImg.naturalWidth || coachImg.width || 300;
+        const naturalH = coachImg.naturalHeight || coachImg.height || 150;
+
+        let drawW = maxSigWidth;
+        let drawH = Math.round(naturalH * (drawW / naturalW));
+        if (drawH > maxSigHeight) {
+          drawH = maxSigHeight;
+          drawW = Math.round(naturalW * (drawH / naturalH));
+        }
+
+        const drawX = coachLineCx - Math.round(drawW / 2);
+        const drawY = lineY - drawH - Math.max(3, Math.round(height * 0.003));
+
+        ctx.drawImage(coachImg, drawX, drawY, drawW, drawH);
+      } catch (err) {
+        console.warn("Could not render coach signature image:", err);
+      }
+    }
+
+    // Dynamic Admin Signature for dynamic templates
+    if (adminSig?.signatureUrl && isDynamicTemplate) {
+      try {
+        const adminImg = await loadImage(adminSig.signatureUrl);
+        const naturalW = adminImg.naturalWidth || adminImg.width || 300;
+        const naturalH = adminImg.naturalHeight || adminImg.height || 150;
+
+        let drawW = maxSigWidth;
+        let drawH = Math.round(naturalH * (drawW / naturalW));
+        if (drawH > maxSigHeight) {
+          drawH = maxSigHeight;
+          drawW = Math.round(naturalW * (drawH / naturalH));
+        }
+
+        const drawX = adminLineCx - Math.round(drawW / 2);
+        const drawY = lineY - drawH - Math.max(3, Math.round(height * 0.003));
+
+        ctx.drawImage(adminImg, drawX, drawY, drawW, drawH);
+      } catch (err) {
+        console.warn("Could not render admin signature image:", err);
+      }
+    }
+  } catch (err) {
+    console.warn("Dynamic signature stamp failed gracefully:", err);
+  }
+}
+
 /**
  * Automatically creates and generates the student's certificate:
  * - Selects the correct template for skill and tier
@@ -273,30 +356,33 @@ export async function generateAutomaticCertificate(params: {
   // 4. Format & Render Student Name
   const formattedName = formatCertificateStudentName(student.name);
 
-  // Baseline at Y = 50.7% of height, centered at X = 50.0% of width
+  // Physical line geometry:
+  // Starts at X = 14.89%, ends at X = 68.80%, line width = 53.91%
+  // Line Center X = 41.85%, Line Baseline Y = 51.16%
+  // Bounding box maxAllowedWidth = 48% of width (safely padded within the 53.91% physical line)
   const centerX = Math.round(width * config.geometry.nameCenterRatioX);
   const baselineY = Math.round(height * config.geometry.nameBaselineRatioY);
   const maxAllowedWidth = Math.round(width * config.geometry.nameMaxRatioWidth);
 
-  // Base font size: approx 3.7% of image width
-  let fontSize = Math.round(width * 0.037);
+  // Base font size: approx 3.6% of image width (~74px at 2048w, ~117px at 3264w)
+  let fontSize = Math.round(width * 0.036);
   ctx.font = `bold ${fontSize}px "Encode Sans", sans-serif`;
   let textWidth = ctx.measureText(formattedName).width;
 
   // Auto-scale font down if name exceeds maximum line width
-  while (textWidth > maxAllowedWidth && fontSize > 24) {
-    fontSize -= 2;
+  while (textWidth > maxAllowedWidth && fontSize > 18) {
+    fontSize -= 1;
     ctx.font = `bold ${fontSize}px "Encode Sans", sans-serif`;
     textWidth = ctx.measureText(formattedName).width;
   }
 
-  // Draw name text
+  // Draw name text - strictly centered horizontally and vertically within the physical line bounding box
   ctx.save();
   ctx.fillStyle = "#12001f"; // Rich dark obsidian matching template text
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
-  // Lift above baseline so characters do not collide with the drawn line
-  const textY = baselineY - Math.max(6, Math.round(fontSize * 0.12));
+  // Lift cleanly above baseline so characters do not collide with the drawn line
+  const textY = baselineY - Math.max(8, Math.round(fontSize * 0.14));
   ctx.fillText(formattedName, centerX, textY);
   ctx.restore();
 
@@ -311,10 +397,19 @@ export async function generateAutomaticCertificate(params: {
     });
   }
 
+  // 4c. Dynamic Coach & Administrator Signatures
+  await renderDynamicSignatures({
+    ctx,
+    width,
+    height,
+    skillKey,
+    isDynamicTemplate: !!config.isDynamicSkillText,
+  });
+
   // 5. Draw QR Code Badge in Bottom-Right Corner
-  const qrSize = Math.max(120, Math.min(240, Math.round(width * config.geometry.qrRatioWidth)));
+  const qrSize = Math.max(140, Math.min(260, Math.round(width * config.geometry.qrRatioWidth)));
   const padding = Math.round(qrSize * 0.08);
-  const captionHeight = Math.round(qrSize * 0.22);
+  const captionHeight = Math.round(qrSize * 0.24);
   const cardWidth = qrSize + padding * 2;
   const cardHeight = qrSize + padding * 2 + captionHeight;
 
@@ -346,8 +441,11 @@ export async function generateAutomaticCertificate(params: {
   ctx.roundRect(qrX, qrY, cardWidth, cardHeight, cornerRadius);
   ctx.stroke();
 
-  // Draw QR Image
+  // Draw QR Image with crisp rendering
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(qrImg, qrX + padding, qrY + padding, qrSize, qrSize);
+  ctx.restore();
 
   // Draw "SCAN TO VERIFY"
   ctx.fillStyle = "#12001f";
@@ -369,13 +467,14 @@ export async function generateAutomaticCertificate(params: {
     qrY + padding + qrSize + captionHeight * 0.75
   );
 
-  const finalImageUrl = canvas.toDataURL("image/jpeg", 0.94);
+  // Lossless PNG data URL ensures QR codes have zero DCT block artifacts or ringing
+  const finalImageUrl = canvas.toDataURL("image/png");
 
   // 6. Generate Downloadable PDF with Exact Dimensions
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([width, height]);
   const imgBytes = await fetch(finalImageUrl).then((r) => r.arrayBuffer());
-  const embeddedImage = await pdfDoc.embedJpg(imgBytes);
+  const embeddedImage = await pdfDoc.embedPng(imgBytes);
   page.drawImage(embeddedImage, {
     x: 0,
     y: 0,

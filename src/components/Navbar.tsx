@@ -61,12 +61,19 @@ export default function Navbar() {
           {/* Logo */}
           <Link
             to="/"
-            className="flex items-center gap-1 font-display text-2xl tracking-tight transition-transform hover:scale-[1.02]"
+            className="flex items-center gap-2.5 font-display text-2xl tracking-tight transition-transform hover:scale-[1.02]"
             onClick={closeDrawer}
             aria-label="KR8 Digitals home"
           >
-            <span className="text-gradient">KR8</span>
-            <span className="text-white">Digitals</span>
+            <img
+              src="/branding/kr8_logo.png"
+              alt="KR8 Digitals Logo"
+              className="h-9 w-9 rounded-xl object-contain shadow-md shadow-pink-500/20"
+            />
+            <div className="flex items-center">
+              <span className="text-gradient font-black">KR8</span>
+              <span className="text-white font-bold ml-1">Digitals</span>
+            </div>
           </Link>
 
           {/* Desktop Links (Kept visible on laptop/desktop) */}
@@ -297,9 +304,16 @@ export default function Navbar() {
             <aside className="w-screen max-w-md bg-[#120022] border-l border-white/10 shadow-2xl flex flex-col overflow-y-auto">
               {/* Drawer Top Header */}
               <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
-                <Link to="/" onClick={closeDrawer} className="font-display text-xl tracking-tight">
-                  <span className="text-gradient">KR8</span>
-                  <span className="text-white">Digitals</span>
+                <Link to="/" onClick={closeDrawer} className="flex items-center gap-2 font-display text-xl tracking-tight">
+                  <img
+                    src="/branding/kr8_logo.png"
+                    alt="KR8 Digitals Logo"
+                    className="h-7 w-7 rounded-lg object-contain shadow-sm"
+                  />
+                  <div className="flex items-center">
+                    <span className="text-gradient font-black">KR8</span>
+                    <span className="text-white font-bold ml-1">Digitals</span>
+                  </div>
                 </Link>
                 <button
                   onClick={closeDrawer}

@@ -4,9 +4,11 @@ export type IconName =
   | "palette" | "video" | "code" | "mobile" | "chart" | "spark" | "bot" | "pen"
   | "book" | "check" | "user" | "briefcase" | "bell" | "lock" | "unlock" | "certificate"
   | "paperclip" | "alert" | "heart" | "bolt" | "trophy" | "users" | "calendar" | "youtube"
-  | "tiktok" | "instagram" | "facebook" | "x" | "linkedin" | "message" | "share" | "volume" | "volumeX" | "fingerprint";
+  | "tiktok" | "instagram" | "facebook" | "x" | "linkedin" | "message" | "share" | "volume" | "volumeX" | "fingerprint"
+  | "search" | "arrowRight" | "shield" | "menu" | "close" | "cog";
 
 const paths: Record<IconName, string> = {
+  cog: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z",
   palette: "M12 3a9 9 0 1 0 0 18h1.2a1.8 1.8 0 0 0 0-3.6h-.8a1.8 1.8 0 0 1 0-3.6H15a6 6 0 0 0 0-12.8A9 9 0 0 0 12 3Z M7.5 9.2h.01 M10.2 6.5h.01 M15.2 6.8h.01 M17.4 10h.01",
   video: "M4 6.5A2.5 2.5 0 0 1 6.5 4h7A2.5 2.5 0 0 1 16 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 17.5v-11Z M16 9l4-2v10l-4-2",
   code: "m8 9-3 3 3 3 M16 9l3 3-3 3 M14 5l-4 14",
@@ -41,6 +43,11 @@ const paths: Record<IconName, string> = {
   volume: "M11 5L6 9H2v6h4l5 4V5z M15.54 8.46a5 5 0 0 1 0 7.07 M19.07 4.93a10 10 0 0 1 0 14.14",
   volumeX: "M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6",
   fingerprint: "M12 2a10 10 0 0 0-6.88 17.23 M12 6a6 6 0 0 0-4.24 10.24 M12 10a2 2 0 0 0-1.41 3.41 M12 14v4 M8.5 19.5c1 .5 2.2.8 3.5.8s2.5-.3 3.5-.8 M15 11a3 3 0 0 1-1 2.23 M18 8a6 6 0 0 1-1.5 3.9 M20 5a10 10 0 0 1-2 5",
+  search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm10 2-4.35-4.35",
+  arrowRight: "M5 12h14 M12 5l7 7-7 7",
+  shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  menu: "M4 6h16 M4 12h16 M4 18h16",
+  close: "M18 6 6 18 M6 6l12 12",
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.7, className = "" }: { name: IconName; size?: number; strokeWidth?: number; className?: string } & SVGProps<SVGSVGElement>) {

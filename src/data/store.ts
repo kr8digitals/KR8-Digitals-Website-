@@ -669,8 +669,14 @@ export type Account = {
     offeredAt: number;
     offeredBy: string;
   };
+  googleAuth?: {
+    enabled: boolean;
+    linkedEmail: string;
+    linkedAt: number;
+    verifiedToken?: string;
+  };
   admin?: {
-    role: "ultimate" | "admin" | "coach" | "assistant";
+    role: "ultimate" | "admin" | "coach" | "assistant" | "attendance_reviewer";
     title?: string;
     permissions: string[];
     adminPassword?: string;
@@ -1547,6 +1553,44 @@ export function registerStudent(input: { name: string; email: string; phone: str
   );
 
   if (existing) {
+    // If existing account is a Tribe member, transition cleanly from Tribe Member to Student!
+    if (existing.type === "tribe") {
+      const newSkill = getSkill(input.skill);
+      if (!newSkill) return { ok: false, error: "Please select a valid skill." };
+      if (!newSkill.available) return { ok: false, error: `${newSkill.name} is currently not available.` };
+      if (!getSkillRegistration(input.skill)) return { ok: false, error: `Registration for ${newSkill.name} is currently closed.` };
+
+      const oldId = existing.id;
+      const serial = nextSerial(input.skill);
+      const studentId = kr8id(existing.name, input.skill, serial);
+
+      existing.type = "student";
+      existing.id = studentId;
+      existing.previousIds = Array.from(new Set([...(existing.previousIds || []), oldId]));
+      existing.skill = input.skill;
+      existing.skills = [input.skill];
+      existing.serial = serial;
+      existing.year = COHORT_YEAR;
+      existing.dob = input.dob || existing.dob;
+      existing.points = (existing.points || 0) + 100; // Registration bonus
+      existing.milestones = Array.from(
+        new Set([
+          ...(existing.milestones || []),
+          `Milestone: Transitioned from Tribe Member (${oldId}) to Academy Scholar in ${newSkill.name}`,
+        ])
+      );
+
+      updateAccount(oldId, existing);
+      addFeed({
+        kind: "registration",
+        name: existing.name,
+        skill: newSkill.name,
+        avatar: existing.avatar,
+      });
+
+      return { ok: true, student: existing };
+    }
+
     const targetSkillKey = input.skill;
     const currentSkillName = getSkillName(existing.skill);
     const targetSkillName = getSkillName(targetSkillKey);
@@ -2545,10 +2589,12 @@ export function saveAnnouncementBar(value: typeof ANNOUNCEMENT_BAR) {
 
 export type Announcement = {
   id: string;
-  type: "text" | "flyer";
+  type: "text" | "flyer" | "image" | "video";
   title: string;
   body?: string;
   image?: string;
+  videoUrl?: string;
+  videoPoster?: string;
   caption?: string;
   date: string;
   author: string;
@@ -5222,3 +5268,281 @@ export function deleteClientRequest(id: string): void {
 export function setBreakoutRooms(_streamId: string, breakouts: BreakoutRoom[]): void {
   updateLiveStream({ breakouts });
 }
+
+/* ==========================================================================
+   KR8 STUDENT-TO-STUDENT DIRECT MESSAGING & CONNECTIONS ARCHITECTURE
+   ========================================================================== */
+
+const DIRECT_MESSAGES_KEY = "kr8_direct_messages_v1";
+const BLOCKED_USERS_KEY = "kr8_blocked_users_v1";
+const CONVERSATION_REPORTS_KEY = "kr8_conv_reports_v1";
+
+export interface DirectMessage {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  text: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface ConversationSummary {
+  partner: Account;
+  lastMessage: DirectMessage;
+  unreadCount: number;
+}
+
+export function getAccountById(id: string): Account | undefined {
+  return findStudent(id) || getAccounts().find((a) => a.id === id);
+}
+
+let memoryDirectMessages: DirectMessage[] | null = null;
+
+function getRawDirectMessages(): DirectMessage[] {
+  if (memoryDirectMessages) return memoryDirectMessages;
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(DIRECT_MESSAGES_KEY);
+    memoryDirectMessages = raw ? JSON.parse(raw) : [];
+  } catch {
+    memoryDirectMessages = [];
+  }
+  return memoryDirectMessages || [];
+}
+
+function saveRawDirectMessages(messages: DirectMessage[]): void {
+  memoryDirectMessages = messages;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(DIRECT_MESSAGES_KEY, JSON.stringify(messages));
+      window.dispatchEvent(new Event("kr8:direct-messages-updated"));
+    } catch (e) {
+      console.warn("Could not persist direct messages to localStorage:", e);
+    }
+  }
+}
+
+export function getDirectMessagesBetween(idA: string, idB: string): DirectMessage[] {
+  const all = getRawDirectMessages();
+  return all.filter(
+    (m) =>
+      (m.senderId === idA && m.recipientId === idB) ||
+      (m.senderId === idB && m.recipientId === idA)
+  ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+export function sendDirectMessage(
+  senderId: string,
+  recipientId: string,
+  text: string
+): { ok: boolean; message?: DirectMessage; error?: string } {
+  if (!text || !text.trim()) {
+    return { ok: false, error: "Message cannot be empty." };
+  }
+  if (senderId === recipientId) {
+    return { ok: false, error: "Cannot send a message to yourself." };
+  }
+
+  // Check if blocked
+  if (isStudentBlocked(senderId, recipientId) || isStudentBlocked(recipientId, senderId)) {
+    return { ok: false, error: "You cannot message this student due to privacy or block controls." };
+  }
+
+  // Check privacy rules
+  const recipient = getAccountById(recipientId);
+  const sender = getAccountById(senderId);
+  if (!recipient) {
+    return { ok: false, error: "Recipient student not found." };
+  }
+
+  const privacy = recipient.messagePrivacy || "Anyone";
+  if (privacy === "No one") {
+    return { ok: false, error: `${recipient.name} does not accept direct messages.` };
+  }
+  if (privacy === "Friends only") {
+    const senderFollows = (sender?.following || []).includes(recipientId);
+    const recipientFollows = (recipient.following || []).includes(senderId);
+    if (!senderFollows && !recipientFollows) {
+      return { ok: false, error: `${recipient.name} only accepts messages from students they are connected with.` };
+    }
+  }
+
+  const newMsg: DirectMessage = {
+    id: "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    senderId,
+    recipientId,
+    text: text.trim(),
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+
+  const all = getRawDirectMessages();
+  all.push(newMsg);
+  saveRawDirectMessages(all);
+
+  return { ok: true, message: newMsg };
+}
+
+export function markConversationRead(studentId: string, partnerId: string): void {
+  const all = getRawDirectMessages();
+  let changed = false;
+  const updated = all.map((m) => {
+    if (m.recipientId === studentId && m.senderId === partnerId && !m.read) {
+      changed = true;
+      return { ...m, read: true };
+    }
+    return m;
+  });
+  if (changed) {
+    saveRawDirectMessages(updated);
+  }
+}
+
+export function getStudentConversations(studentId: string): ConversationSummary[] {
+  const all = getRawDirectMessages();
+  const partnersMap = new Map<string, { lastMsg: DirectMessage; unread: number }>();
+
+  for (const msg of all) {
+    const partnerId = msg.senderId === studentId ? msg.recipientId : msg.recipientId === studentId ? msg.senderId : null;
+    if (!partnerId) continue;
+
+    const existing = partnersMap.get(partnerId);
+    const isUnread = msg.recipientId === studentId && !msg.read;
+
+    if (!existing) {
+      partnersMap.set(partnerId, { lastMsg: msg, unread: isUnread ? 1 : 0 });
+    } else {
+      const isNewer = new Date(msg.createdAt).getTime() > new Date(existing.lastMsg.createdAt).getTime();
+      partnersMap.set(partnerId, {
+        lastMsg: isNewer ? msg : existing.lastMsg,
+        unread: existing.unread + (isUnread ? 1 : 0),
+      });
+    }
+  }
+
+  const summaries: ConversationSummary[] = [];
+  for (const [partnerId, data] of partnersMap.entries()) {
+    const partner = getAccountById(partnerId);
+    if (partner) {
+      summaries.push({
+        partner,
+        lastMessage: data.lastMsg,
+        unreadCount: data.unread,
+      });
+    }
+  }
+
+  return summaries.sort(
+    (a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+  );
+}
+
+/**
+ * High-performance scalable student search:
+ * Only filters as-you-type with limit, never materializes or renders full student table in DOM.
+ */
+export function searchStudentsFast(query: string, excludeId?: string, limit: number = 20): Account[] {
+  if (!query || !query.trim()) return [];
+  const q = query.toLowerCase().trim();
+  const students = getStudents();
+  const results: Account[] = [];
+
+  for (const s of students) {
+    if (excludeId && s.id === excludeId) continue;
+    if (s.isPlaceholder) continue;
+
+    const nameMatch = s.name.toLowerCase().includes(q);
+    const idMatch = s.id.toLowerCase().includes(q);
+    const skillMatch = (s.skill || "").toLowerCase().includes(q);
+
+    if (nameMatch || idMatch || skillMatch) {
+      results.push(s);
+      if (results.length >= limit) break;
+    }
+  }
+
+  return results;
+}
+
+export function getBlockedUserIds(studentId: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(`${BLOCKED_USERS_KEY}_${studentId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blockStudent(currentStudentId: string, targetStudentId: string): void {
+  if (typeof window === "undefined") return;
+  const current = getBlockedUserIds(currentStudentId);
+  if (!current.includes(targetStudentId)) {
+    current.push(targetStudentId);
+    localStorage.setItem(`${BLOCKED_USERS_KEY}_${currentStudentId}`, JSON.stringify(current));
+    window.dispatchEvent(new Event("kr8:blocks-updated"));
+  }
+}
+
+export function unblockStudent(currentStudentId: string, targetStudentId: string): void {
+  if (typeof window === "undefined") return;
+  const current = getBlockedUserIds(currentStudentId).filter((id) => id !== targetStudentId);
+  localStorage.setItem(`${BLOCKED_USERS_KEY}_${currentStudentId}`, JSON.stringify(current));
+  window.dispatchEvent(new Event("kr8:blocks-updated"));
+}
+
+export function isStudentBlocked(userA: string, userB: string): boolean {
+  const blocksA = getBlockedUserIds(userA);
+  return blocksA.includes(userB);
+}
+
+export function reportConversation(
+  reporterId: string,
+  reportedId: string,
+  reason: string
+): { ok: boolean; message: string } {
+  if (typeof window === "undefined") return { ok: true, message: "Report submitted." };
+  try {
+    const raw = localStorage.getItem(CONVERSATION_REPORTS_KEY);
+    const reports = raw ? JSON.parse(raw) : [];
+    reports.push({
+      id: "rep_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      reporterId,
+      reportedId,
+      reason: reason.trim(),
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
+    localStorage.setItem(CONVERSATION_REPORTS_KEY, JSON.stringify(reports));
+    window.dispatchEvent(new Event("kr8:reports-updated"));
+  } catch {}
+  return { ok: true, message: "Conversation reported to KR8 administration for moderation." };
+}
+
+export function toggleFollowStudent(
+  currentStudentId: string,
+  targetStudentId: string
+): { following: boolean; updatedProfile?: Account } {
+  const current = getAccountById(currentStudentId);
+  const target = getAccountById(targetStudentId);
+  if (!current || !target) return { following: false };
+
+  const followingList = current.following || [];
+  const isFollowing = followingList.includes(targetStudentId);
+
+  const nextFollowing = isFollowing
+    ? followingList.filter((id: string) => id !== targetStudentId)
+    : [...followingList, targetStudentId];
+
+  const targetFollowers = target.followers || [];
+  const nextTargetFollowers = isFollowing
+    ? targetFollowers.filter((id: string) => id !== currentStudentId)
+    : [...targetFollowers, currentStudentId];
+
+  updateAccount(currentStudentId, { following: nextFollowing });
+  updateAccount(targetStudentId, { followers: nextTargetFollowers });
+
+  const updatedProfile = getAccountById(currentStudentId) || current;
+  return { following: !isFollowing, updatedProfile };
+}
+
