@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { IMG } from "../data/images";
-import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES, studentCount, tribeCount } from "../data/store";
+import { getPortfolio, BLOG, getTestimonials, FULL_PORTFOLIO_LINK, getAnnouncements, getHomepageSettings, studentCount, tribeCount } from "../data/store";
+import { getSiteContent, type SiteContent } from "../data/cmsStore";
 import Marquee from "../components/Marquee";
 import LiveFeed from "../components/LiveFeed";
 import LeaderboardList from "../components/LeaderboardList";
@@ -11,6 +12,8 @@ import { Pill, GradientButton, GhostButton, SectionHead, Card, GlowImage } from 
 import Dashboard from "./Dashboard";
 import Icon from "../components/Icon";
 import HeroInteractiveCanvas from "../components/HeroInteractiveCanvas";
+import { useSeo } from "../lib/useSeo";
+import AnnouncementCard from "../components/AnnouncementCard";
 
 export default function Home() {
   const { student } = useAuth();
@@ -47,30 +50,6 @@ function CountUp({ end, suffix = "" }: { end: number; suffix?: string }) {
   return <div ref={ref} className="font-display min-w-0 text-2xl text-gradient sm:text-5xl">{n.toLocaleString()}{suffix}</div>;
 }
 
-const pillars = [
-  {
-    icon: "certificate" as const,
-    label: "The Academy",
-    title: "Zero Tuition. Pure Craft.",
-    desc: "Intensive week-by-week cohorts in Graphic Design, Web Engineering, and Video Editing. Real tutors, live feedback, verifiable graduation certificates — 100% free.",
-    to: "/register",
-  },
-  {
-    icon: "users" as const,
-    label: "The Tribe",
-    title: "Never Build Alone Again.",
-    desc: "An unbroken African creative family. Share messy in-progress drafts, find collaborators, exchange paid gigs, and lift each other into high-income careers.",
-    to: "/tribe#join",
-  },
-  {
-    icon: "video" as const,
-    label: "The Agency",
-    title: "From Free Classes to Paid Retainers.",
-    desc: "We engineer brand positioning, conversion websites, and viral short-form video engines for global companies — executed by our vetted senior directors and top graduates.",
-    to: "/agency",
-  },
-];
-
 const journey = [
   { n: "1", t: "Claim Your Verifiable KR8 ID in 60s" },
   { n: "2", t: "Show Up & Ship Daily Live Drills" },
@@ -79,138 +58,110 @@ const journey = [
   { n: "5", t: "Graduate & Step into Paid Client Work" },
 ];
 
+const PILL_MESSAGES = [
+  "Unified Creative Institution & Agency",
+  "Zero Tuition · 100% Free Cohorts",
+  "Doubt to Proof · We Made It Real",
+  "From Novice to Paid Professional",
+  "Africa's Creative Movement",
+];
+
 function GuestHome() {
+  useSeo({
+    title: "KR8 Digitals — Learn Free. Belong Deeply. Build for Real.",
+    description:
+      "KR8 Digitals is an impact-driven creative ecosystem empowering African talent through tuition-free digital skills training, community belonging, and agency execution.",
+    path: "/",
+  });
   const announcements = getAnnouncements();
-  const portfolio = getPortfolio();
+  const [portfolio, setPortfolio] = useState(() => getPortfolio());
   const [homepageSettings, setHomepageSettings] = useState(getHomepageSettings());
-  const [narrativeIndex, setNarrativeIndex] = useState(0);
-  const [narrativeFading, setNarrativeFading] = useState(false);
+  const [cms, setCms] = useState<SiteContent>(() => getSiteContent());
+
+  const [liveCounts, setLiveCounts] = useState(() => ({
+    students: studentCount(),
+    tribe: tribeCount(),
+  }));
 
   useEffect(() => {
-    const sync = () => setHomepageSettings(getHomepageSettings());
-    window.addEventListener("kr8:homepage-settings-updated", sync);
-    window.addEventListener("storage", sync);
+    const syncSettings = () => setHomepageSettings(getHomepageSettings());
+    const syncCounts = () => setLiveCounts({ students: studentCount(), tribe: tribeCount() });
+    const syncCms = () => setCms(getSiteContent());
+    const syncPortfolio = () => setPortfolio(getPortfolio());
+
+    window.addEventListener("kr8:homepage-settings-updated", syncSettings);
+    window.addEventListener("kr8:accounts-updated", syncCounts);
+    window.addEventListener("kr8:cms-updated", syncCms);
+    window.addEventListener("kr8:portfolio-updated", syncPortfolio);
+    window.addEventListener("storage", syncSettings);
+    window.addEventListener("storage", syncCounts);
+    window.addEventListener("storage", syncCms);
+    window.addEventListener("storage", syncPortfolio);
     return () => {
-      window.removeEventListener("kr8:homepage-settings-updated", sync);
-      window.removeEventListener("storage", sync);
+      window.removeEventListener("kr8:homepage-settings-updated", syncSettings);
+      window.removeEventListener("kr8:accounts-updated", syncCounts);
+      window.removeEventListener("kr8:cms-updated", syncCms);
+      window.removeEventListener("kr8:portfolio-updated", syncPortfolio);
+      window.removeEventListener("storage", syncSettings);
+      window.removeEventListener("storage", syncCounts);
+      window.removeEventListener("storage", syncCms);
+      window.removeEventListener("storage", syncPortfolio);
     };
   }, []);
 
-  const steps = homepageSettings.doubtToBelief && homepageSettings.doubtToBelief.length
-    ? homepageSettings.doubtToBelief
-    : DEFAULT_DOUBT_TO_BELIEF;
-
-  const narrativeLines = homepageSettings.narrativeLines && homepageSettings.narrativeLines.length
-    ? homepageSettings.narrativeLines
-    : DEFAULT_NARRATIVE_LINES;
-
-  const [skepticIndex, setSkepticIndex] = useState(0);
-  const [skepticFading, setSkepticFading] = useState(false);
-
-  // Rotate narrative skepticism line every 3.2s
-  useEffect(() => {
-    if (!narrativeLines.length) return;
-    const timer = setInterval(() => {
-      setSkepticFading(true);
-      setTimeout(() => {
-        setSkepticIndex((prev) => (prev + 1) % narrativeLines.length);
-        setSkepticFading(false);
-      }, 400);
-    }, 3600);
-    return () => clearInterval(timer);
-  }, [narrativeLines.length]);
+  // Top pill badge rotating text (starts on initial institutional branding, then rotates every 3.8s)
+  const [pillIndex, setPillIndex] = useState(0);
+  const [pillFade, setPillFade] = useState(false);
 
   useEffect(() => {
-    if (!steps.length) return;
     const timer = setInterval(() => {
-      setNarrativeFading(true);
+      setPillFade(true);
       setTimeout(() => {
-        setNarrativeIndex((prev) => (prev + 1) % steps.length);
-        setNarrativeFading(false);
-      }, 400);
-    }, 5500);
+        setPillIndex((prev) => (prev + 1) % PILL_MESSAGES.length);
+        setPillFade(false);
+      }, 300);
+    }, 3800);
     return () => clearInterval(timer);
-  }, [steps.length]);
+  }, []);
 
   return (
     <div>
-      {/* HERO SECTION — Cinematic & Engaging Experience with Ambient Flowing Gradient Motion */}
+      {/* HERO SECTION — Deep Dark Obsidian Theme Matching Site Tone */}
       <section className="hero-section relative min-h-[auto] md:min-h-[82vh] flex items-center overflow-hidden pt-4 pb-12 sm:pt-6 sm:pb-16 md:pt-7 md:pb-20">
-        {/* Ambient Flowing Gradient Motion Layer */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div
-            className="absolute -top-[25%] left-1/2 -translate-x-1/2 h-[550px] w-[900px] rounded-full bg-gradient-to-tr from-pink-600/20 via-purple-600/15 to-transparent blur-[130px] animate-pulse"
-            style={{ animationDuration: "8s" }}
-          />
-          <div
-            className="absolute top-[35%] -left-[15%] h-[450px] w-[550px] rounded-full bg-gradient-to-br from-purple-800/20 via-pink-700/10 to-transparent blur-[110px] animate-pulse"
-            style={{ animationDuration: "12s" }}
-          />
-          <div
-            className="absolute top-[45%] -right-[15%] h-[480px] w-[580px] rounded-full bg-gradient-to-bl from-pink-500/15 via-blue-600/10 to-transparent blur-[120px] animate-pulse"
-            style={{ animationDuration: "10s" }}
-          />
-        </div>
-
-        {/* Ambient Flowing Gradient Ribbon */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden z-0 opacity-40">
-          <svg className="absolute w-[200%] h-full -top-10 left-0" viewBox="0 0 1440 600" fill="none">
-            <path
-              d="M-200 350 C 200 150, 500 480, 850 280 C 1200 80, 1400 400, 1700 240"
-              stroke="url(#hero-ribbon-gradient)"
-              strokeWidth="2.5"
-              strokeDasharray="12 8"
-              strokeLinecap="round"
-            />
-            <defs>
-              <linearGradient id="hero-ribbon-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ec4899" stopOpacity="0.2" />
-                <stop offset="50%" stopColor="#a855f7" stopOpacity="0.8" />
-                <stop offset="100%" stopColor="#ec4899" stopOpacity="0.2" />
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-
         {/* Dynamic Interactive Background Canvas & Floating Creative Objects */}
         <HeroInteractiveCanvas />
 
         <div className="hero-container relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6">
-          {/* Institution Badge with live pulsing status — Centered above both columns */}
-          <div className="flex w-full justify-center mb-5 sm:mb-8">
-            <div className="hero-badge inline-flex items-center justify-center gap-2 rounded-full border border-pink-500/30 bg-gradient-to-r from-pink-500/15 via-purple-500/15 to-transparent px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 text-center">
+          {/* Top Pill Badge with Smoothly Rotating Text (Always single-line, never wraps) */}
+          <div className="flex w-full justify-center mb-5 sm:mb-8 px-2">
+            <div className="hero-badge inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-full border border-pink-500/30 bg-black/70 px-3 py-1 sm:px-4 sm:py-1.5 backdrop-blur-md shadow-lg shadow-pink-500/5 whitespace-nowrap max-w-full">
               <span className="relative flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-pink-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-pink-500" />
               </span>
-              <span className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 truncate">
-                Unified Creative Institution & Digital Agency
+              <span
+                className={`text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-pink-200 truncate transition-opacity duration-300 ${
+                  pillFade ? "opacity-0" : "opacity-100"
+                }`}
+              >
+                {PILL_MESSAGES[pillIndex]}
               </span>
             </div>
           </div>
 
           {/* Two-Column Layout: Left Text / Right Image (Stacks vertically on mobile) */}
           <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-12">
-            {/* Left Column: Typography, Supporting Description, Animated Narrative, CTAs & Glass Stats */}
+            {/* Left Column: Typography, Supporting Description, All 3 CTAs & Glass Stats */}
             <div className="hero-content rise-in lg:col-span-7">
-              {/* Skepticism Hook — Animated Line from "Doubt to Belief" Sequence */}
-              <div className="h-9 sm:h-10 flex items-center mb-1">
-                <div
-                  className={`inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-black/50 px-3.5 py-1 backdrop-blur-md transition-all duration-400 ${
-                    skepticFading ? "opacity-0 -translate-y-1.5" : "opacity-100 translate-y-0"
-                  }`}
-                >
-                  <span className="text-pink-400 font-serif italic text-xs">“</span>
-                  <span className="text-xs sm:text-sm font-medium text-[#e4daf2] tracking-wide">
-                    {narrativeLines[skepticIndex]}
-                  </span>
-                  <span className="text-pink-400 font-serif italic text-xs">”</span>
-                </div>
-              </div>
-
               {/* Bold Headline — Resolving Doubt into Proof */}
               <h1 className="hero-headline font-display text-4xl sm:text-6xl lg:text-7xl font-bold leading-tight tracking-tight text-white">
-                {homepageSettings.heroHeadline ? (
+                {cms.home.heroHeadline ? (
+                  cms.home.heroHeadline.includes("Happen.") ? (
+                    <>We Make It <span className="text-gradient font-extrabold">Happen.</span></>
+                  ) : (
+                    cms.home.heroHeadline
+                  )
+                ) : homepageSettings.heroHeadline ? (
                   homepageSettings.heroHeadline.includes("Happen.") ? (
                     <>We Make It <span className="text-gradient font-extrabold">Happen.</span></>
                   ) : (
@@ -227,94 +178,49 @@ function GuestHome() {
                   <span className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-pink-500/20 text-[10px] sm:text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
                     ✦
                   </span>
-                  <span>Learn digital skills <span className="text-gradient font-extrabold">free.</span></span>
+                  <span>{cms.home.heroLine1 || <>Learn digital skills <span className="text-gradient font-extrabold">free.</span></>}</span>
                 </div>
                 <div className="flex items-center gap-2.5 sm:gap-3">
                   <span className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-purple-500/20 text-[10px] sm:text-xs text-purple-400 ring-1 ring-purple-500/40 shadow-sm shadow-purple-500/20">
                     ✦
                   </span>
-                  <span>Belong and build with our <span className="text-gradient font-extrabold">tribe.</span></span>
+                  <span>{cms.home.heroLine2 || <>Belong and build with our <span className="text-gradient font-extrabold">tribe.</span></>}</span>
                 </div>
                 <div className="flex items-center gap-2.5 sm:gap-3">
                   <span className="flex h-5 w-5 sm:h-6 sm:w-6 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-pink-500/20 text-[10px] sm:text-xs text-pink-400 ring-1 ring-pink-500/40 shadow-sm shadow-pink-500/20">
                     ✦
                   </span>
-                  <span>Let's bring your <span className="text-gradient font-extrabold">brand to life.</span></span>
+                  <span>{cms.home.heroLine3 || <>Let's bring your <span className="text-gradient font-extrabold">brand to life.</span></>}</span>
                 </div>
               </div>
 
-              {/* Animated "Doubt to Belief" Narrative Sequence (Editable in Admin) */}
-              {steps.length > 0 && (
-                <div className="mt-5 sm:mt-6 w-full rounded-2xl border border-white/10 bg-gradient-to-r from-white/[0.04] via-black/40 to-white/[0.02] p-3.5 sm:p-4 backdrop-blur-md shadow-xl transition-all">
-                  <div className="flex items-center justify-between pb-2 border-b border-white/5">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-2 w-2 rounded-full bg-pink-400 animate-ping" />
-                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-pink-300">
-                        The Journey: From Doubt to Belief
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {steps.map((_, sIdx) => (
-                        <button
-                          key={sIdx}
-                          onClick={() => {
-                            setNarrativeFading(true);
-                            setTimeout(() => {
-                              setNarrativeIndex(sIdx);
-                              setNarrativeFading(false);
-                            }, 200);
-                          }}
-                          className={`h-1.5 transition-all rounded-full ${
-                            sIdx === narrativeIndex ? "w-5 bg-pink-400" : "w-1.5 bg-white/20 hover:bg-white/40"
-                          }`}
-                          aria-label={`Jump to narrative step ${sIdx + 1}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={`mt-2.5 transition-opacity duration-300 ${narrativeFading ? "opacity-0" : "opacity-100"}`}>
-                    <div className="flex items-start gap-2">
-                      <span className="shrink-0 rounded bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-amber-300">
-                        Student Doubt
-                      </span>
-                      <p className="text-xs sm:text-sm text-[#cabfe0] italic leading-snug">
-                        "{steps[narrativeIndex]?.doubt}"
-                      </p>
-                    </div>
-
-                    <div className="mt-2 flex items-start gap-2">
-                      <span className="shrink-0 rounded bg-emerald-500/20 border border-emerald-500/40 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase text-emerald-300">
-                        KR8 Reality
-                      </span>
-                      <p className="text-xs sm:text-sm font-semibold text-white leading-snug">
-                        {steps[narrativeIndex]?.belief}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Three CTA buttons with Mobile Layout Polish */}
-              <div className="hero-actions mt-6 sm:mt-8 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3.5">
-                <GradientButton to="/register" className="group shadow-xl shadow-pink-500/25 px-5 sm:px-6 py-3 text-xs sm:text-sm font-bold justify-center text-center">
-                  <span>Start Learning Free</span>
-                  <span className="ml-2 inline-block transition-transform duration-300 group-hover:translate-x-1">→</span>
+              {/* All Three CTA Buttons on a Single Line (Two-Step Exploration Routing) */}
+              <div className="hero-actions mt-6 sm:mt-8 flex items-center gap-2 sm:gap-3 flex-nowrap overflow-x-auto pb-1 max-w-full">
+                <GradientButton
+                  to={cms.home.primaryCtaLink || "/academy"}
+                  className="whitespace-nowrap px-4 sm:px-6 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold shadow-lg shadow-pink-500/25 shrink-0"
+                >
+                  <span>{cms.home.primaryCtaText || "Start Learning Free"}</span>
+                  <span className="ml-1 sm:ml-1.5 inline-block">→</span>
                 </GradientButton>
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
-                  <GhostButton to="/tribe#join" className="hero-tribe-cta border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm justify-center text-center">
-                    Join Tribe
-                  </GhostButton>
-                  <GhostButton to="/agency" className="hero-agency-cta border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10 px-3 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm justify-center text-center">
-                    Hire Agency
-                  </GhostButton>
-                </div>
+                <GhostButton
+                  to={cms.home.tribeCtaLink || "/tribe"}
+                  className="hero-tribe-cta whitespace-nowrap px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs font-semibold shrink-0 border-white/20 bg-white/[0.04] backdrop-blur-md hover:border-pink-500/40 hover:bg-pink-500/10 text-[#e4daf2]"
+                >
+                  {cms.home.tribeCtaText || "Join the Tribe"}
+                </GhostButton>
+                <GhostButton
+                  to={cms.home.agencyCtaLink || "/agency"}
+                  className="hero-agency-cta whitespace-nowrap px-3 sm:px-4 py-2 sm:py-2.5 text-[11px] sm:text-xs font-semibold shrink-0 border-white/15 bg-white/[0.02] backdrop-blur-md hover:border-purple-400/40 hover:bg-purple-500/10 text-[#e4daf2]"
+                >
+                  {cms.home.agencyCtaText || "Hire the Agency"}
+                </GhostButton>
               </div>
 
               {/* Stats Row with Mobile Responsive Grid */}
               <div className="hero-stats mt-6 sm:mt-10 grid grid-cols-3 gap-2 sm:gap-4">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06]">
-                  <CountUp end={studentCount()} suffix="+" />
+                  <CountUp end={liveCounts.students} suffix="+" />
                   <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
                     <span className="truncate">Students</span>
@@ -322,7 +228,7 @@ function GuestHome() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-purple-500/30 hover:bg-white/[0.06]">
-                  <CountUp end={tribeCount()} suffix="+" />
+                  <CountUp end={liveCounts.tribe} suffix="+" />
                   <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
                     <span className="h-1.5 w-1.5 rounded-full bg-pink-400 shrink-0" />
                     <span className="truncate">Tribe Members</span>
@@ -330,7 +236,7 @@ function GuestHome() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 sm:p-4 backdrop-blur-md transition-all duration-300 hover:border-pink-500/30 hover:bg-white/[0.06]">
-                  <CountUp end={homepageSettings.projectsDone} suffix="+" />
+                  <CountUp end={cms.home.projectsDone || homepageSettings.projectsDone || 120} suffix="+" />
                   <div className="mt-1 flex items-center gap-1 sm:gap-1.5 text-[8px] sm:text-xs font-semibold uppercase tracking-wider text-[#a594c7]">
                     <span className="h-1.5 w-1.5 rounded-full bg-purple-400 shrink-0" />
                     <span className="truncate">Projects Done</span>
@@ -382,17 +288,37 @@ function GuestHome() {
       {/* THREE PILLARS */}
       <section className="section-bg py-20">
         <div className="mx-auto max-w-7xl px-5">
-          <SectionHead label="One platform, three pillars" title="Learn. Belong." highlight="Build." sub="Academy, Tribe and Agency — one unified creative institution." center />
+          <SectionHead
+            label={cms.home.pillarsLabel || "One platform, three pillars"}
+            title={cms.home.pillarsTitle || "Learn. Belong."}
+            highlight="Build."
+            sub={cms.home.pillarsSub || "Academy, Tribe and Agency — one unified creative institution."}
+            center
+          />
           <div className="mt-14 grid gap-6 lg:grid-cols-3">
-            {pillars.map((p) => (
-              <Card key={p.label} className="flex flex-col">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white"><Icon name={p.icon} size={22} /></div>
-                <p className="text-[11px] uppercase tracking-wider text-pink-400">{p.label}</p>
-                <h3 className="mt-1 text-xl font-bold text-white">{p.title}</h3>
-                <p className="mt-3 flex-1 text-sm text-[#b8aecf]">{p.desc}</p>
-                <Link to={p.to} className="mt-5 text-sm font-semibold text-pink-400 underline underline-offset-4 hover:text-pink-300">See how it works →</Link>
-              </Card>
-            ))}
+            <Card className="flex flex-col">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white"><Icon name="certificate" size={22} /></div>
+              <p className="text-[11px] uppercase tracking-wider text-pink-400">{cms.home.pillar1Label || "The Academy"}</p>
+              <h3 className="mt-1 text-xl font-bold text-white">{cms.home.pillar1Title || "Zero Tuition. Pure Craft."}</h3>
+              <p className="mt-3 flex-1 text-sm text-[#b8aecf]">{cms.home.pillar1Desc || "Intensive week-by-week cohorts in Graphic Design, Web Engineering, and Video Editing. Real tutors, live feedback, verifiable graduation certificates — 100% free."}</p>
+              <Link to="/academy" className="mt-5 text-sm font-semibold text-pink-400 underline underline-offset-4 hover:text-pink-300">See how it works →</Link>
+            </Card>
+
+            <Card className="flex flex-col">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white"><Icon name="users" size={22} /></div>
+              <p className="text-[11px] uppercase tracking-wider text-pink-400">{cms.home.pillar2Label || "The Tribe"}</p>
+              <h3 className="mt-1 text-xl font-bold text-white">{cms.home.pillar2Title || "Never Build Alone Again."}</h3>
+              <p className="mt-3 flex-1 text-sm text-[#b8aecf]">{cms.home.pillar2Desc || "An unbroken African creative family. Share messy in-progress drafts, find collaborators, exchange paid gigs, and lift each other into high-income careers."}</p>
+              <Link to="/tribe" className="mt-5 text-sm font-semibold text-pink-400 underline underline-offset-4 hover:text-pink-300">See how it works →</Link>
+            </Card>
+
+            <Card className="flex flex-col">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white"><Icon name="video" size={22} /></div>
+              <p className="text-[11px] uppercase tracking-wider text-pink-400">{cms.home.pillar3Label || "The Agency"}</p>
+              <h3 className="mt-1 text-xl font-bold text-white">{cms.home.pillar3Title || "From Free Classes to Paid Retainers."}</h3>
+              <p className="mt-3 flex-1 text-sm text-[#b8aecf]">{cms.home.pillar3Desc || "We engineer brand positioning, conversion websites, and viral short-form video engines for global companies — executed by our vetted senior directors and top graduates."}</p>
+              <Link to="/agency" className="mt-5 text-sm font-semibold text-pink-400 underline underline-offset-4 hover:text-pink-300">See how it works →</Link>
+            </Card>
           </div>
         </div>
       </section>
@@ -402,10 +328,20 @@ function GuestHome() {
         <div className="mx-auto max-w-7xl px-5">
           <div className="rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-[#1a0030] to-[#12001f] p-8 sm:p-12">
             <div className="text-center">
-              <Pill>The Blueprint</Pill>
-              <h2 className="font-display mt-5 text-4xl text-white sm:text-5xl">From zero skills to <span className="text-gradient">getting paid.</span></h2>
+              <Pill>{cms.home.blueprintBadge || "The Blueprint"}</Pill>
+              <h2 className="font-display mt-5 text-4xl text-white sm:text-5xl">
+                {cms.home.blueprintTitle ? (
+                  cms.home.blueprintTitle.includes("getting paid") ? (
+                    <>From zero skills to <span className="text-gradient">getting paid.</span></>
+                  ) : (
+                    cms.home.blueprintTitle
+                  )
+                ) : (
+                  <>From zero skills to <span className="text-gradient">getting paid.</span></>
+                )}
+              </h2>
               <p className="mx-auto mt-4 max-w-2xl text-sm sm:text-base text-[#cabfe0]">
-                No tuition ransom. No 4-year theory degrees. A battle-tested path from cracking open design and code tools to billing international clients.
+                {cms.home.blueprintSub || "No tuition ransom. No 4-year theory degrees. A battle-tested path from cracking open design and code tools to billing international clients."}
               </p>
             </div>
             <div className="mt-12 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -418,8 +354,8 @@ function GuestHome() {
               ))}
             </div>
             <div className="mt-12 text-center">
-              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
-                Join the Free Cohort Today →
+              <GradientButton to={cms.home.blueprintCtaLink || "/academy"} className="shadow-xl shadow-pink-500/25">
+                {cms.home.blueprintCtaText || "Join the Free Cohort Today →"}
               </GradientButton>
             </div>
           </div>
@@ -467,18 +403,23 @@ function GuestHome() {
           <div className="text-center max-w-3xl mx-auto">
             <div className="inline-flex items-center gap-2 rounded-full border border-pink-500/30 bg-pink-500/10 px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-pink-300 backdrop-blur-md mb-4 shadow glow-pink-sm">
               <span className="h-1.5 w-1.5 rounded-full bg-pink-400 animate-ping" />
-              <span>KR8 Creative & Digital Agency</span>
+              <span>{cms.home.agencyEyebrow || "KR8 Creative & Digital Agency"}</span>
             </div>
 
             <h2 className="font-display text-3xl sm:text-5xl font-black tracking-tight text-white leading-tight">
-              Stop Being Invisible. We Turn Brands into <span className="text-gradient">Market Leaders.</span>
+              {cms.home.agencyHeadline ? (
+                cms.home.agencyHeadline.includes("Market Leaders.") ? (
+                  <>Stop Being Invisible. We Turn Brands into <span className="text-gradient">Market Leaders.</span></>
+                ) : (
+                  cms.home.agencyHeadline
+                )
+              ) : (
+                <>Stop Being Invisible. We Turn Brands into <span className="text-gradient">Market Leaders.</span></>
+              )}
             </h2>
 
             <p className="mt-4 text-sm sm:text-base text-[#cabfe0] leading-relaxed">
-              Most businesses lose 60%+ of their potential revenue because their visual identity looks amateur,
-              their website fails to convert, or their content gets drowned out by competitors. We engineer your complete
-              brand transformation — positioning you to command premium prices, double your digital visibility, and turn
-              curious visitors into high-ticket clients.
+              {cms.home.agencyDescription || "Most businesses lose 60%+ of their potential revenue because their visual identity looks amateur, their website fails to convert, or their content gets drowned out by competitors. We engineer your complete brand transformation — positioning you to command premium prices, double your digital visibility, and turn curious visitors into high-ticket clients."}
             </p>
           </div>
 
@@ -701,13 +642,9 @@ function GuestHome() {
           <div className="mx-auto max-w-7xl px-5">
             <SectionHead label="From the desk" title="Latest" highlight="announcements" />
             <div className="mt-10 grid gap-6 md:grid-cols-2">
-              {announcements.map((a) =>
-                a.type === "text" ? (
-                    <Card key={a.id}><p className="text-xs uppercase tracking-wider text-[#8a7ba8]">{a.date} · {a.author}</p><h3 className="mt-2 text-xl font-bold text-white">{a.title}</h3><p className="mt-3 text-sm text-[#b8aecf]">{a.body}</p></Card>
-                ) : (
-                  <Card key={a.id} className="overflow-hidden !p-0"><div className="aspect-square w-full overflow-hidden"><img src={a.image} alt={a.title} className="h-full w-full object-cover" /></div><div className="p-5"><p className="text-xs uppercase tracking-wider text-[#8a7ba8]">{a.date} · {a.author}</p><h3 className="mt-1 text-lg font-bold text-white">{a.title}</h3><p className="mt-2 text-sm text-[#b8aecf]">{a.caption}</p></div></Card>
-                )
-              )}
+              {announcements.map((a) => (
+                <AnnouncementCard key={a.id} announcement={a} />
+              ))}
             </div>
           </div>
         </section>

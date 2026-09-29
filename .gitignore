@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.env.local
+.env.*.local
 
 # Editor directories and files
 .vscode/*
@@ -23,3 +25,17 @@ dist-ssr
 *.sln
 *.sw?
 .npm
+.sudo_as_admin_successful
+uploads/
+bin/
+.cache/
+.gitconfig
+.env
+
+
+.config/
+*.tsbuildinfo
+
+
+# generated test bundle
+.ms_bundle.cjs

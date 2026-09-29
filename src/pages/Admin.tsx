@@ -1,53 +1,140 @@
 import { useState, useEffect, type ChangeEvent } from "react";
+import { useSeo } from "../lib/useSeo";
+import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
 import {
-  SKILLS, ATTENDANCE_TYPES, PORTFOLIO,
-  getAnnouncements, saveAnnouncements, getSocialLinks, saveSocialLinks,
+  getSkills, getSkill, getSkillName, saveCustomSkill, deleteCustomSkill,
+  getWaitlistWhatsAppUrl, saveWaitlistWhatsAppUrl, areAllRegistrationsClosed,
+  type Skill, ATTENDANCE_TYPES, PORTFOLIO,
+  getAnnouncements, getSocialLinks, saveSocialLinks,
   getPaymentSettings, savePaymentSettings, getSkillRegistration, getSkillWhatsApp,
-  saveSkillSetting, getFounders, saveFounders, getTeam,
+  saveSkillSetting, getFounders, saveFounders, getTeam, saveTeam, type FounderProfile, type TeamProfile,
+  getPortfolio, savePortfolio,
+  getXpRules, saveXpRules, type XpRule,
   getTestimonials, addTestimonial, deleteTestimonial, updateTestimonial,
   getVideoComments, deleteVideoComment,
-  getAccounts, getStudents, updateAccount,
+  getAccounts, getStudents, updateAccount, findStudent,
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
   addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
   getStreamReplays, saveStreamReplays,
   canUserHostStream, deleteStreamRecording,
-  getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem, archiveAnnouncementToGallery,
+  getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem,
   getHomepageSettings, saveHomepageSettings, DEFAULT_DOUBT_TO_BELIEF, DEFAULT_NARRATIVE_LINES,
   revokeStudentRegistration, suspendStudentAccount, getSuspendedAccounts, restoreSuspendedAccount, upholdSuspendedAccount,
-  type Account, type Announcement, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount,
+  getClientRequests, updateClientRequestStatus, deleteClientRequest,
+  saveDynamicCurriculum, type Week,
+  type Account, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount, type ClientRequest,
 } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
-  processGraduationCertificate,
+  generateAutomaticCertificate,
+  formatCertificateStudentName,
+  downloadCertificatePdf,
   saveCertificateData,
-  type CertPosition,
 } from "../utils/certificate";
+import CertificateDocumentView from "../components/CertificateDocumentView";
+import {
+  issueCertificate,
+  withdrawCertificate,
+  getStudentCertificates,
+  type CertificateRecord,
+  type CertificateTier,
+} from "../data/store";
+import { MS_SUPABASE_SQL } from "../data/mindsetShift";
+import WebsiteContentManager from "../components/admin/WebsiteContentManager";
+import { hydrateAccountsFromSupabase } from "../lib/supabaseSync";
+import SignatureManager from "../components/admin/SignatureManager";
+import GranularPermissionsManager from "../components/admin/GranularPermissionsManager";
+import AnnouncementManager from "../components/admin/AnnouncementManager";
+import MindsetShiftTab from "../components/admin/MindsetShiftTab";
 
 const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
-  "Overview", "Home", "Academy", "Testimonial Videos", "Live Streams & Replays", "Agency", "Gallery Archive", "Student Management", "Blog",
-  "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
-  "Verify Remarks", "Payment Settings", "Founders & Partners", "Attendance Review", "Moderation", "Admin Permissions", "Supabase Database",
+  "Overview", "Website Content (CMS)", "Announcements", "Blog", "Gallery Archive", "Links Manager",
+  "Student Management", "Attendance Review", "Graduation & Certificates", "Coach & Admin Signatures",
+  "Verify Remarks", "Leaderboard & XP", "Academy", "Home", "Testimonial Videos", "Live Streams & Replays",
+  "Client Requests", "Agency", "Founders & Partners", "Payment Settings", "Moderation", "Admin Permissions", "Supabase Database",
+  "Mindset Shift",
+];
+
+interface NavGroup {
+  name: string;
+  items: { id: string; label: string; icon: Parameters<typeof Icon>[0]["name"]; badge?: string }[];
+}
+
+const ADMIN_GROUPS: NavGroup[] = [
+  {
+    name: "Analytics & Overview",
+    items: [{ id: "Overview", label: "Dashboard Overview", icon: "chart" }],
+  },
+  {
+    name: "Website Content (CMS)",
+    items: [
+      { id: "Website Content (CMS)", label: "Website Content (CMS)", icon: "spark", badge: "Live" },
+      { id: "Announcements", label: "Announcements & Media", icon: "bell" },
+      { id: "Blog", label: "Blog & Insights", icon: "pen" },
+      { id: "Gallery Archive", label: "Gallery Archive", icon: "palette" },
+      { id: "Links Manager", label: "Links & Redirects", icon: "share" },
+      { id: "Home", label: "Home Page Settings", icon: "spark" },
+    ],
+  },
+  {
+    name: "Academy & Students",
+    items: [
+      { id: "Student Management", label: "Student Registry", icon: "user" },
+      { id: "Attendance Review", label: "Attendance Review", icon: "check", badge: "Atd" },
+      { id: "Graduation & Certificates", label: "Graduation & Certificates", icon: "certificate" },
+      { id: "Coach & Admin Signatures", label: "Coach & Admin Signatures", icon: "pen", badge: "Keys" },
+      { id: "Verify Remarks", label: "Verify Remarks", icon: "lock" },
+      { id: "Leaderboard & XP", label: "Leaderboard & XP", icon: "trophy" },
+      { id: "Academy", label: "Courses & Curriculum", icon: "book" },
+    ],
+  },
+  {
+    name: "Media & Client Agency",
+    items: [
+      { id: "Agency", label: "Agency Portfolio", icon: "briefcase" },
+      { id: "Client Requests", label: "Client Inquiries", icon: "message" },
+      { id: "Testimonial Videos", label: "Testimonials", icon: "video" },
+      { id: "Live Streams & Replays", label: "Live Streams & Replays", icon: "youtube" },
+    ],
+  },
+  {
+    name: "Events & Programs",
+    items: [{ id: "Mindset Shift", label: "Mindset Shift", icon: "calendar", badge: "MS" }],
+  },
+  {
+    name: "System & Governance",
+    items: [
+      { id: "Founders & Partners", label: "Founders & Team", icon: "users" },
+      { id: "Payment Settings", label: "Payment & Accounts", icon: "bolt" },
+      { id: "Moderation", label: "Moderation & Safety", icon: "shield" },
+      { id: "Admin Permissions", label: "Staff Permissions", icon: "lock", badge: "Master" },
+      { id: "Supabase Database", label: "Cloud Sync", icon: "code" },
+    ],
+  },
 ];
 
 export default function Admin() {
-  const { student: currentUser } = useAuth();
+  useSeo({ path: "/admin", noindex: true });
+  const { student: currentUser, signOut } = useAuth();
+  const navigate = useNavigate();
   const [pw, setPw] = useState("");
   const [auth, setAuth] = useState(false);
   const [err, setErr] = useState(false);
   const [tab, setTab] = useState("Overview");
-  const [students, setStudents] = useState<Account[]>(() => getAccounts().filter((a) => a.type !== "tribe"));
+  const [students, setStudents] = useState<Account[]>(() => getAccounts());
 
   const isAuthorized = !!(currentUser?.admin || currentUser?.type === "founder" || currentUser?.type === "co-founder");
   const isUltimate = currentUser?.admin?.role === "ultimate" || currentUser?.type === "founder" || pw === MAIN_ADMIN_PASSWORD;
 
   // Real-time synchronization whenever student data or accounts update
   useEffect(() => {
-    const refresh = () => setStudents(getAccounts().filter((a) => a.type !== "tribe"));
+    const refresh = () => setStudents(getAccounts());
     window.addEventListener("kr8:accounts-updated", refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -56,14 +143,49 @@ export default function Admin() {
     };
   }, []);
 
+  // Ensure non-ultimate staff default to their first permitted section if Overview is unpermitted
+  useEffect(() => {
+    if (!isUltimate && currentUser?.admin?.permissions?.length) {
+      if (!currentUser.admin.permissions.includes(tab)) {
+        setTab(currentUser.admin.permissions[0]);
+      }
+    }
+  }, [currentUser, isUltimate, tab]);
+
+  const [isAttendanceReviewerOnly, setIsAttendanceReviewerOnly] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [navSearch, setNavSearch] = useState("");
+
+  // Close mobile drawer on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && mobileNavOpen) {
+        setMobileNavOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileNavOpen]);
+
   const unlock = () => {
-    const valid = pw === MAIN_ADMIN_PASSWORD || pw === currentUser?.admin?.adminPassword;
-    if (!valid) {
+    const isMainAdmin = pw === MAIN_ADMIN_PASSWORD;
+    const isAttendancePw = pw === ATTENDANCE_PW;
+    const isUserAdminPw = pw === currentUser?.admin?.adminPassword;
+
+    if (!isMainAdmin && !isAttendancePw && !isUserAdminPw) {
       setErr(true);
       return;
     }
+
     setErr(false);
     setAuth(true);
+
+    if (isAttendancePw || currentUser?.admin?.role === "attendance_reviewer") {
+      setIsAttendanceReviewerOnly(true);
+      setTab("Attendance Review");
+    } else {
+      setIsAttendanceReviewerOnly(false);
+    }
   };
 
   // If user is not logged in or not authorized, block public view completely
@@ -98,14 +220,14 @@ export default function Admin() {
           </div>
           <h1 className="font-display text-2xl text-white">Admin Access</h1>
           <p className="mt-2 text-sm text-[#b8aecf]">
-            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative password.
+            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative or reviewer credentials.
           </p>
           <input
             type="password"
             value={pw}
             onChange={(e) => setPw(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && unlock()}
-            placeholder="Admin password"
+            placeholder="Admin or Reviewer password"
             className="mt-5 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
           />
           {err && <p className="mt-2 text-xs text-red-400">Incorrect password.</p>}
@@ -117,7 +239,63 @@ export default function Admin() {
     );
   }
 
-  const allowedSections = isUltimate ? sections : sections.filter((s) => currentUser?.admin?.permissions.includes(s));
+  // ATTENDANCE REVIEWER QUARANTINE: Strict separation of powers
+  if (isAttendanceReviewerOnly || currentUser?.admin?.role === "attendance_reviewer") {
+    return (
+      <div className="section-bg min-h-screen">
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+          {/* Quarantined Reviewer Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-blue-500/30 bg-blue-500/10 p-6 backdrop-blur-md mb-8">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                <Icon name="check" className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-display text-xl sm:text-2xl font-bold text-white">
+                    Attendance Review <span className="text-gradient">Portal</span>
+                  </h1>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                    Quarantined Reviewer
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-[#b8aecf]">
+                  Strict limited access: You are authorized exclusively to review, approve, or reject attendance submissions.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setAuth(false);
+                  setIsAttendanceReviewerOnly(false);
+                }}
+                className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#b8aecf] hover:text-white shrink-0"
+              >
+                Lock Reviewer
+              </button>
+              <button
+                onClick={() => {
+                  setAuth(false);
+                  setIsAttendanceReviewerOnly(false);
+                  signOut();
+                  navigate("/");
+                }}
+                className="rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 shrink-0"
+              >
+                Sign Out of Account
+              </button>
+            </div>
+          </div>
+
+          <AttendancePanel initialUnlocked={true} />
+        </div>
+      </div>
+    );
+  }
+
+  const allowedSections = isUltimate ? sections : sections.filter((s) => currentUser?.admin?.permissions?.includes(s));
   const stats = [
     { n: students.length, l: "Registered Students" },
     { n: students.filter((s) => s.graduated).length, l: "Certified Graduates" },
@@ -127,78 +305,328 @@ export default function Admin() {
     { n: getBlogPosts().length, l: "Blog Articles" },
   ];
 
+  // Active group detection for breadcrumbs and context
+  const activeGroup = ADMIN_GROUPS.find((g) => g.items.some((i) => i.id === tab))?.name || "Dashboard";
+
+  // Filter navigation groups by permissions and search
+  const filteredGroups = ADMIN_GROUPS.map((grp) => {
+    const validItems = grp.items.filter((item) => {
+      if (!allowedSections.includes(item.id)) return false;
+      if (navSearch.trim()) {
+        return item.label.toLowerCase().includes(navSearch.toLowerCase()) || item.id.toLowerCase().includes(navSearch.toLowerCase());
+      }
+      return true;
+    });
+    return { ...grp, items: validItems };
+  }).filter((grp) => grp.items.length > 0);
+
   return (
     <div className="section-bg min-h-screen">
-      <div className="mx-auto max-w-7xl px-5 py-10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-4xl text-white">
-              Admin <span className="text-gradient">Dashboard</span>
-            </h1>
-            <p className="mt-1 text-xs text-[#8a7ba8]">
-              Logged in as <strong className="text-white">{isUltimate ? "Ultimate Administrator" : currentUser?.name}</strong> · Live site connectivity active
-            </p>
-          </div>
-          <button onClick={() => setAuth(false)} className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#b8aecf] hover:text-white">
-            Lock Dashboard
-          </button>
-        </div>
-
-        <div className="mt-6 flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-          {allowedSections.map((s) => (
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {/* Top Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+          <div className="flex items-center gap-3">
             <button
-              key={s}
-              onClick={() => setTab(s)}
-              className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                tab === s ? "bg-gradient-pink text-white glow-pink-sm" : "border border-white/15 text-[#b8aecf] hover:text-white"
-              }`}
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              className="lg:hidden p-2 rounded-xl border border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+              title="Toggle Menu"
             >
-              {s}
+              <Icon name={mobileNavOpen ? "close" : "menu"} className="h-5 w-5" />
             </button>
-          ))}
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500/20 via-purple-500/10 to-transparent p-1 border border-pink-500/30 shadow-md shadow-pink-500/20 shrink-0">
+              <img
+                src="/branding/kr8_logo.png"
+                alt="KR8 Digitals Logo"
+                className="h-full w-full object-contain filter drop-shadow"
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+                  KR8 Admin <span className="text-gradient">Control Center</span>
+                </h1>
+                <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                  {isUltimate ? "Ultimate Administrator" : currentUser?.admin?.title || "Administrator"}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 text-xs text-[#8a7ba8]">
+                <span>Logged in as <strong className="text-white">{currentUser?.name}</strong></span>
+                <span>•</span>
+                <span className="text-[#a594c7]">{activeGroup}</span>
+                <span>›</span>
+                <span className="text-pink-400 font-semibold">{tab}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            <a
+              href="/"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-pink-500/30 bg-pink-500/10 px-3.5 py-2 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 transition-all inline-flex items-center gap-1.5"
+            >
+              <span>View Live Site</span>
+              <span className="text-[10px]">↗</span>
+            </a>
+            <button
+              onClick={() => setAuth(false)}
+              className="rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-[#b8aecf] hover:text-white hover:border-white/30 transition-colors"
+            >
+              Lock Dashboard
+            </button>
+            <button
+              onClick={() => {
+                setAuth(false);
+                signOut();
+                navigate("/");
+              }}
+              className="rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
 
-        <div className="mt-8">
-          {tab === "Overview" && (
-            <div>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {stats.map((s) => (
-                  <Card key={s.l} className="!p-5">
-                    <div className="font-display text-3xl text-gradient">{s.n}</div>
-                    <div className="mt-1 text-[11px] uppercase tracking-wider text-[#8a7ba8]">{s.l}</div>
-                  </Card>
-                ))}
+        {/* Responsive Dashboard Workspace */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Desktop Sidebar Navigation */}
+          <aside className="hidden lg:block lg:col-span-3 xl:col-span-3 sticky top-6 space-y-4">
+            <Card className="p-4 space-y-4">
+              {/* Quick Filter Search */}
+              <div className="relative">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+                <input
+                  type="text"
+                  value={navSearch}
+                  onChange={(e) => setNavSearch(e.target.value)}
+                  placeholder="Filter sections..."
+                  className="w-full rounded-xl border border-white/10 bg-black/40 pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#8a7ba8] focus:border-pink-500 focus:outline-none transition-all"
+                />
+                {navSearch && (
+                  <button
+                    onClick={() => setNavSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8a7ba8] hover:text-white"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
-              <div className="mt-6">
-                <StudentManager students={students} />
+
+              {/* Categorized Menu */}
+              <nav className="space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+                {filteredGroups.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#8a7ba8]">
+                    No sections match "{navSearch}".
+                    <br />
+                    <button onClick={() => setNavSearch("")} className="mt-2 text-pink-400 underline font-semibold">
+                      Clear Search Filter
+                    </button>
+                  </div>
+                ) : (
+                  filteredGroups.map((grp) => (
+                    <div key={grp.name} className="space-y-1">
+                      <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#7e6d97]">
+                        {grp.name}
+                      </div>
+                      {grp.items.map((item) => {
+                        const isActive = tab === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => setTab(item.id)}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
+                              isActive
+                                ? "bg-gradient-pink text-white shadow-md shadow-pink-500/20 glow-pink-sm font-bold"
+                                : "text-[#b8aecf] hover:text-white hover:bg-white/[0.04]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`shrink-0 ${isActive ? "text-white" : "text-pink-400/80"}`}>
+                                <Icon name={item.icon} size={14} />
+                              </span>
+                              <span className="truncate">{item.label}</span>
+                            </div>
+                            {item.badge && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                  isActive ? "bg-white/20 text-white" : "bg-pink-500/20 text-pink-300"
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))
+                )}
+              </nav>
+            </Card>
+          </aside>
+
+          {/* Mobile Drawer (Visible when toggled on small screens) */}
+          {mobileNavOpen && (
+            <div className="fixed inset-0 z-50 lg:hidden flex animate-fadeIn">
+              <div
+                className="fixed inset-0 bg-black/80 backdrop-blur-md"
+                onClick={() => setMobileNavOpen(false)}
+              />
+              <div className="relative w-80 max-w-[85vw] bg-[#12001f] border-r border-white/10 p-5 z-10 flex flex-col h-full overflow-y-auto">
+                <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <img src="/branding/kr8_logo.png" alt="KR8" className="h-7 w-7 rounded-lg" />
+                    <div>
+                      <h3 className="font-display font-bold text-white text-sm">KR8 Admin</h3>
+                      <p className="text-[10px] text-[#8a7ba8]">{currentUser?.admin?.title || "Control Center"}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setMobileNavOpen(false)}
+                    className="p-1.5 rounded-lg border border-white/15 bg-white/5 text-[#8a7ba8] hover:text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="relative mb-4">
+                  <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+                  <input
+                    type="text"
+                    value={navSearch}
+                    onChange={(e) => setNavSearch(e.target.value)}
+                    placeholder="Filter sections..."
+                    className="w-full rounded-xl border border-white/10 bg-black/40 pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#8a7ba8] focus:border-pink-500 focus:outline-none"
+                  />
+                  {navSearch && (
+                    <button
+                      onClick={() => setNavSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8a7ba8] hover:text-white"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-4 flex-1 overflow-y-auto pr-1">
+                  {filteredGroups.map((grp) => (
+                    <div key={grp.name} className="space-y-1">
+                      <div className="px-2 text-[10px] font-bold uppercase tracking-wider text-[#7e6d97]">
+                        {grp.name}
+                      </div>
+                      {grp.items.map((item) => {
+                        const isActive = tab === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setTab(item.id);
+                              setMobileNavOpen(false);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }}
+                            className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 transition-all ${
+                              isActive
+                                ? "bg-gradient-pink text-white shadow-md shadow-pink-500/20 font-bold"
+                                : "text-[#b8aecf] hover:text-white hover:bg-white/[0.04]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={`shrink-0 ${isActive ? "text-white" : "text-pink-400"}`}>
+                                <Icon name={item.icon} size={15} />
+                              </span>
+                              <span className="truncate">{item.label}</span>
+                            </div>
+                            {item.badge && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                  isActive ? "bg-white/20 text-white" : "bg-pink-500/20 text-pink-300"
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Mobile Drawer Footer Actions */}
+                <div className="pt-4 border-t border-white/10 mt-4 space-y-2 shrink-0">
+                  <a
+                    href="/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full rounded-xl border border-pink-500/30 bg-pink-500/10 py-2 text-center text-xs font-semibold text-pink-300 block"
+                  >
+                    View Live Website ↗
+                  </a>
+                  <button
+                    onClick={() => {
+                      setAuth(false);
+                      setMobileNavOpen(false);
+                      signOut();
+                      navigate("/");
+                    }}
+                    className="w-full rounded-xl border border-rose-500/30 bg-rose-500/10 py-2 text-center text-xs font-semibold text-rose-300 block"
+                  >
+                    Sign Out of Account
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
-          {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
-          {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
-          {tab === "Testimonial Videos" && <TestimonialVideosManager />}
-          {tab === "Live Streams & Replays" && <LiveStreamsManager />}
-          {tab === "Agency" && <AgencyManager />}
-          {tab === "Gallery Archive" && <GalleryManager />}
-          {tab === "Student Management" && <StudentManager students={students} />}
-          {tab === "Blog" && <BlogManager />}
-          {tab === "Announcements" && <AnnouncementManager />}
-          {tab === "Graduation & Certificates" && <GraduationManager students={students} />}
-          {tab === "Leaderboard & XP" && <XPManager />}
-          {tab === "Links Manager" && <LinksManager />}
-          {tab === "Verify Remarks" && <VerifyRemarksManager students={students} />}
-          {tab === "Payment Settings" && <PaymentManager />}
-          {tab === "Founders & Partners" && (
-            <>
-              <FoundersManager />
-              <TeamManager />
-            </>
-          )}
-          {tab === "Attendance Review" && <AttendancePanel />}
-          {tab === "Moderation" && <ModerationManager />}
-          {tab === "Admin Permissions" && isUltimate && <PermissionsManager />}
-          {tab === "Supabase Database" && <SupabaseManager />}
+          {/* Main Content Area */}
+          <main className="lg:col-span-9 xl:col-span-9 space-y-6 min-w-0">
+            {tab === "Overview" && (
+              <div className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {stats.map((s) => (
+                    <Card key={s.l} className="!p-5">
+                      <div className="font-display text-3xl text-gradient">{s.n}</div>
+                      <div className="mt-1 text-[11px] uppercase tracking-wider text-[#8a7ba8]">{s.l}</div>
+                    </Card>
+                  ))}
+                </div>
+                <div>
+                  <StudentManager students={students} onRefreshStudents={(fresh) => setStudents(fresh)} />
+                </div>
+              </div>
+            )}
+
+            {tab === "Website Content (CMS)" && <WebsiteContentManager />}
+            {tab === "Coach & Admin Signatures" && <SignatureManager />}
+            {tab === "Admin Permissions" && isUltimate && <GranularPermissionsManager isUltimate={isUltimate} />}
+
+            {tab === "Client Requests" && <ClientRequestsManager />}
+            {tab === "Home" && <HomeManager onOpenVideos={() => setTab("Testimonial Videos")} />}
+            {tab === "Academy" && <AcademyManager onOpenVideos={() => setTab("Testimonial Videos")} />}
+            {tab === "Testimonial Videos" && <TestimonialVideosManager />}
+            {tab === "Live Streams & Replays" && <LiveStreamsManager />}
+            {tab === "Agency" && <AgencyManager />}
+            {tab === "Gallery Archive" && <GalleryManager />}
+            {tab === "Student Management" && <StudentManager students={students} onRefreshStudents={(fresh) => setStudents(fresh)} />}
+            {tab === "Blog" && <BlogManager />}
+            {tab === "Announcements" && <AnnouncementManager />}
+            {tab === "Graduation & Certificates" && <GraduationManager students={students} />}
+            {tab === "Leaderboard & XP" && <XPManager />}
+            {tab === "Links Manager" && <LinksManager />}
+            {tab === "Verify Remarks" && <VerifyRemarksManager students={students} />}
+            {tab === "Payment Settings" && <PaymentManager />}
+            {tab === "Founders & Partners" && (
+              <>
+                <FoundersManager />
+                <TeamManager />
+              </>
+            )}
+            {tab === "Attendance Review" && <AttendancePanel initialUnlocked={isAttendanceReviewerOnly || isUltimate} />}
+            {tab === "Moderation" && <ModerationManager />}
+            {tab === "Supabase Database" && <SupabaseManager />}
+            {tab === "Mindset Shift" && <MindsetShiftTab adminName={currentUser?.name || "Admin"} />}
+          </main>
         </div>
       </div>
     </div>
@@ -207,9 +635,47 @@ export default function Admin() {
 
 /* ---------------- Student Management ---------------- */
 
-function StudentManager({ students }: { students: Account[] }) {
+function StudentManager({
+  students,
+  onRefreshStudents,
+}: {
+  students: Account[];
+  onRefreshStudents?: (fresh: Account[]) => void;
+}) {
   const { student: currentUser, addNotification } = useAuth();
   const [q, setQ] = useState("");
+  const [skillFilter, setSkillFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
+
+  const handleRefresh = async () => {
+    try {
+      await hydrateAccountsFromSupabase();
+    } catch {
+      /* ignore */
+    }
+    const fresh = getAccounts();
+    if (onRefreshStudents) {
+      onRefreshStudents(fresh);
+    }
+    window.dispatchEvent(new Event("kr8:accounts-updated"));
+    addNotification(`Synchronized roster! Loaded ${fresh.length} verified records.`);
+  };
+
+  const handleQuickLookup = () => {
+    const query = window.prompt("Enter Student ID, Email, or Phone to find and verify record:");
+    if (!query?.trim()) return;
+    const found = findStudent(query.trim());
+    if (found) {
+      setQ(found.id);
+      setPage(1);
+      addNotification(`Found record for ${found.name} (${found.id})! Loaded into table view.`);
+    } else {
+      addNotification(`No record found for "${query.trim()}". You can manually register them using "+ Manually Register Student".`);
+    }
+  };
+
   const [tab, setTab] = useState<"active" | "suspended">("active");
   const [graduatingStudent, setGraduatingStudent] = useState<Account | null>(null);
   const [manualRegisterOpen, setManualRegisterOpen] = useState(false);
@@ -227,12 +693,40 @@ function StudentManager({ students }: { students: Account[] }) {
     return () => window.removeEventListener("kr8:suspended-updated", refreshSuspended);
   }, []);
 
-  const filtered = students.filter(
-    (s) =>
-      s.name.toLowerCase().includes(q.toLowerCase()) ||
-      s.id.toLowerCase().includes(q.toLowerCase()) ||
-      (s.skill && s.skill.toLowerCase().includes(q.toLowerCase()))
-  );
+  // Filter students by query, skill, and status
+  const filtered = students.filter((s) => {
+    const qLower = q.toLowerCase().trim();
+    const qNorm = qLower.replace(/[\s-]/g, "");
+    const sIdNorm = s.id.toLowerCase().replace(/[\s-]/g, "");
+    const matchesQuery =
+      !qLower ||
+      s.name.toLowerCase().includes(qLower) ||
+      s.id.toLowerCase().includes(qLower) ||
+      sIdNorm.includes(qNorm) ||
+      (s.email && s.email.toLowerCase().includes(qLower)) ||
+      (s.phone && s.phone.replace(/\D/g, "").includes(qLower.replace(/\D/g, ""))) ||
+      (s.skill && s.skill.toLowerCase().includes(qLower)) ||
+      (s.type && s.type.toLowerCase().includes(qLower));
+
+    const matchesSkill =
+      skillFilter === "all" ||
+      s.skill === skillFilter ||
+      (s.skills && s.skills.includes(skillFilter));
+
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "students" && s.type === "student") ||
+      (statusFilter === "tribe" && s.type === "tribe") ||
+      (statusFilter === "graduated" && s.graduated) ||
+      (statusFilter === "training" && !s.graduated && s.type === "student") ||
+      (statusFilter === "staff" && (!!s.admin || s.type === "founder" || s.type === "co-founder"));
+
+    return matchesQuery && matchesSkill && matchesStatus;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedStudents = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const editName = (student: Account) => {
     const name = window.prompt("Update student display name:", student.name);
@@ -306,12 +800,24 @@ function StudentManager({ students }: { students: Account[] }) {
 
           {tab === "active" && (
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search by name, ID or skill…"
-                className="w-64 rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
-              />
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="rounded-full border border-pink-400/30 bg-pink-500/10 px-3.5 py-2 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 flex items-center gap-1.5 transition-colors"
+                title="Refresh student records from local storage & database"
+              >
+                <Icon name="cog" size={13} />
+                <span>Sync Roster ({students.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickLookup}
+                className="rounded-full border border-purple-400/30 bg-purple-500/10 px-3.5 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 flex items-center gap-1.5 transition-colors"
+                title="Quick identity search & verification across all database records"
+              >
+                <Icon name="search" size={13} />
+                <span>Find / Verify</span>
+              </button>
               <button
                 onClick={() => setManualRegisterOpen(true)}
                 className="rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white glow-pink-sm"
@@ -321,6 +827,78 @@ function StudentManager({ students }: { students: Account[] }) {
             </div>
           )}
         </div>
+
+        {/* Search & Granular Filter Bar */}
+        {tab === "active" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white/[0.02] border-b border-white/10 p-4">
+            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[260px]">
+              {/* Search input */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+                <input
+                  value={q}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search students by name, ID, email, or phone…"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 pl-9 pr-3 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Status Filter - Modern Segmented Pills (Eliminates Dropdown Arrow) */}
+              <div className="flex flex-wrap items-center rounded-xl border border-white/10 bg-black/40 p-1 gap-1">
+                {[
+                  { id: "all", label: "All Members" },
+                  { id: "students", label: "Students" },
+                  { id: "tribe", label: "Tribe" },
+                  { id: "graduated", label: "Graduates" },
+                  { id: "training", label: "In Training" },
+                  { id: "staff", label: "Staff & Execs" },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(st.id);
+                      setPage(1);
+                    }}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      statusFilter === st.id
+                        ? "bg-pink-500/25 text-pink-300 border border-pink-500/40"
+                        : "text-[#8a7ba8] hover:text-white"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Skill Filter - Clean Custom Filter (Eliminates Default Arrow) */}
+              <div className="relative">
+                <select
+                  value={skillFilter}
+                  onChange={(e) => {
+                    setSkillFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="appearance-none rounded-xl border border-white/15 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">Track: All Skills ({students.length})</option>
+                  {getSkills().map((s) => (
+                    <option key={s.key} value={s.key}>
+                      Track: {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="text-xs text-[#8a7ba8] shrink-0 font-medium">
+              Showing <strong className="text-white">{filtered.length}</strong> matching students
+            </div>
+          </div>
+        )}
 
         {tab === "active" ? (
           <div className="overflow-x-auto">
@@ -335,15 +913,15 @@ function StudentManager({ students }: { students: Account[] }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {paginatedStudents.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="p-8 text-center text-[#8a7ba8]">
-                      No students found matching your search.
+                      No students found matching your filters.
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((s) => {
-                    const skill = SKILLS.find((k) => k.key === s.skill);
+                  paginatedStudents.map((s) => {
+                    const skill = getSkill(s.skill);
                     return (
                       <tr key={s.id} className="border-t border-white/5 text-[#cabfe0] hover:bg-white/[0.02]">
                         <td className="p-3 font-mono text-xs font-semibold text-pink-400">{s.id}</td>
@@ -463,6 +1041,55 @@ function StudentManager({ students }: { students: Account[] }) {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/10 p-4 bg-white/[0.01]">
+                <span className="text-xs text-[#8a7ba8]">
+                  Page <strong className="text-white">{currentPage}</strong> of <strong className="text-white">{totalPages}</strong> ({filtered.length} total students)
+                </span>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-lg border border-white/15 bg-black/40 text-xs text-[#cabfe0] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    ← Previous
+                  </button>
+
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum = i + 1;
+                      if (totalPages > 5 && currentPage > 3) {
+                        pageNum = Math.min(totalPages - 4, currentPage - 2) + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setPage(pageNum)}
+                          className={`w-7 h-7 rounded-lg text-xs font-semibold transition-all ${
+                            currentPage === pageNum
+                              ? "bg-gradient-pink text-white font-bold"
+                              : "border border-white/10 bg-black/20 text-[#8a7ba8] hover:text-white"
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded-lg border border-white/15 bg-black/40 text-xs text-[#cabfe0] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* SUSPENDED ACCOUNTS & APPEALS QUEUE (Phase 8) */
@@ -569,7 +1196,15 @@ function StudentManager({ students }: { students: Account[] }) {
       {manualRegisterOpen && (
         <ManualRegisterModal
           onClose={() => setManualRegisterOpen(false)}
-          onSuccess={() => setManualRegisterOpen(false)}
+          onSuccess={(newStudent) => {
+            const fresh = getAccounts();
+            if (onRefreshStudents) onRefreshStudents(fresh);
+            window.dispatchEvent(new Event("kr8:accounts-updated"));
+            setManualRegisterOpen(false);
+            if (newStudent) {
+              addNotification(`Successfully registered ${newStudent.name} (${newStudent.id})! Account is active.`);
+            }
+          }}
         />
       )}
 
@@ -578,7 +1213,9 @@ function StudentManager({ students }: { students: Account[] }) {
         <GraduationModal
           student={graduatingStudent}
           onClose={() => setGraduatingStudent(null)}
-          onGraduated={() => setGraduatingStudent(null)}
+          onGraduated={() => {
+            window.dispatchEvent(new Event("kr8:accounts-updated"));
+          }}
         />
       )}
 
@@ -1090,7 +1727,7 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
                 <select
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+                  className="mt-1 w-full appearance-none rounded-xl border border-white/15 bg-black/20 px-3 py-2.5 text-sm text-white focus:border-pink-400/60 focus:outline-none"
                 >
                   {COUNTRIES.map((c) => (
                     <option key={c.code} value={c.code}>{c.name} ({c.dial})</option>
@@ -1112,9 +1749,9 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
               <select
                 value={skill}
                 onChange={(e) => setSkill(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+                className="mt-1 w-full appearance-none rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-sm text-white focus:border-pink-400/60 focus:outline-none"
               >
-                {SKILLS.map((s) => (
+                {getSkills().map((s) => (
                   <option key={s.key} value={s.key}>{s.name} ({s.suffix})</option>
                 ))}
               </select>
@@ -1122,13 +1759,13 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
             <div>
               <label className="text-xs text-[#8a7ba8]">Date of Birth *</label>
               <div className="mt-1 grid grid-cols-3 gap-2">
-                <select value={y} onChange={(e) => setY(e.target.value)} className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white">
+                <select value={y} onChange={(e) => setY(e.target.value)} className="appearance-none rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white">
                   {years.map((item) => <option key={item}>{item}</option>)}
                 </select>
-                <select value={m} onChange={(e) => setM(e.target.value)} className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white">
+                <select value={m} onChange={(e) => setM(e.target.value)} className="appearance-none rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white">
                   {months.map((item) => <option key={item}>{item}</option>)}
                 </select>
-                <select value={d} onChange={(e) => setD(e.target.value)} className="rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white">
+                <select value={d} onChange={(e) => setD(e.target.value)} className="appearance-none rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-xs text-white">
                   {days.map((item) => <option key={item}>{item}</option>)}
                 </select>
               </div>
@@ -1169,7 +1806,7 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
   );
 }
 
-/* ---------------- Corrected Graduation Modal (External File Upload + QR Overlay) ---------------- */
+/* ---------------- AUTOMATIC GRADUATION & CERTIFICATE ISSUANCE SYSTEM ---------------- */
 
 function GraduationModal({
   student,
@@ -1180,317 +1817,749 @@ function GraduationModal({
   onClose: () => void;
   onGraduated: (updated: Account) => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string>("");
-  const [tier, setTier] = useState<"Completion" | "Professionalism">(
-    (student.certTier as "Completion" | "Professionalism") || "Completion"
-  );
-  const [remark, setRemark] = useState(student.verifyRemark || "");
-  const [position, setPosition] = useState<CertPosition>("bottom-right");
+  const [tier, setTier] = useState<CertificateTier>("Professionalism");
+  const [selectedSkillKey, setSelectedSkillKey] = useState<string>(() => {
+    return student.skill || (student.skills && student.skills[0]) || "graphic";
+  });
+  const [certStudentName, setCertStudentName] = useState(student.name);
+  const [additionalNotes, setAdditionalNotes] = useState("");
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [issuedCert, setIssuedCert] = useState<CertificateRecord | null>(null);
+  const [generatedPdfBytes, setGeneratedPdfBytes] = useState<Uint8Array | null>(null);
 
-  const skill = SKILLS.find((k) => k.key === student.skill);
-  const verifyUrl = `${window.location.origin}/verify?id=${encodeURIComponent(student.id)}`;
+  // Withdrawal Sub-Modal State
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawCertId, setWithdrawCertId] = useState("");
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawError, setWithdrawError] = useState("");
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (!selected) return;
-    setFile(selected);
-    setError("");
+  const existingCertificates = getStudentCertificates(student.id);
+  const formattedPreviewName = formatCertificateStudentName(certStudentName);
+  const selectedSkill = getSkill(selectedSkillKey);
+  const [skillSearchQuery, setSkillSearchQuery] = useState("");
 
-    if (selected.type.startsWith("image/")) {
-      const reader = new FileReader();
-      reader.onload = () => setFilePreview(reader.result as string);
-      reader.readAsDataURL(selected);
-    } else {
-      setFilePreview("");
-    }
-  };
+  const allSkills = getSkills();
+  const filteredSkills = allSkills.filter(
+    (s) =>
+      s.name.toLowerCase().includes(skillSearchQuery.toLowerCase()) ||
+      s.key.toLowerCase().includes(skillSearchQuery.toLowerCase())
+  );
 
-  const handleApprove = async () => {
-    if (!file && !student.certificateUrl) {
-      setError("Please select the externally designed certificate file (image or PDF).");
-      return;
-    }
-
+  const handleIssueCertificate = async () => {
     setProcessing(true);
     setError("");
 
     try {
-      let finalImageUrl = student.certificateUrl || "";
-      let fileType: "image" | "pdf" = student.certificateFileType || "image";
-
-      if (file) {
-        const result = await processGraduationCertificate(
-          file,
-          student.id,
-          window.location.origin,
-          position
-        );
-        finalImageUrl = result.imageUrl;
-        fileType = result.fileType;
-
-        // Persist to IndexedDB
-        await saveCertificateData(student.id, {
-          fileType: result.fileType,
-          imageUrl: result.imageUrl,
-          pdfBytes: result.pdfBytes,
-        });
-      }
-
-      // Update student record
-      const updated = updateAccount(student.id, {
-        graduated: true,
-        certTier: tier,
-        verifyRemark: remark.trim() || undefined,
-        certificateUrl: finalImageUrl,
-        certificateFileType: fileType,
-        graduatedAt: Date.now(),
+      // 1. Generate Automatic Certificate with template, student name, and QR
+      const result = await generateAutomaticCertificate({
+        student,
+        skillKey: selectedSkillKey,
+        tier,
+        courseName: selectedSkill?.name || getSkillName(selectedSkillKey),
+        additionalNotes: additionalNotes.trim(),
+        origin: window.location.origin,
+        customStudentName: certStudentName.trim(),
       });
 
-      if (updated) {
-        saveVerifyRemark(student.id, remark.trim());
-        addFeed({
-          kind: "graduation",
-          name: updated.name,
-          skill: skill?.name ?? "Academy",
-          avatar: updated.avatar,
-        });
-        onGraduated(updated);
+      // 2. Persist to durable IndexedDB
+      await saveCertificateData(
+        student.id,
+        {
+          fileType: "image",
+          imageUrl: result.imageUrl,
+          pdfBytes: result.pdfBytes,
+        },
+        result.certId
+      );
+
+      // 3. Create persistent CertificateRecord
+      const certRecord: CertificateRecord = {
+        id: result.certId,
+        studentId: student.id,
+        studentName: certStudentName.trim() || student.name,
+        formattedName: result.formattedName,
+        skill: selectedSkillKey,
+        skillName: result.courseName,
+        tier: result.tier,
+        templateUrl: result.templateUrl,
+        achievementText: result.achievementText,
+        additionalNotes: additionalNotes.trim() || undefined,
+        issuedAt: Date.now(),
+        issuedBy: "KR8 Administrator",
+        status: "active",
+        certificateImageUrl: result.imageUrl,
+      };
+
+      // 4. Save into Store / Account database
+      const saveRes = issueCertificate(student.id, certRecord);
+      if (!saveRes.ok || !saveRes.account) {
+        throw new Error(saveRes.error || "Failed to issue certificate.");
       }
-    } catch (err) {
+
+      setIssuedCert(certRecord);
+      setGeneratedPdfBytes(result.pdfBytes);
+      onGraduated(saveRes.account);
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to process certificate. Please ensure the file is a valid image or PDF.");
+      setError(err?.message || "Failed to generate certificate. Please try again.");
     } finally {
       setProcessing(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm overflow-y-auto">
-      <Card className="my-8 w-full max-w-2xl border border-pink-400/40">
+  const handleConfirmWithdraw = () => {
+    if (!withdrawReason.trim()) {
+      setWithdrawError("Please state the specific reason for certificate withdrawal.");
+      return;
+    }
+    setWithdrawError("");
+
+    const res = withdrawCertificate(student.id, withdrawCertId, withdrawReason.trim(), "KR8 Administrator");
+    if (!res.ok || !res.account) {
+      setWithdrawError(res.error || "Could not withdraw certificate.");
+      return;
+    }
+
+    setShowWithdrawModal(false);
+    setWithdrawReason("");
+    setWithdrawCertId("");
+    onGraduated(res.account);
+  };
+
+  // Portal to document.body: this modal can be mounted inside a <Card> (the
+  // Graduation & Certification Center). Cards use backdrop-filter, which
+  // creates a containing block for position:fixed descendants — without the
+  // portal the "fixed inset-0" overlay is trapped inside the card, misplaced
+  // and rendered under the page content (tier buttons unclickable).
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md overflow-y-auto">
+      <Card className="my-8 w-full max-w-2xl border border-pink-500/40 shadow-2xl bg-[#0f0219]">
+        {/* HEADER */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div>
-            <h3 className="text-xl font-bold text-white">Graduate Student & Issue Certificate</h3>
-            <p className="text-xs text-[#8a7ba8]">
-              {student.name} · <span className="font-mono text-pink-300">{student.id}</span> · {skill?.name}
+            <h3 className="text-xl font-bold text-white">Issue Official KR8 Certificate</h3>
+            <p className="text-xs text-[#b8aecf] mt-0.5">
+              {student.name} · <span className="font-mono text-pink-300">{student.id}</span>
             </p>
           </div>
-          <button onClick={onClose} className="text-[#8a7ba8] hover:text-white">✕</button>
+          <button onClick={onClose} className="rounded-full p-1.5 text-[#8a7ba8] hover:bg-white/10 hover:text-white">✕</button>
         </div>
 
-        <div className="mt-5 space-y-5">
-          {/* Step 1 & 2: Certificate file upload */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
-              1. Upload Certificate File (Image or PDF) *
-            </label>
-            <p className="mt-1 text-xs text-[#b8aecf]">
-              Upload the actual certificate designed externally (Canva, Figma, Photoshop, etc.). The website will overlay a verifiable QR code automatically.
-            </p>
+        {issuedCert ? (
+          /* SUCCESS / ISSUED PREVIEW VIEW */
+          <div className="mt-5 space-y-5 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20 text-green-300">
+              <Icon name="certificate" size={28} />
+            </div>
+            <div>
+              <h4 className="text-xl font-bold text-white">Certificate Successfully Issued! 🎓</h4>
+              <p className="text-xs text-[#b8aecf] mt-1">
+                Certificate of <strong className="text-white">{issuedCert.tier}</strong> in <strong className="text-white">{issuedCert.skillName}</strong> has been generated and delivered to the student profile.
+              </p>
+            </div>
 
-            <label className="mt-3 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-pink-400/40 bg-black/30 p-6 text-center cursor-pointer hover:border-pink-400">
-              {filePreview ? (
-                <div className="space-y-3">
-                  <img src={filePreview} alt="Preview" className="max-h-44 rounded-xl mx-auto object-contain border border-white/10" />
-                  <p className="text-xs text-green-300 font-semibold">✓ {file?.name} ({Math.round((file?.size || 0) / 1024)} KB)</p>
-                </div>
-              ) : file ? (
-                <div className="space-y-2">
-                  <span className="text-4xl">📄</span>
-                  <p className="text-sm font-semibold text-white">{file.name}</p>
-                  <p className="text-xs text-[#8a7ba8]">PDF document ready ({Math.round(file.size / 1024)} KB)</p>
-                </div>
-              ) : student.certificateUrl ? (
-                <div className="space-y-2">
-                  <img src={student.certificateUrl} alt="Existing Cert" className="max-h-36 rounded-xl mx-auto object-contain" />
-                  <p className="text-xs text-[#cabfe0]">Current certificate loaded. Click to replace with a new file.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <span className="text-3xl">📁</span>
-                  <p className="text-sm font-semibold text-white">Choose Certificate File</p>
-                  <p className="text-xs text-[#8a7ba8]">PNG, JPG, JPEG, WEBP or PDF</p>
-                </div>
-              )}
-              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileChange} />
-            </label>
+            {/* LIVE CERTIFICATE PREVIEW */}
+            <CertificateDocumentView
+              cert={issuedCert}
+              student={student}
+              maxHeight="280px"
+            />
+
+            <div className="flex flex-wrap justify-center gap-3 pt-2">
+              <button
+                onClick={() => {
+                  downloadCertificatePdf(student.name, generatedPdfBytes, issuedCert, student);
+                }}
+                className="flex items-center gap-2 rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white shadow-lg glow-pink-sm hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                <Icon name="certificate" size={14} /> Download Certificate PDF
+              </button>
+
+              <a
+                href={`/verify?id=${encodeURIComponent(student.id)}&cert=${encodeURIComponent(issuedCert.id)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 rounded-full border border-pink-400/50 bg-pink-500/10 px-5 py-2.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 transition-colors"
+              >
+                Test Public Verification ↗
+              </a>
+
+              <button
+                onClick={() => {
+                  setIssuedCert(null);
+                }}
+                className="rounded-full border border-white/20 px-5 py-2.5 text-xs font-semibold text-white hover:bg-white/10"
+              >
+                Issue Another
+              </button>
+
+              <button
+                onClick={onClose}
+                className="rounded-full border border-pink-500/30 px-5 py-2.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/10"
+              >
+                Done
+              </button>
+            </div>
           </div>
-
-          {/* Step 2: Tier */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
-              2. Certificate Tier *
-            </label>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              {(["Completion", "Professionalism"] as const).map((t) => (
+        ) : (
+          /* CERTIFICATE CREATION FORM */
+          <div className="mt-5 space-y-5">
+            {/* 1. WHICH CERTIFICATE IS BEING ISSUED? */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-pink-300 mb-2">
+                1. Which certificate is being issued? *
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* Certificate of Professionalism */}
                 <button
-                  key={t}
                   type="button"
-                  onClick={() => setTier(t)}
-                  className={`rounded-2xl p-4 text-left transition-all ${
-                    tier === t
-                      ? "border border-pink-400 bg-gradient-pink text-white shadow-lg"
-                      : "border border-white/15 bg-black/20 text-[#cabfe0] hover:border-white/30"
+                  onClick={() => setTier("Professionalism")}
+                  className={`rounded-2xl p-4 text-left transition-all relative overflow-hidden border ${
+                    tier === "Professionalism"
+                      ? "border-pink-500 bg-gradient-to-br from-pink-950/40 via-purple-950/30 to-black text-white shadow-lg shadow-pink-500/20 ring-1 ring-pink-500/50"
+                      : "border-white/15 bg-black/30 text-[#cabfe0] hover:border-white/30"
                   }`}
                 >
-                  <div className="font-bold text-sm">Certificate of {t}</div>
-                  <div className="text-[11px] opacity-80 mt-1">
-                    {t === "Completion" ? "Coursework and assignments completed." : "High mastery, exceptional project execution."}
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white">Certificate of Professionalism</span>
+                    {tier === "Professionalism" && <span className="h-2 w-2 rounded-full bg-pink-400 animate-pulse" />}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#d4c6e6]">
+                    "...demonstrating excellence and proficiency in turning client requests into client satisfaction."
+                  </p>
+                  <div className="mt-3 rounded-lg bg-pink-500/10 px-2 py-1 text-[10px] font-semibold text-pink-300">
+                    ⭐ True professional KR8 vouches for anywhere
                   </div>
                 </button>
-              ))}
+
+                {/* Certificate of Completion */}
+                <button
+                  type="button"
+                  onClick={() => setTier("Completion")}
+                  className={`rounded-2xl p-4 text-left transition-all relative overflow-hidden border ${
+                    tier === "Completion"
+                      ? "border-pink-500 bg-gradient-to-br from-pink-950/40 via-purple-950/30 to-black text-white shadow-lg shadow-pink-500/20 ring-1 ring-pink-500/50"
+                      : "border-white/15 bg-black/30 text-[#cabfe0] hover:border-white/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-white">Certificate of Completion</span>
+                    {tier === "Completion" && <span className="h-2 w-2 rounded-full bg-pink-400 animate-pulse" />}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[#d4c6e6]">
+                    "...gaining hands-on experience in turning client requests into finished designs."
+                  </p>
+                  <div className="mt-3 rounded-lg bg-white/10 px-2 py-1 text-[10px] font-semibold text-[#cabfe0]">
+                    🌱 Finished process, gained real experience
+                  </div>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Step 3: Extra notes (Verify Remarks) */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
-              3. Extra Notes / Comments (Verify Remarks)
-            </label>
-            <p className="mt-1 text-xs text-[#8a7ba8]">
-              This note is stored directly on the student's profile. It is <strong>only ever shown on the public Verify page if the student separately opts into expanded visibility</strong>; it is private by default.
-            </p>
-            <textarea
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              rows={3}
-              placeholder="e.g. Demonstrated exceptional discipline in brand identity systems. Strongly recommended for real client work."
-              className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
-            />
-          </div>
+            {/* 2. SKILL SELECTION (MODERN SEARCHABLE GRID - NO DROPDOWNS) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
+                  2. Skill Track to Certify *
+                </label>
+                <span className="text-[11px] text-[#8a7ba8]">
+                  Selected: <strong className="text-white">{selectedSkill?.name || selectedSkillKey}</strong>
+                </span>
+              </div>
 
-          {/* Step 4: QR Code overlay options */}
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold text-white">QR Code Verification Overlay</p>
-                <p className="text-[11px] text-[#8a7ba8]">
-                  Encodes: <span className="font-mono text-pink-300">{verifyUrl}</span>
+              {/* Skill search filter */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search skill track (e.g. Graphic, Video, Web)..."
+                  value={skillSearchQuery}
+                  onChange={(e) => setSkillSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-black/40 pl-8 pr-7 py-2 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-500 focus:outline-none"
+                />
+                <span className="absolute left-2.5 top-2.5 text-[#8a7ba8]">
+                  <Icon name="search" size={13} />
+                </span>
+                {skillSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSkillSearchQuery("")}
+                    className="absolute right-2.5 top-2 text-xs text-[#8a7ba8] hover:text-white"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Grid of selectable skills */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-44 overflow-y-auto p-1.5 rounded-xl border border-white/10 bg-black/30">
+                {filteredSkills.map((s) => {
+                  const isSelected = selectedSkillKey === s.key;
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => setSelectedSkillKey(s.key)}
+                      className={`flex flex-col text-left p-2.5 rounded-xl border text-xs transition-all ${
+                        isSelected
+                          ? "border-pink-500 bg-pink-500/20 text-white ring-1 ring-pink-500/50 shadow-md shadow-pink-500/20"
+                          : "border-white/10 bg-white/[0.02] text-[#b8aecf] hover:bg-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold truncate">{s.name}</span>
+                        {isSelected && <span className="text-pink-400 font-bold">✓</span>}
+                      </div>
+                      <span className="text-[10px] text-[#8a7ba8] font-mono mt-0.5">{s.key}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-[11px] text-[#8a7ba8]">
+                Template mapped: <strong className="text-white">{selectedSkill?.name || selectedSkillKey} ({tier})</strong>
+              </p>
+            </div>
+
+            {/* 3. STUDENT NAME ON CERTIFICATE (EDITABLE) */}
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-pink-300">
+                  3. Certificate Student Name (Editable During Graduation) *
+                </label>
+                {certStudentName !== student.name && (
+                  <button
+                    type="button"
+                    onClick={() => setCertStudentName(student.name)}
+                    className="text-[10px] text-pink-400 hover:text-white underline underline-offset-2"
+                  >
+                    Reset to Account Name
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={certStudentName}
+                onChange={(e) => setCertStudentName(e.target.value)}
+                placeholder="Official student name to print on certificate"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-2.5 text-xs text-white focus:border-pink-400 focus:outline-none"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                <p className="text-[#8a7ba8]">
+                  Account Profile: <span className="text-white font-medium">{student.name}</span>
+                </p>
+                <p className="font-mono text-pink-300 font-bold">
+                  Printed in ALL CAPS: {formattedPreviewName}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#8a7ba8]">Position:</span>
-                <select
-                  value={position}
-                  onChange={(e) => setPosition(e.target.value as CertPosition)}
-                  className="rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-xs text-white focus:outline-none"
+            </div>
+
+            {/* 4. ADDITIONAL NOTES / ACHIEVEMENTS */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-pink-300 mb-1">
+                4. Additional Notes / Achievements (Optional)
+              </label>
+              <input
+                value={additionalNotes}
+                onChange={(e) => setAdditionalNotes(e.target.value)}
+                placeholder="e.g. Three-time Best Performer · Outstanding Performance · Best Student"
+                className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-2.5 text-xs text-white focus:border-pink-400 focus:outline-none placeholder:text-[#6a5b82]"
+              />
+              <p className="mt-1 text-[11px] text-[#8a7ba8]">
+                These honors are recorded on the student's profile and certificate record.
+              </p>
+            </div>
+
+            {/* ERROR NOTICE */}
+            {error && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+                {error}
+              </div>
+            )}
+
+            {/* ACTION BUTTONS */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+              <div>
+                {existingCertificates.length > 0 && (
+                  <span className="text-xs text-[#8a7ba8]">
+                    {existingCertificates.length} certificate{existingCertificates.length === 1 ? "" : "s"} already on file
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white hover:bg-white/10"
                 >
-                  <option value="bottom-right">Bottom Right (Default)</option>
-                  <option value="bottom-left">Bottom Left</option>
-                  <option value="bottom-center">Bottom Center</option>
-                </select>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={processing}
+                  onClick={handleIssueCertificate}
+                  className="rounded-full bg-gradient-pink px-7 py-2.5 text-xs font-bold text-white shadow-lg glow-pink-sm hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {processing ? "Generating Certificate…" : "Issue Certificate"}
+                </button>
+              </div>
+            </div>
+
+            {/* EXISTING CERTIFICATES & WITHDRAWAL CONTROLS */}
+            {existingCertificates.length > 0 && (
+              <div className="mt-6 border-t border-white/10 pt-4">
+                <h5 className="text-xs font-bold uppercase tracking-wider text-[#b8aecf] mb-2.5">
+                  Issued Certificates for this Student
+                </h5>
+                <div className="space-y-2">
+                  {existingCertificates.map((cert) => {
+                    const isWithdrawn = cert.status === "withdrawn";
+                    return (
+                      <div
+                        key={cert.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/40 p-3 text-xs"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white">{cert.skillName}</span>
+                            <span className="font-mono text-[10px] text-pink-300">
+                              Certificate of {cert.tier}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                                isWithdrawn
+                                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                  : "bg-green-500/20 text-green-300 border border-green-500/30"
+                              }`}
+                            >
+                              {isWithdrawn ? "Withdrawn" : "Active ✓"}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#8a7ba8] mt-0.5">
+                            ID: <code className="text-white">{cert.id}</code> · Issued: {new Date(cert.issuedAt).toLocaleDateString()}
+                          </p>
+                          {cert.withdrawalReason && (
+                            <p className="text-[10px] text-amber-300 mt-1 italic">
+                              Withdrawn reason: "{cert.withdrawalReason}"
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/verify?id=${encodeURIComponent(student.id)}&cert=${encodeURIComponent(cert.id)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-white/10"
+                          >
+                            Verify Link
+                          </a>
+                          {!isWithdrawn && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWithdrawCertId(cert.id);
+                                setShowWithdrawModal(true);
+                              }}
+                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-500/20"
+                            >
+                              Withdraw Certificate
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* WITHDRAWAL REASON MODAL (Section 13) */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/50 bg-[#160000] p-6 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-red-500/30 pb-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/20 text-red-300">
+                <Icon name="alert" size={20} />
+              </span>
+              <div>
+                <h4 className="text-base font-bold text-white">Withdraw Student Certificate</h4>
+                <p className="text-xs text-red-300/80">Accountability & Stated Reason Required</p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <p className="text-xs text-[#eed6d6] leading-relaxed">
+                Why are you withdrawing this certificate? The stated reason will be permanently recorded and displayed when someone verifies or scans this certificate's QR code.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-red-300 mb-1">
+                  Reason for Withdrawal *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  placeholder="e.g. Failure to satisfy final project originality standards, plagiarism identified, or breach of code of conduct…"
+                  className="w-full rounded-xl border border-red-500/40 bg-black/50 p-3 text-xs text-white focus:border-red-400 focus:outline-none placeholder:text-red-300/40"
+                />
+              </div>
+
+              {withdrawError && (
+                <p className="text-xs font-semibold text-red-400">{withdrawError}</p>
+              )}
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowWithdrawModal(false)}
+                  className="rounded-xl border border-white/20 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmWithdraw}
+                  className="rounded-xl bg-red-600 px-5 py-2 text-xs font-bold text-white shadow-lg hover:bg-red-500 active:scale-95 transition-all"
+                >
+                  Confirm Withdrawal
+                </button>
               </div>
             </div>
           </div>
-
-          {error && (
-            <p className="rounded-lg bg-red-500/10 px-4 py-2.5 text-xs text-red-300">
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={handleApprove}
-              disabled={processing || (!file && !student.certificateUrl)}
-              className="flex-1 rounded-full bg-gradient-pink py-3 text-sm font-bold text-white glow-pink-sm hover:opacity-90 disabled:opacity-40"
-            >
-              {processing ? "Generating QR Overlay & Saving..." : "Approve & Issue Certificate →"}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={processing}
-              className="rounded-full border border-white/15 px-6 py-3 text-sm text-[#b8aecf] hover:text-white"
-            >
-              Cancel
-            </button>
-          </div>
         </div>
-      </Card>
-    </div>
+      )}
+    </div>,
+    document.body
   );
 }
+
 
 /* ---------------- Graduation & Certificates Tab ---------------- */
 
 function GraduationManager({ students }: { students: Account[] }) {
-  const [sel, setSel] = useState(students[0]?.id ?? "");
-  const selectedStudent = students.find((x) => x.id === sel) || students[0];
+  const [search, setSearch] = useState("");
+  const [filterTrack, setFilterTrack] = useState<string>("All");
+  const [filterStatus, setFilterStatus] = useState<"All" | "graduated" | "enrolled">("All");
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
+  const [selectedStudent, setSelectedStudent] = useState<Account | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const filtered = students.filter((s) => {
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      s.id.toLowerCase().includes(q) ||
+      (s.email && s.email.toLowerCase().includes(q));
+
+    const matchTrack = filterTrack === "All" || s.skill === filterTrack;
+    const matchStatus =
+      filterStatus === "All" ||
+      (filterStatus === "graduated" && s.graduated) ||
+      (filterStatus === "enrolled" && !s.graduated);
+
+    return matchSearch && matchTrack && matchStatus;
+  });
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const handleOpenGraduate = (student: Account) => {
+    setSelectedStudent(student);
+    setModalOpen(true);
+  };
 
   return (
     <Card>
-      <h3 className="font-bold text-white text-xl">Graduation & Certificates Manager</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">
-        Upload externally designed certificate files, choose the graduation tier, add private verify remarks, and automatically overlay verifiable QR codes.
-      </p>
-
-      <div className="mt-6 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
         <div>
-          <label className="text-xs font-semibold text-[#8a7ba8]">Select Student to Graduate</label>
-          <select
-            value={sel}
-            onChange={(e) => setSel(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
-          >
-            {students.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name} — {x.id} {x.graduated ? `(Graduated: ${x.certTier})` : "(In Training)"}
-              </option>
-            ))}
-          </select>
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <span className="text-pink-400">🎓</span>
+            <span>Graduation & Certification Center</span>
+          </h3>
+          <p className="mt-1 text-xs sm:text-sm text-[#b8aecf]">
+            Issue verified certificates (Professionalism or Completion), customize honors, and manage student credentials.
+          </p>
         </div>
 
-        {selectedStudent && (
-          <div className="rounded-2xl border border-white/10 bg-black/30 p-5 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h4 className="text-lg font-bold text-white">{selectedStudent.name}</h4>
-                <p className="font-mono text-xs text-pink-400">{selectedStudent.id}</p>
-              </div>
-              <div>
-                {selectedStudent.graduated ? (
-                  <span className="rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-300">
-                    ✓ Graduated ({selectedStudent.certTier})
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-pink-500/10 px-3 py-1 text-xs text-pink-300">
-                    In Training
-                  </span>
-                )}
-              </div>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-center">
+            <div className="font-display text-lg text-emerald-400 font-bold">
+              {students.filter((s) => s.graduated).length}
             </div>
-
-            {selectedStudent.certificateUrl && (
-              <div className="mt-3">
-                <p className="text-xs text-[#8a7ba8] mb-2">Attached Certificate (with QR Code):</p>
-                <img
-                  src={selectedStudent.certificateUrl}
-                  alt="Certificate"
-                  className="max-h-56 rounded-xl border border-white/10 object-contain"
-                />
-              </div>
-            )}
-
-            <div className="pt-2">
-              <button
-                onClick={() => setModalOpen(true)}
-                className="rounded-full bg-gradient-pink px-6 py-2.5 text-xs font-bold text-white glow-pink-sm"
-              >
-                {selectedStudent.graduated ? "Upload / Update Certificate →" : "Graduate Student Now →"}
-              </button>
-            </div>
+            <div className="text-[10px] text-[#8a7ba8] uppercase tracking-wider">Certified</div>
           </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-center">
+            <div className="font-display text-lg text-pink-400 font-bold">
+              {students.filter((s) => !s.graduated).length}
+            </div>
+            <div className="text-[10px] text-[#8a7ba8] uppercase tracking-wider">Enrolled</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Filter Bar — Zero Dropdown Arrows */}
+      <div className="mt-6 space-y-3">
+        <div className="relative">
+          <Icon name="search" className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8a7ba8]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search students by name, KR8 ID, or email..."
+            className="w-full rounded-xl border border-white/15 bg-black/40 pl-10 pr-4 py-2.5 text-xs sm:text-sm text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none transition-all"
+          />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-[#8a7ba8] mr-1">Status:</span>
+            {(["All", "enrolled", "graduated"] as const).map((st) => (
+              <button
+                key={st}
+                onClick={() => {
+                  setFilterStatus(st);
+                  setPage(1);
+                }}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                  filterStatus === st
+                    ? "bg-pink-600/30 text-pink-300 border border-pink-500/40"
+                    : "text-[#a594c7] hover:bg-white/5 border border-transparent"
+                }`}
+              >
+                {st === "All" ? "All Students" : st === "graduated" ? "🎓 Certified Only" : "🌱 Active Enrolled"}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-[#8a7ba8] mr-1">Track:</span>
+            {["All", "graphic", "web", "video"].map((tr) => (
+              <button
+                key={tr}
+                onClick={() => {
+                  setFilterTrack(tr);
+                  setPage(1);
+                }}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                  filterTrack === tr
+                    ? "bg-purple-600/30 text-purple-300 border border-purple-500/40"
+                    : "text-[#a594c7] hover:bg-white/5 border border-transparent"
+                }`}
+              >
+                {tr === "All" ? "All Tracks" : getSkillName(tr)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Student List View — Interactive Cards */}
+      <div className="mt-6 space-y-2.5">
+        {paginated.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-xs text-[#8a7ba8]">
+            No students found matching your search and filter criteria.
+          </div>
+        ) : (
+          paginated.map((s) => (
+            <div
+              key={s.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] p-3.5 sm:p-4 transition-all"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-gradient-pink flex items-center justify-center font-display text-base font-bold text-white shrink-0">
+                  {s.avatar ? (
+                    <img src={s.avatar} alt={s.name} className="h-full w-full rounded-xl object-cover" />
+                  ) : (
+                    s.name.charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-white text-sm truncate">{s.name}</h4>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        s.graduated
+                          ? "bg-em-500/20 text-emerald-300 border border-emerald-500/30"
+                          : "bg-pink-500/10 text-pink-300 border border-pink-500/20"
+                      }`}
+                    >
+                      {s.graduated ? `🎓 Certified (${s.certTier ?? "Completion"})` : "🌱 Active"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-[#8a7ba8]">
+                    <span className="font-mono text-pink-400 font-semibold">{s.id}</span>
+                    <span>•</span>
+                    <span>{getSkillName(s.skill)}</span>
+                    <span>•</span>
+                    <span>{s.points || 0} XP</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <button
+                  onClick={() => handleOpenGraduate(s)}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                    s.graduated
+                      ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                      : "bg-gradient-pink text-white shadow-md shadow-pink-500/20 hover:opacity-90"
+                  }`}
+                >
+                  <span>{s.graduated ? "Manage Certificate 📜" : "Graduate Student 🎓"}</span>
+                </button>
+              </div>
+            </div>
+          ))
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4 text-xs text-[#8a7ba8]">
+          <span>
+            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} students
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5"
+            >
+              Previous
+            </button>
+            <span className="px-2 text-white font-semibold">
+              {page} / {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/5"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {modalOpen && selectedStudent && (
         <GraduationModal
           student={selectedStudent}
           onClose={() => setModalOpen(false)}
-          onGraduated={() => setModalOpen(false)}
+          onGraduated={() => {
+            window.dispatchEvent(new Event("kr8:accounts-updated"));
+          }}
         />
       )}
     </Card>
@@ -1501,6 +2570,7 @@ function GraduationManager({ students }: { students: Account[] }) {
 
 function VerifyRemarksManager({ students }: { students: Account[] }) {
   const [selId, setSelId] = useState(students[0]?.id ?? "");
+  const [search, setSearch] = useState("");
   const selectedStudent = students.find((s) => s.id === selId) || students[0];
   const [remark, setRemark] = useState("");
   const [saved, setSaved] = useState(false);
@@ -1510,6 +2580,13 @@ function VerifyRemarksManager({ students }: { students: Account[] }) {
       setRemark(selectedStudent.verifyRemark || "");
     }
   }, [selId, selectedStudent]);
+
+  const filteredStudents = students.filter(
+    (s) =>
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.id.toLowerCase().includes(search.toLowerCase()) ||
+      (s.email && s.email.toLowerCase().includes(search.toLowerCase()))
+  );
 
   const save = () => {
     if (!selectedStudent) return;
@@ -1526,19 +2603,75 @@ function VerifyRemarksManager({ students }: { students: Account[] }) {
         Write custom admin notes per student. This remark is stored on the student profile and is <strong>only shown on their public Verify page if that student has explicitly opted into expanded visibility</strong>.
       </p>
 
-      <div className="mt-4">
-        <label className="text-xs text-[#8a7ba8]">Select Student</label>
-        <select
-          value={selId}
-          onChange={(e) => setSelId(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:outline-none"
-        >
-          {students.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} — {s.id} {s.verifyRemark ? "(Has remark)" : ""}
-            </option>
-          ))}
-        </select>
+      <div className="mt-5 space-y-2">
+        <label className="text-xs font-bold uppercase tracking-wider text-[#b8aecf]">
+          Select Student for Verification Remark
+        </label>
+
+        {/* Search Input */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search student by name or ID (e.g. KR8-2026)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-xl border border-white/10 bg-black/40 pl-9 pr-7 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+          />
+          <span className="absolute left-3 top-2.5 text-[#8a7ba8]">
+            <Icon name="search" size={14} />
+          </span>
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-2 text-xs text-[#8a7ba8] hover:text-white"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Scrollable Student Roster Picker - Scalable & No Native Arrows */}
+        <div className="max-h-44 overflow-y-auto space-y-1 rounded-xl border border-white/10 bg-black/30 p-2">
+          {filteredStudents.length === 0 ? (
+            <div className="p-3 text-center text-xs text-[#8a7ba8]">No matching students found</div>
+          ) : (
+            filteredStudents.slice(0, 40).map((s) => {
+              const isSelected = s.id === selectedStudent?.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSelId(s.id)}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition-all ${
+                    isSelected
+                      ? "bg-pink-500/20 text-white border border-pink-500/40 font-bold"
+                      : "text-[#b8aecf] hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] text-pink-300 shrink-0">{s.id}</span>
+                    <span className="truncate">{s.name}</span>
+                  </div>
+                  {s.verifyRemark && (
+                    <span className="text-[10px] bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full shrink-0">
+                      Has Remark
+                    </span>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {selectedStudent && (
+          <div className="p-2.5 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-[#8a7ba8]">Active Student: </span>
+              <strong className="text-white">{selectedStudent.name}</strong>{" "}
+              <span className="text-pink-300 font-mono">({selectedStudent.id})</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4">
@@ -1712,12 +2845,13 @@ function BlogManager() {
 
 /* ---------------- Attendance Review Panel ---------------- */
 
-function AttendancePanel() {
+function AttendancePanel({ initialUnlocked = false }: { initialUnlocked?: boolean }) {
   const [pw, setPw] = useState("");
-  const [ok, setOk] = useState(false);
+  const [ok, setOk] = useState(initialUnlocked);
   const [err, setErr] = useState(false);
   const [students, setStudents] = useState<Account[]>(getStudents);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const refresh = () => setStudents(getStudents());
@@ -1727,26 +2861,27 @@ function AttendancePanel() {
 
   if (!ok) {
     return (
-      <Card className="max-w-sm">
-        <h3 className="flex items-center gap-2 font-bold text-white">
-          <Icon name="lock" size={17} /> Attendance Review
+      <Card className="max-w-md mx-auto my-8">
+        <h3 className="flex items-center gap-2 font-bold text-white text-base">
+          <Icon name="lock" size={18} /> Attendance Review Access
         </h3>
-        <p className="mt-1 text-sm text-[#b8aecf]">
-          Dedicated coach access. Enter attendance review password.
+        <p className="mt-1 text-xs text-[#b8aecf]">
+          Quarantined Reviewer access. Enter your attendance review password.
         </p>
         <input
           type="password"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
-          placeholder="Attendance password"
-          className="mt-4 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+          onKeyDown={(e) => e.key === "Enter" && (pw === ATTENDANCE_PW ? setOk(true) : setErr(true))}
+          placeholder="Attendance review password"
+          className="mt-4 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-xs text-white focus:border-pink-400/60 focus:outline-none"
         />
-        {err && <p className="mt-2 text-xs text-red-400">Incorrect password.</p>}
+        {err && <p className="mt-2 text-xs text-rose-400">Incorrect password.</p>}
         <button
           onClick={() => (pw === ATTENDANCE_PW ? setOk(true) : setErr(true))}
-          className="mt-3 w-full rounded-full bg-gradient-pink py-2.5 text-sm font-bold text-white"
+          className="mt-3 w-full rounded-full bg-gradient-pink py-2.5 text-xs font-bold text-white"
         >
-          Unlock Review
+          Unlock Review Portal
         </button>
       </Card>
     );
@@ -1763,46 +2898,94 @@ function AttendancePanel() {
     }
   };
 
+  const filteredStudents = students.filter((s) => {
+    const q = search.toLowerCase();
+    return s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || (s.skill || "").toLowerCase().includes(q);
+  });
+
   return (
-    <div className="space-y-4">
-      {ATTENDANCE_TYPES.map((t) => (
-        <Card key={t.key}>
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white">{t.name}</h3>
-            <span className="text-xs text-green-300">● Open for Submissions</span>
-          </div>
-          <div className="mt-3 space-y-2">
-            {students.slice(0, 4).map((s) => (
-              <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/20 p-3 text-xs">
-                <div>
-                  <span className="font-medium text-white">{s.name}</span> ·{" "}
-                  <span className="font-mono text-pink-300">{s.id}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {feedback[`${t.name}-${s.id}`] ? (
-                    <span className="text-green-300 font-semibold">{feedback[`${t.name}-${s.id}`]}</span>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => approve(s, t.name)}
-                        className="rounded-full bg-green-500/20 px-3 py-1 font-semibold text-green-300 hover:bg-green-500/30"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => setFeedback((p) => ({ ...p, [`${t.name}-${s.id}`]: "Rejected" }))}
-                        className="rounded-full bg-red-500/20 px-3 py-1 text-red-300 hover:bg-red-500/30"
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
-                </div>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/[0.02] border border-white/10 rounded-2xl p-4">
+        <div>
+          <h2 className="font-display font-bold text-lg text-white">Attendance Queue & Verification</h2>
+          <p className="text-xs text-[#8a7ba8]">
+            Review class and hangout attendance logs. Approving awards verified XP to student profiles.
+          </p>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8a7ba8]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search students or track..."
+            className="w-full rounded-xl border border-white/10 bg-black/40 pl-8 pr-3 py-1.5 text-xs text-white placeholder-[#8a7ba8] focus:border-pink-500 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {ATTENDANCE_TYPES.map((t) => (
+          <Card key={t.key} className="p-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-sm">{t.name}</h3>
+                <span className="text-[11px] text-[#8a7ba8]">Standard requirement: 80% attendance</span>
               </div>
-            ))}
-          </div>
-        </Card>
-      ))}
+              <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Open for Review
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {filteredStudents.slice(0, 10).map((s) => (
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-black/30 border border-white/5 p-3 text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-pink-500/20 text-pink-400 flex items-center justify-center font-bold text-xs shrink-0">
+                      {s.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-white">{s.name}</div>
+                      <div className="text-[11px] text-[#8a7ba8]">
+                        <span className="font-mono text-purple-300">{s.id}</span> · Track: <span className="text-[#cabfe0]">{s.skill || "General"}</span> · Verified: <strong className="text-emerald-400">{s.attendanceAccepted || 0} sessions</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {feedback[`${t.name}-${s.id}`] ? (
+                      <span className="text-emerald-400 font-semibold text-xs px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                        {feedback[`${t.name}-${s.id}`]}
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => approve(s, t.name)}
+                          className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-3 py-1 font-semibold text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+                        >
+                          Approve (+10 pts)
+                        </button>
+                        <button
+                          onClick={() => setFeedback((p) => ({ ...p, [`${t.name}-${s.id}`]: "Rejected" }))}
+                          className="rounded-full bg-rose-500/20 border border-rose-500/40 px-3 py-1 text-rose-300 hover:bg-rose-500/30 transition-colors"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredStudents.length === 0 && (
+                <div className="text-center py-6 text-xs text-[#8a7ba8]">
+                  No students found matching "{search}".
+                </div>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1846,36 +3029,354 @@ function PaymentManager() {
 }
 
 function XPManager() {
-  const [saved, setSaved] = useState(false);
+  const [rules, setRules] = useState<XpRule[]>(() => getXpRules());
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  // New Rule Form State
+  const [showAddRule, setShowAddRule] = useState(false);
+  const [newAction, setNewAction] = useState("");
+  const [newPts, setNewPts] = useState<number>(20);
+  const [newCategory, setNewCategory] = useState<XpRule["category"]>("community");
+  const [newDesc, setNewDesc] = useState("");
+
+  // Direct Student XP Awarding State
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [manualXpAmount, setManualXpAmount] = useState<number>(50);
+  const [manualReason, setManualReason] = useState("");
+  const [awardFeedback, setAwardFeedback] = useState<string | null>(null);
+
+  const students = getStudents();
+  const filteredStudents = studentSearch.trim()
+    ? students.filter(
+        (s) =>
+          s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+          s.id.toLowerCase().includes(studentSearch.toLowerCase()) ||
+          (s.email && s.email.toLowerCase().includes(studentSearch.toLowerCase()))
+      )
+    : [];
+
+  const targetStudent = students.find((s) => s.id === selectedStudentId);
+
+  const handleUpdateRulePts = (id: string, pts: number) => {
+    setRules((prev) => prev.map((r) => (r.id === id ? { ...r, pts } : r)));
+  };
+
+  const handleSaveRules = () => {
+    saveXpRules(rules);
+    setSavedMsg("XP Rules & Allocation values saved and activated across the platform!");
+    setTimeout(() => setSavedMsg(null), 3500);
+  };
+
+  const handleAddRule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAction.trim()) return;
+    const rule: XpRule = {
+      id: `xp-rule-${Date.now()}`,
+      action: newAction.trim(),
+      pts: Number(newPts) || 10,
+      category: newCategory,
+      description: newDesc.trim() || undefined,
+    };
+    const next = [...rules, rule];
+    setRules(next);
+    saveXpRules(next);
+    setNewAction("");
+    setNewPts(20);
+    setNewDesc("");
+    setShowAddRule(false);
+    setSavedMsg("New XP Rule added successfully!");
+    setTimeout(() => setSavedMsg(null), 3500);
+  };
+
+  const handleDeleteRule = (id: string, action: string) => {
+    if (confirm(`Are you sure you want to delete the rule "${action}"?`)) {
+      const next = rules.filter((r) => r.id !== id);
+      setRules(next);
+      saveXpRules(next);
+      setSavedMsg(`Rule "${action}" deleted.`);
+      setTimeout(() => setSavedMsg(null), 3500);
+    }
+  };
+
+  const handleAwardStudentXp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentId) {
+      setAwardFeedback("Please search and select a student first.");
+      return;
+    }
+    const amount = Number(manualXpAmount);
+    if (isNaN(amount) || amount === 0) {
+      setAwardFeedback("Please enter a non-zero XP amount.");
+      return;
+    }
+
+    const currentPoints = targetStudent?.points || 0;
+    const newTotal = Math.max(0, currentPoints + amount);
+
+    updateAccount(selectedStudentId, { points: newTotal });
+    setAwardFeedback(
+      `✓ Successfully ${amount >= 0 ? "awarded" : "deducted"} ${Math.abs(amount)} XP ${
+        amount >= 0 ? "to" : "from"
+      } ${targetStudent?.name}! New balance: ${newTotal} XP.`
+    );
+    setTimeout(() => setAwardFeedback(null), 4000);
+  };
+
   return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Leaderboard & XP Rules</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">Points allocated per verified activity.</p>
-      <div className="mt-4 space-y-2">
-        {[
-          { action: "Attendance Approved", pts: "10" },
-          { action: "Assignment Accepted", pts: "25" },
-          { action: "Community Hangout", pts: "15" },
-          { action: "Successful Referral", pts: "20" },
-          { action: "Graduate Certification", pts: "100" },
-        ].map((item) => (
-          <div key={item.action} className="flex items-center justify-between rounded-xl bg-black/20 px-4 py-3 text-sm text-white">
-            <span>{item.action}</span>
-            <span className="font-mono text-pink-300 font-bold">+{item.pts} pts</span>
+    <div className="space-y-6">
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+          <div>
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <span className="text-pink-400">⚡</span>
+              <span>Leaderboard & Gamification XP Rules</span>
+            </h3>
+            <p className="mt-1 text-xs sm:text-sm text-[#b8aecf]">
+              Configure system-wide XP weights awarded to students for verifiable academic and community achievements.
+            </p>
           </div>
-        ))}
-      </div>
-      <button onClick={() => { setSaved(true); setTimeout(() => setSaved(false), 1500); }} className="mt-4 rounded-full bg-gradient-pink px-5 py-2 text-xs font-bold text-white">
-        Save XP Rules
-      </button>
-      {saved && <span className="ml-3 text-xs text-green-300">Saved.</span>}
-    </Card>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAddRule(!showAddRule)}
+              className="rounded-xl border border-white/15 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/5 transition-all"
+            >
+              {showAddRule ? "Cancel" : "+ Add XP Rule"}
+            </button>
+            <button
+              onClick={handleSaveRules}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-lg shadow-pink-500/20 hover:opacity-90 transition-all"
+            >
+              <Icon name="check" size={14} />
+              <span>Save & Publish XP Rules</span>
+            </button>
+          </div>
+        </div>
+
+        {savedMsg && (
+          <div className="mt-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-4 py-2 text-xs font-semibold text-emerald-300">
+            ✓ {savedMsg}
+          </div>
+        )}
+
+        {/* Add New Rule Form */}
+        {showAddRule && (
+          <form onSubmit={handleAddRule} className="mt-6 rounded-2xl border border-pink-500/30 bg-black/40 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-pink-300">Create New XP Milestone Rule</h4>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Action / Trigger Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Masterclass Participation"
+                  value={newAction}
+                  onChange={(e) => setNewAction(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Points (+XP)</label>
+                <input
+                  type="number"
+                  required
+                  value={newPts}
+                  onChange={(e) => setNewPts(parseInt(e.target.value) || 0)}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Category</label>
+                <input
+                  type="text"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value as any)}
+                  placeholder="community"
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+              <div className="sm:col-span-4">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Description</label>
+                <input
+                  type="text"
+                  placeholder="Brief criteria for awarding this XP..."
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/50 px-3 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="submit"
+                className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20"
+              >
+                Save New Milestone
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* List of Rules */}
+        <div className="mt-6 space-y-2.5">
+          {rules.map((item) => (
+            <div
+              key={item.id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] p-3.5 sm:p-4 transition-all"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-bold text-white text-sm">{item.action}</h4>
+                  <span className="rounded-full bg-pink-500/10 px-2 py-0.5 text-[10px] font-semibold text-pink-300 uppercase tracking-wider">
+                    {item.category}
+                  </span>
+                </div>
+                {item.description && (
+                  <p className="mt-1 text-xs text-[#8a7ba8] leading-relaxed">{item.description}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#8a7ba8]">Points:</span>
+                  <input
+                    type="number"
+                    value={item.pts}
+                    onChange={(e) => handleUpdateRulePts(item.id, parseInt(e.target.value) || 0)}
+                    className="w-20 rounded-lg border border-white/15 bg-black/50 px-2.5 py-1 text-xs font-mono font-bold text-pink-300 text-center focus:border-pink-500 focus:outline-none"
+                  />
+                  <span className="text-xs font-bold text-pink-400">XP</span>
+                </div>
+
+                {item.id.startsWith("xp-rule-") && (
+                  <button
+                    onClick={() => handleDeleteRule(item.id, item.action)}
+                    className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 text-xs font-bold"
+                    title="Delete custom rule"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* MANUAL STUDENT XP ALLOCATION TOOL */}
+      <Card>
+        <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <span className="text-amber-400">🎖️</span>
+          <span>Manual Student XP Award / Adjustment</span>
+        </h3>
+        <p className="mt-1 text-xs text-[#b8aecf]">
+          Directly recognize high-achieving creators, community contributors, or adjust student XP balances on the official Leaderboard.
+        </p>
+
+        <form onSubmit={handleAwardStudentXp} className="mt-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-[11px] font-semibold text-[#8a7ba8]">1. Search Student (Name or KR8-ID)</label>
+              <input
+                type="text"
+                placeholder="Type student name or ID..."
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+              />
+              {filteredStudents.length > 0 && (
+                <div className="mt-2 max-h-36 overflow-y-auto rounded-xl border border-white/10 bg-black/80 p-1.5 space-y-1">
+                  {filteredStudents.slice(0, 6).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedStudentId(s.id);
+                        setStudentSearch(`${s.name} (${s.id})`);
+                      }}
+                      className={`w-full text-left rounded-lg px-2.5 py-1.5 text-xs transition-colors flex items-center justify-between ${
+                        selectedStudentId === s.id
+                          ? "bg-pink-600/30 text-white font-bold"
+                          : "text-[#cabfe0] hover:bg-white/10"
+                      }`}
+                    >
+                      <span>{s.name} <span className="font-mono text-pink-400">({s.id})</span></span>
+                      <span className="text-[10px] text-emerald-400 font-mono font-bold">{s.points || 0} XP</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[11px] font-semibold text-[#8a7ba8]">2. Points to Award / Adjust</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="number"
+                  value={manualXpAmount}
+                  onChange={(e) => setManualXpAmount(parseInt(e.target.value) || 0)}
+                  placeholder="+50"
+                  className="w-32 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs font-mono font-bold text-pink-300 focus:border-pink-500 focus:outline-none"
+                />
+                <div className="flex gap-1.5">
+                  {[25, 50, 100, 250].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setManualXpAmount(amt)}
+                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-mono text-pink-300 hover:bg-white/10"
+                    >
+                      +{amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Reason / Note</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Outstanding project presentation"
+                  value={manualReason}
+                  onChange={(e) => setManualReason(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {targetStudent && (
+            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 flex items-center justify-between text-xs">
+              <span className="text-[#a594c7]">Selected Student: <strong className="text-white">{targetStudent.name}</strong></span>
+              <span className="text-white">Current Balance: <strong className="font-mono text-pink-400">{targetStudent.points || 0} XP</strong></span>
+            </div>
+          )}
+
+          {awardFeedback && (
+            <div className="rounded-xl bg-pink-500/20 border border-pink-500/30 px-3.5 py-2 text-xs font-semibold text-pink-200">
+              {awardFeedback}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              disabled={!selectedStudentId}
+              className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-95"
+            >
+              Award Points Directly →
+            </button>
+          </div>
+        </form>
+      </Card>
+    </div>
   );
 }
 
 function LinksManager() {
   const [links, setLinks] = useState(() =>
-    Object.fromEntries(SKILLS.filter((s) => s.available).map((s) => [s.key, getSkillWhatsApp(s.key)]))
+    Object.fromEntries(getSkills().filter((s) => s.available).map((s) => [s.key, getSkillWhatsApp(s.key)]))
   );
   const [tribe, setTribe] = useState("https://chat.whatsapp.com/DgnBOEd5CfMHV8CTWgPNLH?s=cl&p=a&mlu=4&ilr=4");
   const [saved, setSaved] = useState(false);
@@ -1892,7 +3393,7 @@ function LinksManager() {
       <h3 className="font-bold text-white text-lg">Links Manager</h3>
       <p className="mt-1 text-sm text-[#b8aecf]">Edit skill and Tribe WhatsApp links, then save to apply them to registration and join flows.</p>
       <div className="mt-4 space-y-2">
-        {SKILLS.filter((s) => s.available).map((s) => (
+        {getSkills().filter((s) => s.available).map((s) => (
           <label key={s.key} className="flex flex-wrap items-center gap-3 rounded-xl bg-black/20 px-4 py-2.5">
             <span className="w-40 shrink-0 text-sm text-white">{s.name}</span>
             <input
@@ -1968,214 +3469,1483 @@ function SocialLinksManager() {
 }
 
 function AcademyManager({ onOpenVideos }: { onOpenVideos?: () => void }) {
+  const [skillsList, setSkillsList] = useState<Skill[]>(() => getSkills());
+  const [waitlistUrl, setWaitlistUrl] = useState(() => getWaitlistWhatsAppUrl());
+  const [waitlistSaved, setWaitlistSaved] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [globalNotice, setGlobalNotice] = useState<string | null>(null);
+
+  // New Skill Form State
+  const [newSkillName, setNewSkillName] = useState("");
+  const [newSkillKey, setNewSkillKey] = useState("");
+  const [newSkillCode, setNewSkillCode] = useState("");
+  const [newSkillDesc, setNewSkillDesc] = useState("");
+  const [newSkillIcon, setNewSkillIcon] = useState("spark");
+  const [newSkillWhatsapp, setNewSkillWhatsapp] = useState("");
+  const [newSkillInstructorName, setNewSkillInstructorName] = useState("");
+  const [newSkillInstructorBio, setNewSkillInstructorBio] = useState("");
+  const [newSkillCriteria, setNewSkillCriteria] = useState("");
+  const [newSkillVisible, setNewSkillVisible] = useState(true);
+  const [newSkillRegOpen, setNewSkillRegOpen] = useState(true);
+
+  const refresh = () => {
+    setSkillsList(getSkills());
+    setWaitlistUrl(getWaitlistWhatsAppUrl());
+  };
+
+  useEffect(() => {
+    window.addEventListener("kr8:skills-updated", refresh);
+    window.addEventListener("kr8:waitlist-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kr8:skills-updated", refresh);
+      window.removeEventListener("kr8:waitlist-updated", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  const handleSaveWaitlist = () => {
+    if (!waitlistUrl.trim()) return;
+    saveWaitlistWhatsAppUrl(waitlistUrl.trim());
+    setWaitlistSaved(true);
+    setTimeout(() => setWaitlistSaved(false), 2000);
+  };
+
+  const handleCloseAllRegistrations = () => {
+    if (!window.confirm("Are you sure you want to close registrations for ALL skills? Visitors navigating to register will be redirected to the waitlist.")) return;
+    skillsList.forEach((s) => {
+      saveSkillSetting(s.key, { regOpen: false });
+    });
+    refresh();
+    setGlobalNotice("All skill registrations have been closed. Visitors are now redirected to the waitlist.");
+    setTimeout(() => setGlobalNotice(null), 3500);
+  };
+
+  const handleOpenAllRegistrations = () => {
+    if (!window.confirm("Are you sure you want to open registrations for all visible skills?")) return;
+    skillsList.filter((s) => s.available).forEach((s) => {
+      saveSkillSetting(s.key, { regOpen: true });
+    });
+    refresh();
+    setGlobalNotice("All available skill registrations are now OPEN.");
+    setTimeout(() => setGlobalNotice(null), 3500);
+  };
+
+  const handleCreateSkill = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSkillName.trim()) {
+      alert("Skill name is required.");
+      return;
+    }
+
+    const rawKey = newSkillKey.trim() || newSkillName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    const rawCode = (newSkillCode.trim() || newSkillName.replace(/[^A-Z0-9]/gi, "").slice(0, 3)).toUpperCase();
+    const suffix = rawCode.endsWith("VFD") ? rawCode : `${rawCode}VFD`;
+
+    const newSkillObj: Skill = {
+      key: rawKey,
+      name: newSkillName.trim(),
+      suffix,
+      whatsapp: newSkillWhatsapp.trim() || "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8",
+      available: newSkillVisible,
+      regOpen: newSkillRegOpen,
+      snippet: newSkillDesc.trim() || `An intensive 8-week professional ${newSkillName} track with live mentorship and real deliverables.`,
+      icon: newSkillIcon,
+      instructor: newSkillInstructorName.trim()
+        ? { name: newSkillInstructorName.trim(), photo: "", bio: newSkillInstructorBio.trim() }
+        : null,
+      criteria: newSkillCriteria.trim() || "≥80% live session attendance · all core projects submitted · passing review sessions · Mindset Shift & Monthly Hangout attendance.",
+      curriculum: [
+        { week: "Week 1", title: `${newSkillName} Fundamentals`, points: ["Core principles & terminology", "Tools & environment setup", "Industry workflow overview"] },
+        { week: "Week 2", title: "Core Techniques & Foundations", points: ["Fundamental skills practice", "Working with standard briefs", "Weekly assignment review"] },
+        { week: "Week 3", title: "Intermediate Execution", points: ["Deep-dive into tools", "Efficiency & speed techniques", "Peer review & feedback"] },
+        { week: "Week 4", title: "Client Brief Simulation", points: ["Working on real-world scenarios", "Solving common client challenges", "Mid-cohort milestone project"] },
+        { week: "Week 5", title: "Advanced Mastery & AI Collaboration", points: ["Advanced workflows", "Ethical AI tooling integration", "Quality refinement"] },
+        { week: "Week 6", title: "Professional Standards & Optimization", points: ["Polishing outputs for production", "Performance benchmarking", "Deliverable packaging"] },
+        { week: "Week 7", title: "Portfolio Development & Positioning", points: ["Selecting your best work", "Case study documentation", "Client communication & pricing"] },
+        { week: "Week 8", title: "Capstone Project & Graduation", points: ["Project 1 — Collaborative production deliverable.", "Project 2 — Individual professional portfolio showcase.", "Certificate verification and graduation showcase."] },
+      ],
+    };
+
+    saveCustomSkill(newSkillObj);
+    refresh();
+    setShowAddModal(false);
+
+    // Reset form
+    setNewSkillName("");
+    setNewSkillKey("");
+    setNewSkillCode("");
+    setNewSkillDesc("");
+    setNewSkillWhatsapp("");
+    setNewSkillInstructorName("");
+    setNewSkillInstructorBio("");
+    setNewSkillCriteria("");
+    setGlobalNotice(`Skill "${newSkillObj.name}" added successfully with ID suffix ${suffix}!`);
+    setTimeout(() => setGlobalNotice(null), 3500);
+  };
+
+  const allClosed = areAllRegistrationsClosed();
+  const openCount = skillsList.filter((s) => s.available && getSkillRegistration(s.key)).length;
+  const visibleCount = skillsList.filter((s) => s.available).length;
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/30 p-4">
+    <div className="space-y-6">
+      {/* GLOBAL NOTICE */}
+      {globalNotice && (
+        <div className="rounded-2xl border border-pink-500/40 bg-pink-500/10 p-4 text-sm font-semibold text-pink-300">
+          {globalNotice}
+        </div>
+      )}
+
+      {/* TOP HEADER & CONTROLS */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-5">
         <div>
-          <h4 className="font-bold text-white text-sm">Academy Testimonial Videos</h4>
-          <p className="text-xs text-[#b8aecf]">
-            The student testimonial reels power the Academy page.
+          <h4 className="font-bold text-white text-base">Academy Tracks & Admissions Control</h4>
+          <p className="text-xs text-[#b8aecf] mt-0.5">
+            Manage visible skills, open/close registrations, customize ID suffixes, and update the global waitlist.
           </p>
         </div>
-        {onOpenVideos && (
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={onOpenVideos}
-            className="flex items-center gap-1.5 rounded-xl border border-pink-500/40 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-lg glow-pink-sm active:scale-95 transition-all"
           >
-            <Icon name="video" size={14} />
-            <span>Open Video Manager</span>
+            <span>+ Add New Skill Track</span>
           </button>
-        )}
+          {onOpenVideos && (
+            <button
+              onClick={onOpenVideos}
+              className="flex items-center gap-1.5 rounded-full border border-pink-500/40 bg-pink-500/10 px-3.5 py-2 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all"
+            >
+              <Icon name="video" size={14} />
+              <span>Video Reels</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {SKILLS.map((s) => (
-        <AcademySkillManager key={s.key} skill={s} />
-      ))}
-      <p className="text-xs text-[#8a7ba8]">
-        Each skill's registration toggle is independent — close any combination while others stay open.
-      </p>
+      {/* GLOBAL WAITLIST & REGISTRATION CARD */}
+      <Card className="border-pink-500/20 bg-gradient-to-r from-purple-950/20 via-[#140624] to-pink-950/20 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2.5">
+            <span className={`h-3 w-3 rounded-full ${allClosed ? "bg-red-500 animate-pulse" : "bg-green-400"}`} />
+            <h5 className="font-bold text-white text-sm">
+              {allClosed
+                ? "🔴 ALL REGISTRATIONS CLOSED — Visitors Redirected to Waitlist"
+                : `🟢 ADMISSIONS ACTIVE: ${openCount} of ${visibleCount} visible skills currently open`}
+            </h5>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleCloseAllRegistrations}
+              className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
+            >
+              Close All Registrations
+            </button>
+            <button
+              onClick={handleOpenAllRegistrations}
+              className="rounded-xl border border-green-500/40 bg-green-500/10 px-3 py-1.5 text-xs font-semibold text-green-300 hover:bg-green-500/20 active:scale-95 transition-all"
+            >
+              Open All Available
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-[#cabfe0] mb-1.5">
+            VIP WhatsApp Waitlist Group URL (Used when all tracks or a track is closed)
+          </label>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              value={waitlistUrl}
+              onChange={(e) => setWaitlistUrl(e.target.value)}
+              placeholder="https://chat.whatsapp.com/..."
+              className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3.5 py-2.5 text-xs text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
+            />
+            <button
+              onClick={handleSaveWaitlist}
+              className="rounded-xl bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white shrink-0 hover:scale-[1.02] active:scale-95 transition-all"
+            >
+              Save Waitlist URL
+            </button>
+            <a
+              href={waitlistUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-1 rounded-xl border border-white/15 px-3 py-2.5 text-xs font-semibold text-[#b8aecf] hover:text-white shrink-0"
+            >
+              <Icon name="spark" size={12} /> Test Link
+            </a>
+          </div>
+          {waitlistSaved && <p className="mt-2 text-xs text-green-300 font-semibold">✓ Waitlist WhatsApp link saved successfully!</p>}
+        </div>
+      </Card>
+
+      {/* SKILL TRACKS LIST */}
+      <div className="space-y-3">
+        <h5 className="text-xs font-bold uppercase tracking-wider text-[#8a7ba8]">
+          Configured Skills ({skillsList.length})
+        </h5>
+        {skillsList.map((s) => (
+          <AcademySkillManager
+            key={s.key}
+            skill={s}
+            onUpdate={refresh}
+            onDelete={() => {
+              if (window.confirm(`Delete custom skill "${s.name}"? Existing students will keep their record.`)) {
+                deleteCustomSkill(s.key);
+                refresh();
+              }
+            }}
+          />
+        ))}
+      </div>
+
+      {/* ADD NEW SKILL MODAL */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-white/15 bg-[#12001f] p-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Add New Skill Track</h3>
+                <p className="text-xs text-[#b8aecf]">
+                  This new skill will follow the standard KR8 ID format and be immediately recognized across registration, academy, verification, and leaderboard.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="rounded-full p-2 text-[#8a7ba8] hover:bg-white/10 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSkill} className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Skill Track Name *
+                  </label>
+                  <input
+                    required
+                    value={newSkillName}
+                    onChange={(e) => {
+                      setNewSkillName(e.target.value);
+                      if (!newSkillKey) {
+                        setNewSkillKey(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
+                      }
+                      if (!newSkillCode) {
+                        setNewSkillCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase());
+                      }
+                    }}
+                    placeholder="e.g. Product Management"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    System Key / Slug *
+                  </label>
+                  <input
+                    required
+                    value={newSkillKey}
+                    onChange={(e) => setNewSkillKey(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    placeholder="e.g. product_management"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    ID Suffix Code * (e.g. PM {"->"} PMVFD)
+                  </label>
+                  <input
+                    required
+                    value={newSkillCode}
+                    onChange={(e) => setNewSkillCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. PM or PMVFD"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                  <p className="mt-1 text-[10px] text-[#8a7ba8]">
+                    Student IDs will be generated as: <code className="text-pink-300">KR826JD0001{(newSkillCode || "PM").endsWith("VFD") ? newSkillCode : `${newSkillCode || "PM"}VFD`}</code>
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Track Icon
+                  </label>
+                  <select
+                    value={newSkillIcon}
+                    onChange={(e) => setNewSkillIcon(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  >
+                    <option value="spark">Spark / Innovation</option>
+                    <option value="code">Code / Development</option>
+                    <option value="palette">Palette / Design</option>
+                    <option value="video">Video / Production</option>
+                    <option value="mobile">Mobile / Social</option>
+                    <option value="chart">Chart / Growth</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                  Track Description & Snippet
+                </label>
+                <textarea
+                  rows={2}
+                  value={newSkillDesc}
+                  onChange={(e) => setNewSkillDesc(e.target.value)}
+                  placeholder="Overview of the 8-week curriculum and learning outcomes…"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                  WhatsApp Class Group URL
+                </label>
+                <input
+                  value={newSkillWhatsapp}
+                  onChange={(e) => setNewSkillWhatsapp(e.target.value)}
+                  placeholder="https://chat.whatsapp.com/..."
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Instructor Name (Optional)
+                  </label>
+                  <input
+                    value={newSkillInstructorName}
+                    onChange={(e) => setNewSkillInstructorName(e.target.value)}
+                    placeholder="e.g. Alex Morgan"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                    Instructor Bio (Optional)
+                  </label>
+                  <input
+                    value={newSkillInstructorBio}
+                    onChange={(e) => setNewSkillInstructorBio(e.target.value)}
+                    placeholder="e.g. Senior Practitioner at KR8 Studio"
+                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
+                  Certification Criteria (Optional)
+                </label>
+                <input
+                  value={newSkillCriteria}
+                  onChange={(e) => setNewSkillCriteria(e.target.value)}
+                  placeholder="≥80% attendance, coursework completion, final project submission…"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-xs text-white focus:border-pink-400/60 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-6 pt-2 border-t border-white/10">
+                <label className="flex items-center gap-2 text-xs font-semibold text-[#cabfe0] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newSkillVisible}
+                    onChange={(e) => setNewSkillVisible(e.target.checked)}
+                    className="accent-pink-500 h-4 w-4"
+                  />
+                  <span>Make Visible to Visitors</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold text-[#cabfe0] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newSkillRegOpen}
+                    onChange={(e) => setNewSkillRegOpen(e.target.checked)}
+                    className="accent-pink-500 h-4 w-4"
+                  />
+                  <span>Open for Registration</span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg glow-pink-sm active:scale-95 transition-all"
+                >
+                  Save & Publish Track
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AcademySkillManager({ skill }: { skill: (typeof SKILLS)[number] }) {
-  const [open, setOpen] = useState(getSkillRegistration(skill.key));
-  const [whatsapp, setWhatsapp] = useState(getSkillWhatsApp(skill.key));
+function AcademySkillManager({
+  skill,
+  onUpdate,
+  onDelete,
+}: {
+  skill: Skill;
+  onUpdate: () => void;
+  onDelete?: () => void;
+}) {
+  const [open, setOpen] = useState(skill.regOpen);
+  const [visible, setVisible] = useState(skill.available);
+  const [whatsapp, setWhatsapp] = useState(skill.whatsapp || "");
   const [saved, setSaved] = useState(false);
+  const [managingCurriculum, setManagingCurriculum] = useState(false);
+
+  useEffect(() => {
+    setOpen(skill.regOpen);
+    setVisible(skill.available);
+    setWhatsapp(skill.whatsapp || "");
+  }, [skill]);
 
   const save = () => {
-    saveSkillSetting(skill.key, { regOpen: open, whatsapp });
+    saveSkillSetting(skill.key, { regOpen: open, available: visible, whatsapp: whatsapp.trim() });
     setSaved(true);
-    setTimeout(() => setSaved(false), 1400);
+    onUpdate();
+    setTimeout(() => setSaved(false), 1600);
   };
 
+  const studentCount = getStudents().filter(
+    (x) => x.skill === skill.key || (x.skills && x.skills.includes(skill.key))
+  ).length;
+
   return (
-    <Card>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <Card className="p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="font-bold text-white">{skill.name}</h3>
-          <p className="text-xs text-[#8a7ba8]">
-            {getStudents().filter((x) => x.skill === skill.key).length} registered · Instructor:{" "}
-            {skill.instructor?.name ?? "To be announced"}
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-white text-base">{skill.name}</h3>
+            <span className="rounded-full bg-pink-500/10 px-2 py-0.5 font-mono text-[10px] text-pink-400">
+              {skill.suffix}
+            </span>
+            {!visible && (
+              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold text-amber-300">
+                Hidden from Visitors
+              </span>
+            )}
+            {!open && (
+              <span className="rounded-full bg-red-500/10 border border-red-500/30 px-2 py-0.5 text-[9px] font-bold text-red-300">
+                Registration Closed
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-[#8a7ba8] mt-1">
+            {studentCount} enrolled student{studentCount === 1 ? "" : "s"} · Key: <code className="text-pink-300">{skill.key}</code> · Instructor: {skill.instructor?.name ?? "KR8 Master Practitioner"}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-xs text-[#cabfe0]">
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* VISIBILITY TOGGLE */}
+          <label className="flex items-center gap-1.5 text-xs text-[#cabfe0] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={visible}
+              onChange={(e) => setVisible(e.target.checked)}
+              className="accent-pink-500"
+            />
+            <span>Visible to Visitors</span>
+          </label>
+
+          {/* REGISTRATION TOGGLE */}
+          <label className="flex items-center gap-1.5 text-xs text-[#cabfe0] cursor-pointer">
             <input
               type="checkbox"
               checked={open}
               onChange={(e) => setOpen(e.target.checked)}
-              disabled={!skill.available}
               className="accent-pink-500"
             />
-            Registration {open ? "open" : "closed"}
+            <span>Registration {open ? "Open" : "Closed"}</span>
           </label>
-          <button onClick={save} className="rounded-full bg-gradient-pink px-3 py-1.5 text-xs font-bold text-white">
-            Save
+
+          <button
+            onClick={save}
+            className="rounded-full bg-gradient-pink px-4 py-1.5 text-xs font-bold text-white shadow-md active:scale-95 transition-all"
+          >
+            Save Settings
+          </button>
+
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              title="Delete custom track"
+              className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-300 hover:bg-red-500/25 transition-all"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5">
+        <div className="flex-1 min-w-[240px]">
+          <input
+            value={whatsapp}
+            onChange={(e) => setWhatsapp(e.target.value)}
+            className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-[#cabfe0] focus:border-pink-400/60 focus:outline-none"
+            placeholder="Skill WhatsApp group link"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#8a7ba8]">
+            Curriculum: {skill.curriculum?.length ? `${skill.curriculum.length} weeks` : "None uploaded"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setManagingCurriculum(true)}
+            className="rounded-lg border border-pink-500/40 bg-pink-500/15 px-3 py-2 text-xs font-bold text-pink-300 hover:bg-pink-500/30 active:scale-95 transition-all flex items-center gap-1.5"
+          >
+            <span>📖 Manage Curriculum</span>
           </button>
         </div>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-        <input
-          value={whatsapp}
-          onChange={(e) => setWhatsapp(e.target.value)}
-          className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-[#cabfe0] focus:border-pink-400/60 focus:outline-none"
-          placeholder="Skill WhatsApp link"
+
+      {saved && (
+        <p className="mt-2 text-xs text-green-300 font-semibold">
+          ✓ Track settings saved and updated across the site.
+        </p>
+      )}
+
+      {managingCurriculum && (
+        <CurriculumManagerModal
+          skill={skill}
+          onClose={() => setManagingCurriculum(false)}
+          onSave={() => {
+            onUpdate();
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+          }}
         />
-        <span className="rounded-lg border border-white/10 px-3 py-2 text-xs text-[#8a7ba8]">
-          Curriculum: {skill.curriculum.length ? `${skill.curriculum.length} weeks` : "Not published"}
-        </span>
-      </div>
-      {saved && <p className="mt-2 text-xs text-green-300">Skill settings saved and applied to registration.</p>}
+      )}
     </Card>
   );
 }
 
-function AgencyManager() {
-  return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Agency Portfolio</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">Client projects delivered by KR8 graduate teams.</p>
-      <div className="mt-4 space-y-3">
-        {PORTFOLIO.map((item) => (
-          <div key={item.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <h4 className="font-bold text-white">{item.client} — {item.service}</h4>
-            <p className="text-xs text-[#8a7ba8] mt-1">{item.description}</p>
+function CurriculumManagerModal({
+  skill,
+  onClose,
+  onSave,
+}: {
+  skill: Skill;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [weeks, setWeeks] = useState<Week[]>(() =>
+    skill.curriculum && skill.curriculum.length > 0 ? JSON.parse(JSON.stringify(skill.curriculum)) : []
+  );
+  const [jsonMode, setJsonMode] = useState(false);
+  const [jsonText, setJsonText] = useState("");
+  const [jsonError, setJsonError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const handleAddWeek = () => {
+    const nextNum = weeks.length + 1;
+    setWeeks([
+      ...weeks,
+      {
+        week: `Week ${nextNum}`,
+        title: "",
+        points: ["Key concepts & fundamentals", "Hands-on project work"],
+      },
+    ]);
+  };
+
+  const handleUpdateWeekTitle = (idx: number, title: string) => {
+    const updated = [...weeks];
+    updated[idx].title = title;
+    setWeeks(updated);
+  };
+
+  const handleUpdateWeekLabel = (idx: number, label: string) => {
+    const updated = [...weeks];
+    updated[idx].week = label;
+    setWeeks(updated);
+  };
+
+  const handleUpdatePointsText = (idx: number, text: string) => {
+    const updated = [...weeks];
+    updated[idx].points = text.split("\n").map((p) => p.trim()).filter(Boolean);
+    setWeeks(updated);
+  };
+
+  const handleDeleteWeek = (idx: number) => {
+    setWeeks(weeks.filter((_, i) => i !== idx));
+  };
+
+  const handleInitTemplate = () => {
+    const template: Week[] = Array.from({ length: 8 }, (_, i) => ({
+      week: `Week ${i + 1}`,
+      title: i === 0 ? `${skill.name} Foundations & Tooling Setup` : i === 7 ? "Final Capstone Project & Portfolio Defense" : `Module ${i + 1}: Core Techniques`,
+      points: [
+        `Core concept ${i + 1}.1`,
+        `Practical exercise ${i + 1}.2`,
+        `Weekly real-world project deliverable`,
+      ],
+    }));
+    setWeeks(template);
+  };
+
+  const handleApplyJson = () => {
+    setJsonError("");
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!Array.isArray(parsed)) {
+        throw new Error("Curriculum must be a JSON array of weeks");
+      }
+      for (const w of parsed) {
+        if (!w.week || !w.title || !Array.isArray(w.points)) {
+          throw new Error("Each week must have 'week', 'title', and an array of 'points'");
+        }
+      }
+      setWeeks(parsed);
+      setJsonMode(false);
+    } catch (e: any) {
+      setJsonError(e.message || "Invalid JSON format");
+    }
+  };
+
+  const handleSave = () => {
+    saveDynamicCurriculum(skill.key, weeks);
+    setSaveSuccess(true);
+    onSave();
+    setTimeout(() => {
+      onClose();
+    }, 800);
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+      <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-pink-500/40 bg-gradient-to-b from-[#180026] to-[#0a0012] p-6 sm:p-8 shadow-2xl my-6">
+        <div className="flex items-start justify-between pb-4 border-b border-white/10">
+          <div>
+            <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pink-300">
+              Curriculum Manager
+            </span>
+            <h3 className="font-display text-2xl font-bold text-white mt-1">
+              Manage Curriculum: <span className="text-pink-400">{skill.name}</span>
+            </h3>
+            <p className="text-xs text-[#a594c7] mt-0.5">
+              Add, update, replace, or restructure the weekly learning syllabus for this skill.
+            </p>
           </div>
-        ))}
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-all text-xs"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Toolbar */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 bg-black/40 p-3 rounded-2xl border border-white/10">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!jsonMode) {
+                  setJsonText(JSON.stringify(weeks, null, 2));
+                }
+                setJsonMode(!jsonMode);
+              }}
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 transition-all"
+            >
+              {jsonMode ? "Switch to Visual Editor" : "Import / Export JSON"}
+            </button>
+            {weeks.length === 0 && !jsonMode && (
+              <button
+                type="button"
+                onClick={handleInitTemplate}
+                className="rounded-xl border border-pink-500/30 bg-pink-500/10 px-3 py-1.5 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 transition-all"
+              >
+                + Initialize 8-Week Template
+              </button>
+            )}
+          </div>
+          <span className="text-xs text-[#8a7ba8] font-mono">
+            {weeks.length} Week{weeks.length === 1 ? "" : "s"} Configured
+          </span>
+        </div>
+
+        {jsonMode ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-[#cabfe0]">
+              Paste a JSON array representing weeks, or copy the current curriculum below:
+            </p>
+            {jsonError && (
+              <p className="text-xs text-red-400 font-semibold">{jsonError}</p>
+            )}
+            <textarea
+              rows={12}
+              className="w-full rounded-2xl border border-white/15 bg-black/60 p-4 font-mono text-xs text-pink-200 focus:border-pink-500 focus:outline-none resize-none"
+              value={jsonText}
+              onChange={(e) => setJsonText(e.target.value)}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setJsonMode(false)}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyJson}
+                className="rounded-xl bg-pink-600 px-4 py-2 text-xs font-bold text-white hover:bg-pink-500 shadow-md"
+              >
+                Apply JSON to Curriculum
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 space-y-4">
+            {weeks.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center space-y-2">
+                <span className="text-3xl">📭</span>
+                <p className="text-sm font-semibold text-white">No Curriculum Uploaded Yet</p>
+                <p className="text-xs text-[#8a7ba8] max-w-sm mx-auto">
+                  This skill currently has no active syllabus. You can build it week-by-week or initialize an 8-week starter outline.
+                </p>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddWeek}
+                    className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:brightness-110"
+                  >
+                    + Add Week 1
+                  </button>
+                </div>
+              </div>
+            ) : (
+              weeks.map((w, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="text"
+                        value={w.week}
+                        onChange={(e) => handleUpdateWeekLabel(idx, e.target.value)}
+                        className="w-24 rounded-lg border border-pink-500/40 bg-pink-500/10 px-2.5 py-1 text-xs font-bold text-pink-300 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Week Topic / Title (e.g. Modern CSS & Tailwind Frameworks)"
+                        value={w.title}
+                        onChange={(e) => handleUpdateWeekTitle(idx, e.target.value)}
+                        className="flex-1 rounded-lg border border-white/15 bg-black/40 px-3 py-1 text-xs font-semibold text-white focus:border-pink-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteWeek(idx)}
+                      className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-bold text-red-300 hover:bg-red-500/20"
+                      title="Remove week"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#8a7ba8] mb-1">
+                      Learning Outcomes & Practice Deliverables (One per line)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={w.points.join("\n")}
+                      onChange={(e) => handleUpdatePointsText(idx, e.target.value)}
+                      placeholder="Intro to semantic markup&#10;Flexbox and CSS Grid layout algorithms&#10;Hands-on landing page clone"
+                      className="w-full rounded-xl border border-white/10 bg-black/40 p-2.5 text-xs text-[#cabfe0] focus:border-pink-500 focus:outline-none resize-none leading-relaxed"
+                    />
+                  </div>
+                </div>
+              ))
+            )}
+
+            {weeks.length > 0 && (
+              <button
+                type="button"
+                onClick={handleAddWeek}
+                className="w-full rounded-2xl border border-dashed border-white/20 bg-white/[0.02] py-3 text-xs font-bold text-pink-300 hover:border-pink-500/50 hover:bg-pink-500/10 transition-all text-center"
+              >
+                + Add Another Week
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Modal Footer */}
+        <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:bg-white/10 transition-all"
+          >
+            Cancel
+          </button>
+          <div className="flex items-center gap-3">
+            {saveSuccess && (
+              <span className="text-xs text-emerald-400 font-bold animate-pulse">
+                ✓ Curriculum Saved!
+              </span>
+            )}
+            <GradientButton onClick={handleSave} className="px-6 py-2 shadow-lg shadow-pink-500/25">
+              <span>Save & Publish Curriculum →</span>
+            </GradientButton>
+          </div>
+        </div>
       </div>
-    </Card>
+    </div>,
+    document.body
   );
 }
 
-function AnnouncementManager() {
-  const [items, setItems] = useState<Announcement[]>(getAnnouncements());
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [saved, setSaved] = useState(false);
+/* ---------------- Client Requests Manager (Agency Inquiries & Coaching) ---------------- */
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !body.trim()) return;
-    const newA: Announcement = {
-      id: "a-" + Date.now(),
-      title: title.trim(),
-      body: body.trim(),
-      date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      author: "Admin Desk",
-      type: "text",
+function ClientRequestsManager() {
+  const [requests, setRequests] = useState<ClientRequest[]>(() => getClientRequests());
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const refresh = () => setRequests(getClientRequests());
+    window.addEventListener("kr8:client-requests-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kr8:client-requests-updated", refresh);
+      window.removeEventListener("storage", refresh);
     };
-    const updated = [newA, ...items];
-    saveAnnouncements(updated);
-    setItems(updated);
-    setTitle("");
-    setBody("");
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  }, []);
+
+  const filtered = requests.filter((r) => {
+    if (filterType !== "all" && r.type !== filterType) return false;
+    if (filterStatus !== "all" && r.status !== filterStatus) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchName = r.name.toLowerCase().includes(q);
+      const matchEmail = r.email.toLowerCase().includes(q);
+      const matchPhone = r.phone.toLowerCase().includes(q);
+      const matchTitle = r.title.toLowerCase().includes(q);
+      if (!matchName && !matchEmail && !matchPhone && !matchTitle) return false;
+    }
+    return true;
+  });
+
+  const countNew = requests.filter((r) => r.status === "new").length;
+  const countContacted = requests.filter((r) => r.status === "contacted").length;
+  const countClosed = requests.filter((r) => r.status === "closed").length;
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case "brand_audit":
+        return <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-2.5 py-0.5 text-[10px] font-bold text-pink-300">✦ Free Brand Audit</span>;
+      case "structured":
+        return <span className="rounded-full bg-blue-500/20 border border-blue-500/40 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">💼 Project Brief</span>;
+      case "custom_quote":
+        return <span className="rounded-full bg-purple-500/20 border border-purple-500/40 px-2.5 py-0.5 text-[10px] font-bold text-purple-300">💬 Custom Quote</span>;
+      case "coaching":
+        return <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-bold text-emerald-300">🎯 Coaching Request</span>;
+      case "partnership":
+        return <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300">🤝 Partnership</span>;
+      default:
+        return <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white">{type}</span>;
+    }
   };
 
-  const handleDelete = (id: string) => {
-    const updated = items.filter((a) => a.id !== id);
-    saveAnnouncements(updated);
-    setItems(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
-  };
-
-  const handleArchive = (id: string) => {
-    archiveAnnouncementToGallery(id);
-    const updated = items.filter((a) => a.id !== id);
-    saveAnnouncements(updated);
-    setItems(updated);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const getStatusBadge = (status: "new" | "contacted" | "closed") => {
+    switch (status) {
+      case "new":
+        return <span className="rounded-full bg-yellow-500/20 border border-yellow-500/40 px-2 py-0.5 text-[10px] font-bold text-yellow-300">New</span>;
+      case "contacted":
+        return <span className="rounded-full bg-sky-500/20 border border-sky-500/40 px-2 py-0.5 text-[10px] font-bold text-sky-300">Contacted</span>;
+      case "closed":
+        return <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold text-emerald-300">Closed</span>;
+    }
   };
 
   return (
     <div className="space-y-6">
-      <Card>
-        <h3 className="font-bold text-white text-lg">Post New Announcement</h3>
-        {saved && <p className="mt-2 text-xs text-pink-300 font-semibold">Announcements updated successfully!</p>}
-        <form onSubmit={handleAdd} className="mt-4 space-y-3">
-          <input
-            type="text"
-            required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Announcement Title"
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
-          />
-          <textarea
-            required
-            rows={2}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Announcement details..."
-            className="w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md hover:brightness-110 active:scale-95 transition-all"
-          >
-            Publish Announcement
-          </button>
-        </form>
-      </Card>
+      {/* Metrics Row */}
+      <div className="grid gap-4 sm:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-wider text-[#a594c7]">Total Inquiries</p>
+          <p className="font-display text-2xl font-bold text-white mt-1">{requests.length}</p>
+        </Card>
+        <Card className="p-4 border-yellow-500/30 bg-yellow-500/5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wider text-yellow-300 font-bold">New & Actionable</p>
+            {countNew > 0 && <span className="h-2 w-2 rounded-full bg-yellow-400 animate-ping" />}
+          </div>
+          <p className="font-display text-2xl font-bold text-yellow-200 mt-1">{countNew}</p>
+        </Card>
+        <Card className="p-4 border-sky-500/30">
+          <p className="text-xs uppercase tracking-wider text-sky-300">Contacted / Active</p>
+          <p className="font-display text-2xl font-bold text-sky-200 mt-1">{countContacted}</p>
+        </Card>
+        <Card className="p-4 border-emerald-500/30">
+          <p className="text-xs uppercase tracking-wider text-emerald-300">Closed / Completed</p>
+          <p className="font-display text-2xl font-bold text-emerald-200 mt-1">{countClosed}</p>
+        </Card>
+      </div>
 
+      {/* Main Inbox Card */}
       <Card>
-        <h3 className="font-bold text-white text-lg">Active Announcements ({items.length})</h3>
-        <p className="mt-1 text-sm text-[#b8aecf]">
-          Live announcements displayed on the site. Instead of deleting past milestones, click "Archive to Gallery" to permanently preserve them with their dates.
-        </p>
-        <div className="mt-4 space-y-3">
-          {items.map((item) => (
-            <div key={item.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div>
-                <p className="text-xs text-pink-400 font-semibold">{item.date} · {item.author}</p>
-                <h4 className="text-base font-bold text-white mt-1">{item.title}</h4>
-                <p className="text-xs text-[#cabfe0] mt-1">{item.body || item.caption}</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => handleArchive(item.id)}
-                  className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2.5 py-1 text-xs font-semibold text-pink-300 hover:bg-pink-500/20 active:scale-95 transition-all flex items-center gap-1"
-                  title="Preserve in Gallery rather than deleting"
-                >
-                  <span>📦</span>
-                  <span>Archive to Gallery</span>
-                </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 active:scale-95 transition-all"
-                >
-                  Delete
-                </button>
-              </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <h3 className="font-bold text-white text-lg flex items-center gap-2">
+              <span>Client Requests & Inbound Inquiries</span>
+              {countNew > 0 && (
+                <span className="rounded-full bg-pink-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                  {countNew} new
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-[#b8aecf] mt-1">
+              All inbound submissions from the Agency page, 1-on-1 Coaching bookings, and Partnership proposals.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email..."
+              className="rounded-xl border border-white/15 bg-black/40 px-3 py-1.5 text-xs text-white placeholder:text-gray-500 focus:border-pink-500 focus:outline-none w-44"
+            />
+          </div>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: "all", label: "All Types" },
+              { id: "brand_audit", label: "Brand Audits" },
+              { id: "structured", label: "Structured Projects" },
+              { id: "custom_quote", label: "Custom Quotes" },
+              { id: "coaching", label: "1-on-1 Coaching" },
+              { id: "partnership", label: "Partnerships" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setFilterType(f.id)}
+                className={`rounded-full px-3 py-1 font-semibold transition-all ${
+                  filterType === f.id
+                    ? "bg-gradient-pink text-white shadow-md"
+                    : "border border-white/10 bg-white/5 text-[#b8aecf] hover:text-white"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-[#8a7ba8]">Status:</span>
+            {(["all", "new", "contacted", "closed"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase transition-all ${
+                  filterStatus === s
+                    ? "bg-white/20 text-white"
+                    : "text-[#8a7ba8] hover:text-[#cabfe0]"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Request List */}
+        <div className="mt-5 space-y-3">
+          {filtered.length === 0 ? (
+            <div className="rounded-2xl border border-white/5 bg-black/20 p-8 text-center text-xs text-[#8a7ba8]">
+              No client requests found matching the current filters. When a visitor submits an Agency project, Free Brand Audit, or 1-on-1 Coaching request, it will appear here instantly.
             </div>
-          ))}
+          ) : (
+            filtered.map((req) => (
+              <div
+                key={req.id}
+                className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 hover:border-pink-500/30 transition-all space-y-3"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-2.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {getTypeBadge(req.type)}
+                    <h4 className="font-bold text-white text-sm">{req.name}</h4>
+                    <span className="text-xs text-[#8a7ba8]">·</span>
+                    <span className="text-[11px] text-[#8a7ba8]">
+                      {new Date(req.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(req.status)}
+                    <select
+                      value={req.status}
+                      onChange={(e) => updateClientRequestStatus(req.id, e.target.value as any)}
+                      className="rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-[11px] font-semibold text-white focus:outline-none cursor-pointer"
+                    >
+                      <option value="new">Mark New</option>
+                      <option value="contacted">Mark Contacted</option>
+                      <option value="closed">Mark Closed</option>
+                    </select>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete request from ${req.name}?`)) {
+                          deleteClientRequest(req.id);
+                        }
+                      }}
+                      className="rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-1 text-[11px] text-red-300 hover:bg-red-500/20 transition-all"
+                      title="Delete request"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {/* Contact links & summary */}
+                <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                  <div className="space-y-1">
+                    {req.email && (
+                      <p className="flex items-center gap-2 text-[#cabfe0]">
+                        <span className="text-pink-400">✉️</span>
+                        <a href={`mailto:${req.email}`} className="text-white hover:underline">
+                          {req.email}
+                        </a>
+                      </p>
+                    )}
+                    {req.phone && (
+                      <p className="flex items-center gap-2 text-[#cabfe0]">
+                        <span className="text-pink-400">📞</span>
+                        <a href={`tel:${req.phone}`} className="text-white hover:underline">
+                          {req.phone}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 text-left sm:text-right">
+                    <p className="text-xs font-semibold text-pink-300">{req.title}</p>
+                  </div>
+                </div>
+
+                {/* Details Breakdown */}
+                {req.details && Object.keys(req.details).length > 0 && (
+                  <div className="rounded-xl border border-white/5 bg-black/30 p-3 text-xs space-y-1.5">
+                    {Object.entries(req.details).map(([k, v]) => (
+                      <div key={k} className="flex flex-col sm:flex-row sm:items-start justify-between gap-1">
+                        <span className="font-semibold text-[#8a7ba8] capitalize">
+                          {k.replace(/([A-Z])/g, " $1")}:
+                        </span>
+                        <span className="text-white font-medium break-all max-w-lg text-left sm:text-right">
+                          {String(v)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       </Card>
     </div>
+  );
+}
+
+function AgencyManager() {
+  const [items, setItems] = useState(() => getPortfolio());
+  const [filterCategory, setFilterCategory] = useState("All");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<(typeof items)[number] | null>(null);
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Form State
+  const [formTitle, setFormTitle] = useState("");
+  const [formClient, setFormClient] = useState("");
+  const [formService, setFormService] = useState("Graphic Design");
+  const [formDescription, setFormDescription] = useState("");
+  const [formLink, setFormLink] = useState("");
+  const [formPrice, setFormPrice] = useState("");
+  const [formShowPrice, setFormShowPrice] = useState(false);
+  const [formImg, setFormImg] = useState("");
+
+  const categories = ["All", "Graphic Design", "Web Development", "Video Editing", "Brand Identity", "Motion Graphics"];
+
+  const filtered = items.filter((p) => {
+    const matchCat = filterCategory === "All" || p.service === filterCategory;
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      p.title.toLowerCase().includes(q) ||
+      p.client.toLowerCase().includes(q) ||
+      p.service.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q);
+    return matchCat && matchSearch;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingItem(null);
+    setFormTitle("");
+    setFormClient("");
+    setFormService("Graphic Design");
+    setFormDescription("");
+    setFormLink("");
+    setFormPrice("");
+    setFormShowPrice(false);
+    setFormImg("");
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (item: (typeof items)[number]) => {
+    setEditingItem(item);
+    setFormTitle(item.title);
+    setFormClient(item.client);
+    setFormService(item.service);
+    setFormDescription(item.description);
+    setFormLink(item.link || "");
+    setFormPrice(item.price || "");
+    setFormShowPrice(!!item.showPrice);
+    setFormImg(item.img || "");
+    setShowModal(true);
+  };
+
+  const handleSaveProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formTitle.trim() || !formClient.trim()) return;
+
+    if (editingItem) {
+      const updated = items.map((p) =>
+        p.id === editingItem.id
+          ? {
+              ...p,
+              title: formTitle.trim(),
+              client: formClient.trim(),
+              service: formService,
+              description: formDescription.trim(),
+              link: formLink.trim(),
+              price: formPrice.trim(),
+              showPrice: formShowPrice,
+              img: formImg.trim() || p.img,
+            }
+          : p
+      );
+      setItems(updated);
+      savePortfolio(updated);
+      setStatusMsg(`Updated project "${formTitle}" successfully!`);
+    } else {
+      const newProj = {
+        id: `port-${Date.now()}`,
+        title: formTitle.trim(),
+        client: formClient.trim(),
+        service: formService,
+        description: formDescription.trim(),
+        link: formLink.trim(),
+        price: formPrice.trim(),
+        showPrice: formShowPrice,
+        img: formImg.trim() || "/branding/kr8_logo.png",
+        placeholder: false,
+      };
+      const updated = [newProj, ...items];
+      setItems(updated);
+      savePortfolio(updated);
+      setStatusMsg(`Added new agency project "${formTitle}" successfully!`);
+    }
+
+    setShowModal(false);
+    setTimeout(() => setStatusMsg(null), 3500);
+  };
+
+  const handleDelete = (id: string, title: string) => {
+    if (confirm(`Are you sure you want to delete "${title}" from the agency portfolio?`)) {
+      const updated = items.filter((p) => p.id !== id);
+      setItems(updated);
+      savePortfolio(updated);
+      setStatusMsg(`Deleted project "${title}".`);
+      setTimeout(() => setStatusMsg(null), 3500);
+    }
+  };
+
+  const handleImageUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormImg(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <Card>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+        <div>
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <span className="text-pink-400">💼</span>
+            <span>Agency Portfolio Manager</span>
+          </h3>
+          <p className="mt-1 text-xs sm:text-sm text-[#b8aecf]">
+            Create, edit, showcase, and manage real commercial client deliverables shipped by KR8 graduate teams.
+          </p>
+        </div>
+
+        <button
+          onClick={handleOpenAdd}
+          className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-pink-500/20 hover:opacity-90 self-start sm:self-auto transition-all"
+        >
+          <span>+ Add New Project</span>
+        </button>
+      </div>
+
+      {statusMsg && (
+        <div className="mt-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-4 py-2 text-xs font-semibold text-emerald-300">
+          ✓ {statusMsg}
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="mt-6 space-y-3">
+        <div className="relative">
+          <Icon name="search" className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8a7ba8]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search projects by client, title, category, or keyword..."
+            className="w-full rounded-xl border border-white/15 bg-black/40 pl-10 pr-4 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setFilterCategory(c)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                filterCategory === c
+                  ? "bg-pink-600/30 text-pink-300 border border-pink-500/40"
+                  : "text-[#a594c7] hover:bg-white/5 border border-transparent"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Projects Grid */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((item) => (
+          <div
+            key={item.id}
+            className="flex flex-col justify-between rounded-2xl border border-white/10 bg-white/[0.02] hover:border-pink-500/30 hover:bg-white/[0.04] p-4 transition-all"
+          >
+            <div>
+              <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black/40 border border-white/10">
+                <img
+                  src={item.img || "/branding/kr8_logo.png"}
+                  alt={item.title}
+                  className="h-full w-full object-cover"
+                />
+                <span className="absolute top-2 right-2 rounded-full bg-black/70 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-bold text-pink-300 border border-pink-500/30">
+                  {item.service}
+                </span>
+              </div>
+
+              <h4 className="mt-3 font-bold text-white text-sm">{item.title}</h4>
+              <p className="text-xs text-pink-400 font-medium">{item.client}</p>
+              <p className="mt-2 text-xs text-[#a594c7] line-clamp-3 leading-relaxed">{item.description}</p>
+
+              {item.link && (
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block text-[11px] font-semibold text-emerald-400 hover:underline"
+                >
+                  View Live Asset ↗
+                </a>
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
+              <button
+                onClick={() => handleOpenEdit(item)}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => handleDelete(item.id, item.title)}
+                className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add / Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-lg rounded-3xl border border-pink-500/30 bg-[#160d24] p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-bold text-white text-base">
+                {editingItem ? `Edit Project: ${editingItem.title}` : "Add New Agency Deliverable"}
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="rounded-lg p-1 text-[#8a7ba8] hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProject} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b8aecf] mb-1">
+                  Project Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Apex Luxury Brand Identity & Packaging"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b8aecf] mb-1">
+                    Client / Organization
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Apex Global"
+                    value={formClient}
+                    onChange={(e) => setFormClient(e.target.value)}
+                    className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b8aecf] mb-1">
+                    Service Category
+                  </label>
+                  <input
+                    type="text"
+                    value={formService}
+                    onChange={(e) => setFormService(e.target.value)}
+                    placeholder="e.g. Graphic Design, Web Development"
+                    className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b8aecf] mb-1">
+                  Project Description & Deliverables
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Explain what the KR8 team executed, client results, and techniques..."
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b8aecf] mb-1">
+                  Live Project / Case Study Link (Optional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={formLink}
+                  onChange={(e) => setFormLink(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#b8aecf] mb-1">
+                  Featured Thumbnail Image (URL or Upload File)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Paste image URL (https://...)"
+                  value={formImg}
+                  onChange={(e) => setFormImg(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-black/40 px-3.5 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none mb-2"
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && handleImageUpload(e.target.files[0])}
+                  className="block w-full text-xs text-[#a594c7] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 cursor-pointer"
+                />
+              </div>
+
+              {formImg && (
+                <div className="aspect-video w-32 rounded-xl overflow-hidden border border-white/15 bg-black/50">
+                  <img src={formImg} alt="Preview" className="h-full w-full object-cover" />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-xl border border-white/15 px-4 py-2 text-xs font-semibold text-[#cabfe0] hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-lg shadow-pink-500/20 hover:opacity-95"
+                >
+                  {editingItem ? "Save Project Changes" : "Publish to Agency"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -2528,61 +5298,511 @@ function GalleryManager() {
 }
 
 function FoundersManager() {
-  const [founders, setFounders] = useState(getFounders());
-  const [saved, setSaved] = useState("");
+  const [founders, setFounders] = useState<FounderProfile[]>(() => getFounders());
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newFounder, setNewFounder] = useState({ name: "", role: "", bio: "", photo: "" });
 
-  const update = (key: string, patch: Partial<(typeof founders)[number]>) =>
+  useEffect(() => {
+    const sync = () => setFounders(getFounders());
+    window.addEventListener("kr8:founders-updated", sync);
+    return () => window.removeEventListener("kr8:founders-updated", sync);
+  }, []);
+
+  const update = (key: string, patch: Partial<FounderProfile>) => {
     setFounders((all) => all.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  };
 
-  const save = (key: string) => {
+  const handleSaveAll = () => {
     saveFounders(founders);
-    setSaved(key);
-    setTimeout(() => setSaved(""), 1500);
+    setSavedMsg("Executive founders updated and published live!");
+    setTimeout(() => setSavedMsg(null), 3000);
+  };
+
+  const handleAddFounder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFounder.name.trim() || !newFounder.role.trim()) return;
+    const key = newFounder.name.toLowerCase().replace(/[^a-z0-9]/g, "_") + "_" + Date.now().toString().slice(-4);
+    const added: FounderProfile = {
+      key,
+      name: newFounder.name.trim(),
+      role: newFounder.role.trim(),
+      bio: newFounder.bio.trim() || "Executive Leader at KR8 Digitals.",
+      photo: newFounder.photo.trim() || "/branding/kr8_logo.png",
+    };
+    const next = [...founders, added];
+    setFounders(next);
+    saveFounders(next);
+    setNewFounder({ name: "", role: "", bio: "", photo: "" });
+    setShowAddModal(false);
+    setSavedMsg("New executive leader added successfully!");
+    setTimeout(() => setSavedMsg(null), 3000);
+  };
+
+  const handleDeleteFounder = (key: string, name: string) => {
+    if (founders.length <= 1) {
+      alert("Cannot delete the only executive founder.");
+      return;
+    }
+    if (confirm(`Are you sure you want to remove ${name} from executive founders?`)) {
+      const next = founders.filter((f) => f.key !== key);
+      setFounders(next);
+      saveFounders(next);
+      setSavedMsg(`Removed ${name} from executive founders.`);
+      setTimeout(() => setSavedMsg(null), 3000);
+    }
+  };
+
+  const handlePhotoUpload = (key: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      update(key, { photo: reader.result as string });
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
     <Card className="mb-6">
-      <h3 className="font-bold text-white text-lg">Founders Manager</h3>
-      <div className="mt-4 space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+          <h3 className="font-bold text-white text-lg flex items-center gap-2">
+            <span className="text-amber-400">👑</span>
+            <span>Founders & Executive Council</span>
+          </h3>
+          <p className="mt-1 text-xs text-[#b8aecf]">
+            Directly edit names, executive roles, biographies, and portraits of the founding team.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white hover:bg-white/5 transition-all"
+          >
+            + Add Executive
+          </button>
+          <button
+            onClick={handleSaveAll}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20 hover:opacity-90 transition-all"
+          >
+            <Icon name="check" size={14} />
+            <span>Save All Changes</span>
+          </button>
+        </div>
+      </div>
+
+      {savedMsg && (
+        <div className="mt-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3.5 py-2 text-xs font-semibold text-emerald-300">
+          ✓ {savedMsg}
+        </div>
+      )}
+
+      <div className="mt-6 space-y-4">
         {founders.map((f) => (
-          <div key={f.key} className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-2">
-            <div className="flex justify-between items-center">
-              <h4 className="font-bold text-white">{f.name}</h4>
-              <button onClick={() => save(f.key)} className="rounded-full bg-gradient-pink px-4 py-1 text-xs font-bold text-white">
-                Save
-              </button>
+          <div key={f.key} className="rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-black/50 border border-white/15 overflow-hidden shrink-0">
+                  <img src={f.photo || "/branding/kr8_logo.png"} alt={f.name} className="h-full w-full object-cover" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">{f.name}</h4>
+                  <p className="text-xs text-pink-400 font-semibold">{f.role}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  onClick={() => handleDeleteFounder(f.key, f.name)}
+                  className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-            <input
-              value={f.name}
-              onChange={(e) => update(f.key, { name: e.target.value })}
-              className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-1.5 text-xs text-white"
-            />
-            <input
-              value={f.role}
-              onChange={(e) => update(f.key, { role: e.target.value })}
-              className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-1.5 text-xs text-[#cabfe0]"
-            />
-            {saved === f.key && <p className="text-xs text-green-300">Saved successfully!</p>}
+
+            <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-white/5">
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Full Name</label>
+                <input
+                  value={f.name}
+                  onChange={(e) => update(f.key, { name: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Role / Title</label>
+                <input
+                  value={f.role}
+                  onChange={(e) => update(f.key, { role: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Biography / Mission Statement</label>
+                <textarea
+                  rows={2}
+                  value={f.bio}
+                  onChange={(e) => update(f.key, { bio: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Photo URL or Upload</label>
+                <div className="mt-1 flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={f.photo}
+                    onChange={(e) => update(f.key, { photo: e.target.value })}
+                    placeholder="Photo URL (https://...)"
+                    className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handlePhotoUpload(f.key, e.target.files[0])}
+                    className="block text-xs text-[#a594c7] file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-white/10 file:text-white cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         ))}
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl border border-pink-500/30 bg-[#170e24] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-bold text-white text-base">Add New Executive Council Member</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-[#8a7ba8] hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleAddFounder} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Full Name</label>
+                <input
+                  required
+                  placeholder="e.g. Kenneth Timothy Iziogo"
+                  value={newFounder.name}
+                  onChange={(e) => setNewFounder({ ...newFounder, name: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Executive Role</label>
+                <input
+                  required
+                  placeholder="e.g. Co-Founder · Head of Creative Technology"
+                  value={newFounder.role}
+                  onChange={(e) => setNewFounder({ ...newFounder, role: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Biography</label>
+                <textarea
+                  rows={2}
+                  placeholder="Leadership background and focus..."
+                  value={newFounder.bio}
+                  onChange={(e) => setNewFounder({ ...newFounder, bio: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Photo URL</label>
+                <input
+                  placeholder="https://..."
+                  value={newFounder.photo}
+                  onChange={(e) => setNewFounder({ ...newFounder, photo: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-white/15 px-3.5 py-2 text-xs font-semibold text-[#cabfe0]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20"
+                >
+                  Save Executive
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
 
 function TeamManager() {
-  const [team] = useState(getTeam());
+  const [team, setTeam] = useState<TeamProfile[]>(() => getTeam());
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newMember, setNewMember] = useState({ name: "", role: "", bio: "", photo: "" });
+
+  useEffect(() => {
+    const sync = () => setTeam(getTeam());
+    window.addEventListener("kr8:team-updated", sync);
+    return () => window.removeEventListener("kr8:team-updated", sync);
+  }, []);
+
+  const update = (key: string, patch: Partial<TeamProfile>) => {
+    setTeam((all) => all.map((m) => (m.key === key ? { ...m, ...patch } : m)));
+  };
+
+  const handleSaveAll = () => {
+    saveTeam(team);
+    setSavedMsg("Leadership Team updated and published live across the site!");
+    setTimeout(() => setSavedMsg(null), 3500);
+  };
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMember.name.trim() || !newMember.role.trim()) return;
+    const key = newMember.name.toLowerCase().replace(/[^a-z0-9]/g, "_") + "_" + Date.now().toString().slice(-4);
+    const added: TeamProfile = {
+      key,
+      name: newMember.name.trim(),
+      role: newMember.role.trim(),
+      bio: newMember.bio.trim() || "Leadership member at KR8 Digitals.",
+      photo: newMember.photo.trim() || "/branding/kr8_logo.png",
+    };
+    const next = [...team, added];
+    setTeam(next);
+    saveTeam(next);
+    setNewMember({ name: "", role: "", bio: "", photo: "" });
+    setShowAddModal(false);
+    setSavedMsg(`Added ${added.name} to the Leadership Team!`);
+    setTimeout(() => setSavedMsg(null), 3500);
+  };
+
+  const handleDeleteMember = (key: string, name: string) => {
+    if (confirm(`Are you sure you want to remove ${name} from the leadership team?`)) {
+      const next = team.filter((m) => m.key !== key);
+      setTeam(next);
+      saveTeam(next);
+      setSavedMsg(`Removed ${name} from leadership team.`);
+      setTimeout(() => setSavedMsg(null), 3500);
+    }
+  };
+
+  const handlePhotoUpload = (key: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      update(key, { photo: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleNewPhotoUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewMember((prev) => ({ ...prev, photo: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <Card>
-      <h3 className="font-bold text-white text-lg">Leadership Team</h3>
-      <div className="mt-4 space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+          <h3 className="font-bold text-white text-lg flex items-center gap-2">
+            <span className="text-purple-400">🛡️</span>
+            <span>Core Leadership Team Manager</span>
+          </h3>
+          <p className="mt-1 text-xs text-[#b8aecf]">
+            Fully editable leadership registry: add new leaders, update roles, edit bios, upload portraits, and expand your team.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/5 transition-all"
+          >
+            <span>+ Add Team Member</span>
+          </button>
+          <button
+            onClick={handleSaveAll}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-pink px-4 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20 hover:opacity-90 transition-all"
+          >
+            <Icon name="check" size={14} />
+            <span>Save & Publish Live</span>
+          </button>
+        </div>
+      </div>
+
+      {savedMsg && (
+        <div className="mt-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-3.5 py-2 text-xs font-semibold text-emerald-300">
+          ✓ {savedMsg}
+        </div>
+      )}
+
+      <div className="mt-6 space-y-4">
         {team.map((m) => (
-          <div key={m.key} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-            <h4 className="font-bold text-white text-sm">{m.name}</h4>
-            <p className="text-xs text-[#8a7ba8]">{m.role}</p>
+          <div key={m.key} className="rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-black/50 border border-white/15 overflow-hidden shrink-0">
+                  <img src={m.photo || "/branding/kr8_logo.png"} alt={m.name} className="h-full w-full object-cover" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-white text-sm">{m.name}</h4>
+                  <p className="text-xs text-pink-400 font-semibold">{m.role}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  onClick={() => handleDeleteMember(m.key, m.name)}
+                  className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-white/5">
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Full Name</label>
+                <input
+                  value={m.name}
+                  onChange={(e) => update(m.key, { name: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Role / Strategic Title</label>
+                <input
+                  value={m.role}
+                  onChange={(e) => update(m.key, { role: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Biography / Responsibilities</label>
+                <textarea
+                  rows={2}
+                  value={m.bio}
+                  onChange={(e) => update(m.key, { bio: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Portrait (URL or Direct Upload)</label>
+                <div className="mt-1 flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={m.photo}
+                    onChange={(e) => update(m.key, { photo: e.target.value })}
+                    placeholder="Portrait URL (https://... or /team/...)"
+                    className="flex-1 rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                  />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handlePhotoUpload(m.key, e.target.files[0])}
+                    className="block text-xs text-[#a594c7] file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:bg-white/10 file:text-white cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         ))}
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl border border-pink-500/30 bg-[#170e24] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-bold text-white text-base">Add New Leadership Member</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-[#8a7ba8] hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleAddMember} className="space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Full Name</label>
+                <input
+                  required
+                  placeholder="e.g. Chimnonyerem Mercy"
+                  value={newMember.name}
+                  onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Strategic Role</label>
+                <input
+                  required
+                  placeholder="e.g. Project Director & Frontend Coach"
+                  value={newMember.role}
+                  onChange={(e) => setNewMember({ ...newMember, role: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Biography / Responsibilities</label>
+                <textarea
+                  rows={2}
+                  placeholder="Responsibilities and contributions..."
+                  value={newMember.bio}
+                  onChange={(e) => setNewMember({ ...newMember, bio: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-[#8a7ba8]">Portrait Image (URL or File Upload)</label>
+                <input
+                  placeholder="https://... or /team/..."
+                  value={newMember.photo}
+                  onChange={(e) => setNewMember({ ...newMember, photo: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-xs text-white focus:border-pink-500 focus:outline-none mb-1.5"
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => e.target.files?.[0] && handleNewPhotoUpload(e.target.files[0])}
+                  className="block w-full text-xs text-[#a594c7] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:bg-white/10 file:text-white cursor-pointer"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="rounded-xl border border-white/15 px-3.5 py-2 text-xs font-semibold text-[#cabfe0]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20"
+                >
+                  Save & Add to Team
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -2652,7 +5872,7 @@ function TestimonialVideosManager() {
       return;
     }
 
-    const effectiveVideo = videoUrl.trim() || "/videos/testimonial1.mp4";
+    const effectiveVideo = videoUrl.trim() || "/videos/testimonial_bio_nicz.mp4";
     const effectivePoster = posterUrl.trim() || "/videos/testimonial1_poster.jpg";
 
     let parsedCaptions = undefined;
@@ -2782,9 +6002,9 @@ function TestimonialVideosManager() {
                 <option value="Graphic Design">Graphic Design</option>
                 <option value="Web Development">Web Development</option>
                 <option value="Video Editing">Video Editing</option>
-                <option value="UI/UX Design">UI/UX Design</option>
-                <option value="AI Prompt Engineering">AI Prompt Engineering</option>
                 <option value="Content Creation">Content Creation</option>
+                <option value="Social Media Management">Social Media Management</option>
+                <option value="Digital Marketing">Digital Marketing</option>
                 <option value="Tech & Design">Tech & Design</option>
               </select>
             </div>
@@ -2827,7 +6047,7 @@ function TestimonialVideosManager() {
                   type="text"
                   value={videoUrl}
                   onChange={(e) => setVideoUrl(e.target.value)}
-                  placeholder="/videos/testimonial1.mp4 or URL"
+                  placeholder="/videos/testimonial_bio_nicz.mp4 or URL"
                   className="flex-1 rounded-xl border border-white/10 bg-black/30 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
                 />
                 <label className="cursor-pointer shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 active:scale-95 transition-all">
@@ -3466,7 +6686,7 @@ function LiveStreamsManager() {
               <h3 className="font-bold text-white text-lg">Active Live Broadcasts & WebRTC Stage</h3>
             </div>
             <p className="mt-1 text-xs text-[#b8aecf]">
-              Monitor running broadcasts, viewer counts, LiveKit SFU relay state, and enforce broadcast termination.
+              Monitor running broadcasts, viewer counts, real-time relay state, and enforce broadcast termination.
             </p>
           </div>
 
@@ -3490,7 +6710,7 @@ function LiveStreamsManager() {
                   <th className="py-2.5 px-3">Visibility</th>
                   <th className="py-2.5 px-3">Started</th>
                   <th className="py-2.5 px-3">Viewers</th>
-                  <th className="py-2.5 px-3">LiveKit Room</th>
+                  <th className="py-2.5 px-3">Broadcast Room</th>
                   <th className="py-2.5 px-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -3548,9 +6768,9 @@ function LiveStreamsManager() {
       <Card>
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <div>
-            <h3 className="font-bold text-white text-lg">LiveKit Cloud Stream Recordings Library</h3>
+            <h3 className="font-bold text-white text-lg">KR8 Broadcast Recordings Library</h3>
             <p className="text-xs text-[#8a7ba8]">
-              Manage egress cloud-recorded broadcast sessions, duration, storage footprint, and playback visibility.
+              Manage cloud-recorded broadcast sessions, duration, storage footprint, and playback visibility.
             </p>
           </div>
           {statusMsg && <span className="text-xs text-pink-300 font-semibold">{statusMsg}</span>}
@@ -3703,20 +6923,365 @@ function LiveStreamsManager() {
 }
 
 function ModerationManager() {
-  return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Community Moderation</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">No flagged accounts or moderation disputes pending.</p>
-    </Card>
-  );
-}
+  const [accounts, setAccounts] = useState<Account[]>(() => getAccounts());
+  const [activeTab, setActiveTab] = useState<"moderators" | "safety" | "restrictions">("moderators");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [moderatorRoleTitle, setModeratorRoleTitle] = useState("Community Moderator");
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-function PermissionsManager() {
+  // Safety settings stored in localStorage
+  const [autoFilter, setAutoFilter] = useState(() => localStorage.getItem("kr8_mod_autofilter") !== "false");
+  const [strictAntiSpam, setStrictAntiSpam] = useState(() => localStorage.getItem("kr8_mod_antispam") === "true");
+
+  useEffect(() => {
+    const sync = () => setAccounts(getAccounts());
+    window.addEventListener("kr8:accounts-updated", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("kr8:accounts-updated", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  const moderators = accounts.filter((a) => !!a.isModerator || a.moderatorRole);
+  const restrictedAccounts = accounts.filter((a) => !!a.restricted);
+  const suspendedAccounts = getSuspendedAccounts();
+
+  const studentsToPromote = studentSearch.trim()
+    ? accounts.filter(
+        (a) =>
+          (a.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+            a.id.toLowerCase().includes(studentSearch.toLowerCase()) ||
+            (a.email && a.email.toLowerCase().includes(studentSearch.toLowerCase()))) &&
+          !a.isModerator
+      )
+    : [];
+
+  const handlePromoteStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentId) {
+      setStatusMsg("Please search and select a student to promote.");
+      return;
+    }
+    const student = accounts.find((a) => a.id === selectedStudentId);
+    if (!student) return;
+
+    updateAccount(selectedStudentId, {
+      isModerator: true,
+      moderatorRole: moderatorRoleTitle.trim() || "Community Moderator",
+      moderatorAssignedAt: Date.now(),
+    });
+
+    setStatusMsg(`✓ Successfully promoted ${student.name} (${student.id}) to ${moderatorRoleTitle}!`);
+    setSelectedStudentId("");
+    setStudentSearch("");
+    setTimeout(() => setStatusMsg(null), 4000);
+  };
+
+  const handleRevokeModerator = (student: Account) => {
+    if (confirm(`Are you sure you want to revoke moderation privileges from ${student.name}?`)) {
+      updateAccount(student.id, {
+        isModerator: false,
+        moderatorRole: undefined,
+        moderatorAssignedAt: undefined,
+      });
+      setStatusMsg(`Moderator privileges revoked for ${student.name}.`);
+      setTimeout(() => setStatusMsg(null), 3500);
+    }
+  };
+
+  const handleUnrestrict = (student: Account) => {
+    updateAccount(student.id, {
+      restricted: false,
+    });
+    setStatusMsg(`Account restrictions removed for ${student.name}.`);
+    setTimeout(() => setStatusMsg(null), 3500);
+  };
+
+  const handleRestoreSuspended = (id: string, name: string) => {
+    restoreSuspendedAccount(id);
+    setStatusMsg(`Restored deleted account for ${name} (${id})!`);
+    setTimeout(() => setStatusMsg(null), 3500);
+  };
+
+  const handleToggleAutoFilter = () => {
+    const next = !autoFilter;
+    setAutoFilter(next);
+    localStorage.setItem("kr8_mod_autofilter", String(next));
+  };
+
+  const handleToggleAntiSpam = () => {
+    const next = !strictAntiSpam;
+    setStrictAntiSpam(next);
+    localStorage.setItem("kr8_mod_antispam", String(next));
+  };
+
   return (
-    <Card>
-      <h3 className="font-bold text-white text-lg">Admin Permissions & Access Control</h3>
-      <p className="mt-1 text-sm text-[#b8aecf]">The Ultimate Administrator account has unconstrained access to all sections.</p>
-    </Card>
+    <div className="space-y-6">
+      <Card>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/10">
+          <div>
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <span className="text-pink-400">🛡️</span>
+              <span>Community Moderation & Safety Center</span>
+            </h3>
+            <p className="mt-1 text-xs sm:text-sm text-[#b8aecf]">
+              Appoint student moderators, manage community safety guidelines, and oversee account restrictions.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-300">
+              {moderators.length} Active Moderators
+            </span>
+          </div>
+        </div>
+
+        {statusMsg && (
+          <div className="mt-4 rounded-xl bg-emerald-500/20 border border-emerald-500/30 px-4 py-2 text-xs font-semibold text-emerald-300">
+            {statusMsg}
+          </div>
+        )}
+
+        {/* Tab Selection */}
+        <div className="mt-6 flex flex-wrap gap-2 border-b border-white/10 pb-4">
+          <button
+            onClick={() => setActiveTab("moderators")}
+            className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
+              activeTab === "moderators"
+                ? "bg-pink-600/30 text-pink-300 border border-pink-500/40"
+                : "text-[#a594c7] hover:bg-white/5 border border-transparent"
+            }`}
+          >
+            Appointed Moderators ({moderators.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("restrictions")}
+            className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
+              activeTab === "restrictions"
+                ? "bg-pink-600/30 text-pink-300 border border-pink-500/40"
+                : "text-[#a594c7] hover:bg-white/5 border border-transparent"
+            }`}
+          >
+            Flagged & Restricted Accounts ({restrictedAccounts.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("safety")}
+            className={`rounded-xl px-4 py-2 text-xs font-semibold transition-all ${
+              activeTab === "safety"
+                ? "bg-pink-600/30 text-pink-300 border border-pink-500/40"
+                : "text-[#a594c7] hover:bg-white/5 border border-transparent"
+            }`}
+          >
+            Safety Protocols & Auto-Filters
+          </button>
+        </div>
+
+        {/* TAB 1: APPOINTED MODERATORS */}
+        {activeTab === "moderators" && (
+          <div className="mt-6 space-y-6">
+            {/* Promotion Form */}
+            <div className="rounded-2xl border border-pink-500/30 bg-black/40 p-4 sm:p-5">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <span className="text-pink-400">✦</span>
+                <span>Promote a Student to Community Moderator</span>
+              </h4>
+              <p className="mt-1 text-xs text-[#a594c7]">
+                Empower trusted scholars to moderate community chat, forum discussions, live streams, and review reports.
+              </p>
+
+              <form onSubmit={handlePromoteStudent} className="mt-4 grid gap-3 sm:grid-cols-2 items-end">
+                <div>
+                  <label className="text-[11px] font-semibold text-[#8a7ba8]">1. Search Student to Promote</label>
+                  <input
+                    type="text"
+                    placeholder="Search by student name, ID or email..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-xs text-white placeholder-[#7c6f96] focus:border-pink-500 focus:outline-none"
+                  />
+                  {studentsToPromote.length > 0 && (
+                    <div className="mt-2 max-h-36 overflow-y-auto rounded-xl border border-white/10 bg-black/90 p-1.5 space-y-1">
+                      {studentsToPromote.slice(0, 6).map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStudentId(s.id);
+                            setStudentSearch(`${s.name} (${s.id})`);
+                          }}
+                          className={`w-full text-left rounded-lg px-2.5 py-1.5 text-xs transition-colors flex items-center justify-between ${
+                            selectedStudentId === s.id
+                              ? "bg-pink-600/30 text-white font-bold"
+                              : "text-[#cabfe0] hover:bg-white/10"
+                          }`}
+                        >
+                          <span>{s.name} <span className="font-mono text-pink-400">({s.id})</span></span>
+                          <span className="text-[10px] text-[#8a7ba8]">{s.email || "Student"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-[#8a7ba8]">2. Moderator Title / Role</label>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      type="text"
+                      value={moderatorRoleTitle}
+                      onChange={(e) => setModeratorRoleTitle(e.target.value)}
+                      placeholder="e.g. Community Moderator"
+                      className="flex-1 rounded-xl border border-white/15 bg-black/50 px-3.5 py-2 text-xs text-white focus:border-pink-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!selectedStudentId}
+                      className="rounded-xl bg-gradient-pink px-5 py-2 text-xs font-bold text-white shadow-md shadow-pink-500/20 disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-95 shrink-0"
+                    >
+                      Promote to Moderator
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            {/* Current Moderator Roster */}
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#b8aecf] mb-3">
+                Active Community Moderators Roster
+              </h4>
+              {moderators.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-xs text-[#8a7ba8]">
+                  No appointed student moderators yet. Use the form above to promote your first moderator.
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {moderators.map((mod) => (
+                    <div
+                      key={mod.id}
+                      className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] p-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-pink flex items-center justify-center font-bold text-white text-sm shrink-0">
+                          {mod.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h5 className="font-bold text-white text-sm">{mod.name}</h5>
+                          <p className="text-xs text-pink-300 font-semibold">{mod.moderatorRole || "Community Moderator"}</p>
+                          <p className="font-mono text-[10px] text-[#8a7ba8]">{mod.id}</p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleRevokeModerator(mod)}
+                        className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: RESTRICTED & SUSPENDED ACCOUNTS */}
+        {activeTab === "restrictions" && (
+          <div className="mt-6 space-y-4">
+            {restrictedAccounts.length === 0 && suspendedAccounts.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-xs text-emerald-400">
+                ✓ Great news! Zero accounts are currently restricted or suspended.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {restrictedAccounts.map((acc) => (
+                  <div
+                    key={acc.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4"
+                  >
+                    <div>
+                      <h5 className="font-bold text-white text-sm">{acc.name} ({acc.id})</h5>
+                      <p className="text-xs text-amber-300">Status: Restricted by Moderator</p>
+                    </div>
+                    <button
+                      onClick={() => handleUnrestrict(acc)}
+                      className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30"
+                    >
+                      Unsuspend & Restore Access
+                    </button>
+                  </div>
+                ))}
+
+                {suspendedAccounts.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4"
+                  >
+                    <div>
+                      <h5 className="font-bold text-white text-sm">{s.name} ({s.id})</h5>
+                      <p className="text-xs text-rose-300">Reason: {s.reason || "Suspended"}</p>
+                      {s.appealText && (
+                        <p className="text-[11px] text-[#cabfe0] mt-1 bg-black/40 p-2 rounded-lg border border-white/10">
+                          Appeal: "{s.appealText}"
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleRestoreSuspended(s.id, s.name)}
+                      className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30"
+                    >
+                      Approve Appeal & Restore Account
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: SAFETY PROTOCOLS */}
+        {activeTab === "safety" && (
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+              <div>
+                <h5 className="font-bold text-white text-sm">Automated Profanity & Harassment Filter</h5>
+                <p className="text-xs text-[#8a7ba8]">
+                  Automatically mask toxic, offensive, or harassing phrases across student chats and feedback.
+                </p>
+              </div>
+              <button
+                onClick={handleToggleAutoFilter}
+                className={`rounded-full px-4 py-1.5 text-xs font-bold transition-all ${
+                  autoFilter ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-white/10 text-white"
+                }`}
+              >
+                {autoFilter ? "Active (Shielded)" : "Disabled"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+              <div>
+                <h5 className="font-bold text-white text-sm">Strict Anti-Spam Rate Limiter</h5>
+                <p className="text-xs text-[#8a7ba8]">
+                  Limit high-frequency duplicate messaging in live broadcast stages and chat forums.
+                </p>
+              </div>
+              <button
+                onClick={handleToggleAntiSpam}
+                className={`rounded-full px-4 py-1.5 text-xs font-bold transition-all ${
+                  strictAntiSpam ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-white/10 text-white"
+                }`}
+              >
+                {strictAntiSpam ? "Active (Rate Limited)" : "Standard"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -3823,6 +7388,7 @@ create table if not exists public.live_chat (
 
 alter publication supabase_realtime add table public.live_streams;
 alter publication supabase_realtime add table public.live_chat;
+${MS_SUPABASE_SQL}
 `;
     navigator.clipboard?.writeText(sql);
     setCopiedSql(true);

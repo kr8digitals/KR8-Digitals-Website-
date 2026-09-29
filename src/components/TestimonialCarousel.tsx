@@ -6,12 +6,9 @@ import {
   getVideoComments,
   addVideoComment,
   likeVideoComment,
+  getStudents,
 } from "../data/store";
 import { useAuth } from "../context/AuthContext";
-
-function shuffle<T>(items: T[]) {
-  return [...items].sort(() => Math.random() - 0.5);
-}
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
@@ -68,17 +65,31 @@ function highlightKeywords(text: string) {
 export default function TestimonialCarousel({ items }: { items: Testimonial[] }) {
   const { student: currentUser } = useAuth();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Order videos: latest first, then shuffle the rest
-  const ordered = useMemo(() => {
-    if (!items.length) return [];
-    const sorted = [...items].sort((a, b) => b.createdAt - a.createdAt);
-    if (sorted.length <= 1) return sorted;
-    const [latest, ...rest] = sorted;
-    return [latest, ...shuffle(rest)];
-  }, [items]);
+  // TRUE SHUFFLE ON INITIAL MOUNT (Session-based, does not reshuffle on every re-render)
+  const [ordered] = useState<Testimonial[]>(() => {
+    if (!items || !items.length) return [];
+    try {
+      const stored = sessionStorage.getItem("kr8_shuffled_testimonials_v16");
+      if (stored) {
+        const parsedIds: string[] = JSON.parse(stored);
+        const map = new Map(items.map((it) => [it.id, it]));
+        const rehydrated = parsedIds.map((id) => map.get(id)).filter(Boolean) as Testimonial[];
+        if (rehydrated.length === items.length) {
+          return rehydrated;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const shuffled = [...items].sort(() => Math.random() - 0.5);
+    try {
+      sessionStorage.setItem("kr8_shuffled_testimonials_v16", JSON.stringify(shuffled.map((i) => i.id)));
+    } catch {}
+    return shuffled;
+  });
 
+  const total = ordered.length;
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -87,6 +98,11 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const [duration, setDuration] = useState(0);
   const [captionsEnabled, setCaptionsEnabled] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [slideDirection, setSlideDirection] = useState<"next" | "prev" | "none">("none");
+
+  // Touch Swipe Handlers for mobile
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   // Comments state
   const [comments, setComments] = useState<VideoComment[]>([]);
@@ -94,8 +110,12 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   const [authorName, setAuthorName] = useState("");
 
   const currentItem = ordered[currentIndex] || items[0];
+  const prevIndex = (currentIndex - 1 + total) % total;
+  const nextIndex = (currentIndex + 1) % total;
+  const prevItem = ordered[prevIndex];
+  const nextItem = ordered[nextIndex];
 
-  // Deep linking: read ?video=[id] or hash on mount
+  // Deep linking: read ?video=[id] on mount
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -106,10 +126,15 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
           setCurrentIndex(found);
         }
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [ordered]);
+
+  // Link to real student profile if kr8Id exists and matches a registered student
+  const linkedStudent = useMemo(() => {
+    if (!currentItem?.kr8Id) return null;
+    const allStudents = getStudents();
+    return allStudents.find((s) => s.id.toLowerCase() === currentItem.kr8Id?.trim().toLowerCase()) || null;
+  }, [currentItem?.kr8Id]);
 
   // Load comments for current video
   useEffect(() => {
@@ -118,12 +143,23 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     }
   }, [currentItem?.id]);
 
-  // Play current video whenever currentIndex changes
+  // Set initial duration from current item if available
+  useEffect(() => {
+    if (currentItem?.duration) {
+      setDuration(currentItem.duration);
+    }
+    setCurrentTime(0);
+  }, [currentIndex, currentItem]);
+
+  // Sync video source change with immediate smooth playback
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.currentTime = 0;
+
     setCurrentTime(0);
+    video.muted = isMuted;
+
+    // Smooth native play
     const playPromise = video.play();
     if (playPromise !== undefined) {
       playPromise
@@ -145,31 +181,35 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     return active ? active.text : null;
   }, [currentItem?.captions, currentTime]);
 
-  // Continuous auto-playback: on ended, go to next
-  const handleEnded = () => {
-    setCurrentIndex((prev) => (prev + 1) % ordered.length);
-  };
-
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % ordered.length);
+    setSlideDirection("next");
+    setCurrentIndex((prev) => (prev + 1) % total);
+    setTimeout(() => setSlideDirection("none"), 450);
   };
 
   const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + ordered.length) % ordered.length);
+    setSlideDirection("prev");
+    setCurrentIndex((prev) => (prev - 1 + total) % total);
+    setTimeout(() => setSlideDirection("none"), 450);
   };
 
-  const togglePlay = () => {
+  const togglePlay = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
-    if (isPlaying) {
+
+    if (video.paused) {
+      video.play().then(() => setIsPlaying(true)).catch((err) => {
+        console.warn("Playback error:", err);
+      });
+    } else {
       video.pause();
       setIsPlaying(false);
-    } else {
-      video.play().then(() => setIsPlaying(true)).catch(() => {});
     }
   };
 
-  const toggleMute = () => {
+  const toggleMute = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
     const newMuted = !isMuted;
@@ -180,7 +220,8 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     }
   };
 
-  const handleUnmutePrompt = () => {
+  const handleUnmutePrompt = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
     video.muted = false;
@@ -192,19 +233,72 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
     const video = videoRef.current;
-    if (!video || !duration) return;
+    const effectiveDuration = duration || video?.duration || currentItem?.duration || 0;
+    if (!video || !effectiveDuration) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const pos = (e.clientX - rect.left) / rect.width;
-    const newTime = Math.max(0, Math.min(duration, pos * duration));
+    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const newTime = pos * effectiveDuration;
     video.currentTime = newTime;
     setCurrentTime(newTime);
   };
 
-  const handleShare = async (e?: React.MouseEvent) => {
+  // Touch Swipe Handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    // Horizontal swipe threshold: > 35px and more horizontal than vertical
+    if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) {
+        handleNext();
+      } else {
+        handlePrev();
+      }
+    }
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  };
+
+  // General shareable link (landing on full testimonial library)
+  const handleShareGeneral = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const shareUrl = `${window.location.origin}${window.location.pathname}?video=${currentItem.id}#student-stories`;
-    const shareTitle = `Watch ${currentItem.name}'s Journey at KR8 Digitals`;
+    const shareUrl = `${window.location.origin}/#student-stories`;
+    const shareTitle = "KR8 Digitals Student Stories & Reviews";
+    const shareText = "Come see what our students say! Real stories from African youth mastering high-income tech and creative skills for free at KR8 Digitals.";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        showToast("General student stories shared!");
+        return;
+      } catch {}
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast("General testimonial library link copied to clipboard!");
+    } catch {
+      showToast(shareUrl);
+    }
+  };
+
+  // Individual active story share link
+  const handleShareActive = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const shareUrl = `${window.location.origin}/?video=${currentItem.id}#student-stories`;
+    const shareTitle = `Watch ${currentItem.name}'s Story at KR8 Digitals`;
     const shareText = `Check out how ${currentItem.name} learned ${currentItem.skill} for free at KR8 Digitals Academy!`;
 
     if (navigator.share) {
@@ -216,16 +310,14 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
         });
         showToast("Story shared successfully!");
         return;
-      } catch {
-        // Fallback to clipboard
-      }
+      } catch {}
     }
 
     try {
       await navigator.clipboard.writeText(shareUrl);
-      showToast("Link copied to clipboard! Share with friends 🚀");
+      showToast("Story link copied to clipboard!");
     } catch {
-      showToast("Share URL: " + shareUrl);
+      showToast(shareUrl);
     }
   };
 
@@ -263,7 +355,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     );
   };
 
-  if (!ordered.length) {
+  if (!total) {
     return (
       <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-10 text-center text-sm text-[#8a7ba8]">
         Student testimonial videos will appear here as they are published.
@@ -271,8 +363,10 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
     );
   }
 
+  const effectiveDuration = duration || currentItem.duration || 0;
+
   return (
-    <div id="student-stories" className="relative w-full max-w-5xl mx-auto">
+    <div id="student-stories" className="relative w-full max-w-6xl mx-auto px-2 sm:px-4">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-2xl border border-pink-500/40 bg-[#160d2b]/95 px-5 py-3 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl animate-fade-in">
@@ -283,16 +377,94 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
         </div>
       )}
 
-      {/* Main Experience Grid: Video Player + Interactive Story/Comments Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* VIDEO PLAYER COLUMN (7 cols on desktop) */}
-        <div className="lg:col-span-7 flex flex-col items-center">
-          <div
-            ref={containerRef}
-            className="group relative w-full max-w-[340px] sm:max-w-[380px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/15 bg-black shadow-2xl glow-pink-sm select-none"
+      {/* Top Controls Bar: General Library Share & Shuffle indicator */}
+      <div className="mb-4 sm:mb-6 flex flex-wrap items-center justify-between gap-3 px-2">
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-3 py-1 text-xs font-bold text-pink-300 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-pink-400 animate-pulse" />
+            Live Student Testimonials ({total})
+          </span>
+          <span className="text-xs text-[#8a7ba8] hidden sm:inline">
+            Freshly shuffled for each visit
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleShareGeneral}
+            className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all shadow-sm"
+            title="Share full testimonial library link"
           >
-            {/* Background Glow */}
-            <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-pink-500/20 via-purple-600/10 to-blue-500/20 blur-xl pointer-events-none" />
+            <Icon name="share" size={13} />
+            <span>Share All Student Stories</span>
+          </button>
+        </div>
+      </div>
+
+      {/* RESPONSIVE EXPERIENCE GRID: Side-by-side (VIDEO LEFT | COMMENT RIGHT) on Desktop/Laptop, Stacked on Mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
+        {/* LEFT COLUMN: VIDEO PLAYER & CAROUSEL (Desktop: Left Side | Mobile: Top) */}
+        <div className="lg:col-span-6 xl:col-span-6 flex flex-col items-center w-full">
+          <div
+            className="relative w-full overflow-hidden py-2 select-none flex flex-col items-center"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Navigation Arrows for Mobile and Desktop */}
+            <button
+              onClick={handlePrev}
+              aria-label="Previous story"
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-40 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-white/30 bg-black/75 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-2xl"
+            >
+              <span className="text-2xl font-bold leading-none -ml-0.5">‹</span>
+            </button>
+
+            <button
+              onClick={handleNext}
+              aria-label="Next story"
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-40 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-white/30 bg-black/75 text-white backdrop-blur-md hover:bg-pink-600 hover:border-pink-500 hover:scale-110 active:scale-95 transition-all shadow-2xl"
+            >
+              <span className="text-2xl font-bold leading-none -mr-0.5">›</span>
+            </button>
+
+            {/* Carousel Stage: Mobile 3-Card Row / Desktop Clean Center Player */}
+            <div className="relative flex items-center justify-center gap-2 sm:gap-6 w-full max-w-full">
+              {/* PREVIOUS VIDEO PREVIEW (Mobile Only: dimmed on left edge) */}
+              {prevItem && (
+                <div
+                  onClick={handlePrev}
+                  className="lg:hidden relative flex flex-col items-center opacity-30 hover:opacity-75 scale-80 sm:scale-90 -mr-12 sm:-mr-8 z-10 cursor-pointer transition-all duration-500 shrink-0 select-none group"
+                  title={`Previous: ${prevItem.name}`}
+                >
+                  <div className="relative w-[130px] sm:w-[220px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/15 bg-black shadow-lg">
+                    <img
+                      src={prevItem.img}
+                      alt={prevItem.name}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md border border-white/30 group-hover:bg-pink-600 transition-colors">
+                        ‹
+                      </span>
+                    </div>
+                    <div className="absolute bottom-3 left-2.5 right-2.5 text-left">
+                      <p className="text-[11px] sm:text-xs font-bold text-white truncate">{prevItem.name}</p>
+                      <p className="text-[9px] sm:text-[10px] text-pink-300 truncate">{prevItem.skill}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+          {/* ACTIVE CENTER VIDEO PLAYER (Prominent, Centered, Fully Functional) */}
+          <div
+            className={`group/player relative w-[80vw] max-w-[340px] sm:max-w-[380px] aspect-[9/16] rounded-3xl overflow-hidden border-2 border-pink-500/60 bg-black shadow-2xl glow-pink-sm z-20 shrink-0 select-none transition-all duration-500 ${
+              slideDirection === "next" ? "animate-pulse" : slideDirection === "prev" ? "animate-pulse" : ""
+            }`}
+          >
+            {/* Ambient Back Glow */}
+            <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-pink-500/30 via-purple-600/20 to-blue-500/20 blur-xl pointer-events-none" />
 
             {/* Video Element */}
             <video
@@ -300,222 +472,284 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               src={currentItem.video}
               poster={currentItem.img}
               playsInline
-              muted={isMuted}
+              preload="auto"
               autoPlay
-              onTimeUpdate={() => {
-                if (videoRef.current) {
-                  setCurrentTime(videoRef.current.currentTime);
-                  setDuration(videoRef.current.duration || currentItem.duration || 0);
+              muted={isMuted}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onTimeUpdate={(e) => {
+                const v = e.currentTarget;
+                setCurrentTime(v.currentTime);
+                if (v.duration && !isNaN(v.duration)) {
+                  setDuration(v.duration);
                 }
               }}
-              onLoadedMetadata={() => {
-                if (videoRef.current) {
-                  setDuration(videoRef.current.duration || currentItem.duration || 0);
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                if (v.duration && !isNaN(v.duration)) {
+                  setDuration(v.duration);
                 }
               }}
-              onEnded={handleEnded}
+              onDurationChange={(e) => {
+                const v = e.currentTarget;
+                if (v.duration && !isNaN(v.duration)) {
+                  setDuration(v.duration);
+                }
+              }}
+              onEnded={handleNext}
               onClick={togglePlay}
-              className="relative z-0 h-full w-full object-cover cursor-pointer"
+              className="h-full w-full object-cover cursor-pointer bg-black"
             />
 
-            {/* Big Centered Play/Pause Button on Video */}
+            {/* BIG PROMINENT CENTER PLAY BUTTON OVERLAY (When Paused) */}
             {!isPlaying && (
-              <button
+              <div
                 onClick={togglePlay}
-                aria-label="Play video"
-                className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 backdrop-blur-[2px] transition-all"
+                className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-[2px] cursor-pointer transition-all hover:bg-black/30"
               >
-                <span className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-pink text-white shadow-2xl transform scale-100 hover:scale-110 active:scale-95 transition-transform glow-pink">
-                  <Icon name="video" size={32} />
-                </span>
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  aria-label="Play testimonial video"
+                  className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full bg-gradient-pink text-white shadow-2xl shadow-pink-500/60 glow-pink hover:scale-110 active:scale-95 transition-all ring-4 ring-white/30 animate-pulse"
+                >
+                  <span className="text-2xl sm:text-3xl ml-1">▶</span>
+                </button>
+              </div>
+            )}
+
+            {/* Tap to Unmute Overlay Hint */}
+            {isMuted && showUnmuteHint && (
+              <button
+                type="button"
+                onClick={handleUnmutePrompt}
+                className="absolute top-4 left-4 z-30 flex items-center gap-2 rounded-full border border-pink-400/50 bg-black/80 px-3.5 py-1.5 text-xs font-bold text-white shadow-xl backdrop-blur-md animate-pulse hover:bg-pink-600"
+              >
+                <span>🔊</span>
+                <span>Tap to Unmute Audio</span>
               </button>
             )}
 
-            {/* Top Bar Overlay: Badge, Audio & Share */}
-            <div className="absolute top-0 inset-x-0 z-20 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-auto">
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-pink-500/80 px-2.5 py-1 text-[11px] font-bold text-white tracking-wider uppercase backdrop-blur-md">
-                  {currentIndex === 0 ? "🔥 Latest Upload" : "Student Reel"}
-                </span>
-                <span className="rounded-full bg-black/60 border border-white/20 px-2.5 py-1 text-[11px] font-medium text-[#e8ddf5] backdrop-blur-md">
-                  {currentIndex + 1} of {ordered.length}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleShare}
-                  aria-label="Share this story"
-                  title="Share this student's story"
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 border border-white/20 text-white hover:bg-pink-500/30 hover:border-pink-500/50 transition-all backdrop-blur-md active:scale-90"
-                >
-                  <Icon name="share" size={16} />
-                </button>
-                <button
-                  onClick={toggleMute}
-                  aria-label={isMuted ? "Unmute sound" : "Mute sound"}
-                  title={isMuted ? "Unmute sound" : "Mute sound"}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-black/60 border border-white/20 text-white hover:bg-white/20 transition-all backdrop-blur-md active:scale-90"
-                >
-                  <Icon name={isMuted ? "volumeX" : "volume"} size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Unmute Prompt Banner if autoplaying muted */}
-            {isMuted && showUnmuteHint && isPlaying && (
-              <div className="absolute top-16 inset-x-0 z-20 flex justify-center px-4 animate-bounce">
-                <button
-                  onClick={handleUnmutePrompt}
-                  className="flex items-center gap-2 rounded-full bg-gradient-to-r from-pink-500 to-purple-600 px-4 py-2 text-xs font-bold text-white shadow-xl hover:brightness-110 active:scale-95 transition-all glow-pink-sm"
-                >
-                  <Icon name="volume" size={14} />
-                  <span>Tap to Unmute Audio</span>
-                </button>
+            {/* Verified Student Badge on Video */}
+            {linkedStudent && (
+              <div className="absolute top-4 right-4 z-30 flex items-center gap-1.5 rounded-full border border-emerald-500/50 bg-emerald-950/80 px-3 py-1 text-[11px] font-bold text-emerald-300 shadow-xl backdrop-blur-md">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span>Verified Student</span>
               </div>
             )}
 
-            {/* STYLED AUTO-CAPTIONS OVERLAY */}
+            {/* Subtitles & Captions Overlay */}
             {captionsEnabled && currentCaption && (
-              <div className="absolute bottom-20 inset-x-3 z-20 flex justify-center pointer-events-none transition-all duration-300">
-                <div className="inline-block max-w-[95%] rounded-2xl border border-white/20 bg-black/85 px-4 py-2.5 text-center text-xs sm:text-sm font-semibold text-white tracking-wide shadow-2xl backdrop-blur-md animate-fade-in">
-                  <span className="leading-snug">{highlightKeywords(currentCaption)}</span>
-                </div>
+              <div className="pointer-events-none absolute bottom-24 left-3 right-3 z-20 flex justify-center text-center">
+                <p className="max-w-[92%] rounded-2xl bg-black/85 px-3.5 py-2 text-xs sm:text-sm font-semibold leading-relaxed text-white shadow-2xl backdrop-blur-md border border-white/15">
+                  {highlightKeywords(currentCaption)}
+                </p>
               </div>
             )}
 
-            {/* BOTTOM CONTROLS & TIMELINE OVERLAY */}
-            <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-black/95 via-black/70 to-transparent pt-12 pb-3 px-4 flex flex-col gap-2">
-              {/* Interactive Scrub Bar */}
+            {/* Video Gradient Shadow at Bottom */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-44 bg-gradient-to-t from-black via-black/70 to-transparent z-10" />
+
+            {/* Bottom Controls & Info Overlay */}
+            <div className="absolute inset-x-0 bottom-0 z-20 p-4 space-y-2">
+              {/* Progress Scrubber */}
               <div
                 onClick={handleSeek}
-                className="group/bar relative h-2 w-full cursor-pointer rounded-full bg-white/25 hover:h-3 transition-all"
+                className="group/seek relative h-2.5 w-full cursor-pointer rounded-full bg-white/20 overflow-hidden"
+                title="Click or drag to seek"
               >
                 <div
-                  className="h-full rounded-full bg-gradient-pink relative"
+                  className="h-full bg-gradient-pink transition-all duration-100"
                   style={{
-                    width: `${duration ? (currentTime / duration) * 100 : 0}%`,
+                    width: `${effectiveDuration ? (currentTime / effectiveDuration) * 100 : 0}%`,
                   }}
-                >
-                  <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 h-3.5 w-3.5 rounded-full bg-white shadow-md ring-2 ring-pink-500 scale-0 group-hover/bar:scale-100 transition-transform" />
-                </div>
+                />
               </div>
 
-              {/* Controls Row */}
-              <div className="flex items-center justify-between text-xs text-white">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handlePrev}
-                    aria-label="Previous story"
-                    title="Previous story"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all"
-                  >
-                    ⏮
-                  </button>
-                  <button
-                    onClick={togglePlay}
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                    title={isPlaying ? "Pause" : "Play"}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-pink-500 hover:bg-pink-600 active:scale-90 transition-all font-bold"
-                  >
-                    {isPlaying ? "❚❚" : "▶"}
-                  </button>
-                  <button
-                    onClick={handleNext}
-                    aria-label="Next story"
-                    title="Next story"
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all"
-                  >
-                    ⏭
-                  </button>
-                  <span className="font-mono text-[11px] text-[#cabfe0] ml-1">
-                    {formatTime(currentTime)} / {formatTime(duration)}
-                  </span>
+              {/* Student Name & Controls Row */}
+              <div className="flex items-end justify-between gap-2 pt-1">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-white text-base truncate">
+                      {currentItem.name}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-pink-300 font-semibold truncate">
+                    {currentItem.skill} {currentItem.schoolOrRole ? `· ${currentItem.schoolOrRole}` : ""}
+                  </p>
+                  <p className="text-[11px] text-gray-300 font-mono mt-0.5">
+                    {formatTime(currentTime)} / {formatTime(effectiveDuration)}
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {/* CC (Closed Captions) Toggle */}
+                {/* Right Action Icons: Play, Mute, CC, Share */}
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
-                    onClick={() => setCaptionsEnabled((prev) => !prev)}
-                    aria-label={captionsEnabled ? "Disable Captions" : "Enable Captions"}
-                    title={captionsEnabled ? "Captions On (Tap to Hide)" : "Captions Off (Tap to Show)"}
-                    className={`px-2 py-0.5 rounded text-[11px] font-bold tracking-wider transition-all border ${
+                    type="button"
+                    onClick={togglePlay}
+                    aria-label={isPlaying ? "Pause video" : "Play video"}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40 active:scale-90 backdrop-blur-sm transition-all"
+                  >
+                    <span className="text-xs">{isPlaying ? "❚❚" : "▶"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    aria-label={isMuted ? "Unmute audio" : "Mute audio"}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40 active:scale-90 backdrop-blur-sm transition-all"
+                  >
+                    <span className="text-xs">{isMuted ? "🔇" : "🔊"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCaptionsEnabled(!captionsEnabled)}
+                    aria-label="Toggle subtitles"
+                    className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all ${
                       captionsEnabled
-                        ? "bg-pink-500/80 border-pink-400 text-white"
-                        : "bg-white/10 border-white/20 text-[#8a7ba8] hover:text-white"
+                        ? "bg-gradient-pink text-white"
+                        : "bg-white/20 text-white/50"
                     }`}
                   >
                     CC
                   </button>
-
-                  {/* Unmute/Mute Toggle */}
                   <button
-                    onClick={toggleMute}
-                    aria-label={isMuted ? "Unmute" : "Mute"}
-                    title={isMuted ? "Unmute" : "Mute"}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 transition-all text-white"
+                    type="button"
+                    onClick={handleShareActive}
+                    aria-label="Share story"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40 active:scale-90 backdrop-blur-sm transition-all"
+                    title="Share this specific story"
                   >
-                    <Icon name={isMuted ? "volumeX" : "volume"} size={14} />
+                    <Icon name="share" size={13} />
                   </button>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* NEXT VIDEO PREVIEW (Partially visible & dimmed on right edge on mobile and desktop) */}
+          {nextItem && (
+            <div
+              onClick={handleNext}
+              className="relative flex flex-col items-center opacity-30 hover:opacity-75 scale-80 sm:scale-90 -ml-12 sm:-ml-8 z-10 cursor-pointer transition-all duration-500 shrink-0 select-none group"
+              title={`Next: ${nextItem.name}`}
+            >
+              <div className="relative w-[130px] sm:w-[220px] aspect-[9/16] rounded-3xl overflow-hidden border border-white/15 bg-black shadow-lg">
+                <img
+                  src={nextItem.img}
+                  alt={nextItem.name}
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md border border-white/30 group-hover:bg-pink-600 transition-colors">
+                    ›
+                  </span>
+                </div>
+                <div className="absolute bottom-3 left-2.5 right-2.5 text-left">
+                  <p className="text-[11px] sm:text-xs font-bold text-white truncate">{nextItem.name}</p>
+                  <p className="text-[9px] sm:text-[10px] text-pink-300 truncate">{nextItem.skill}</p>
+                </div>
+              </div>
+            </div>
+          )}
+            </div>
+
+            {/* Desktop Navigation Bar below Video */}
+            <div className="hidden lg:flex items-center justify-between w-full max-w-[380px] mt-4 px-2 text-xs">
+              <button
+                type="button"
+                onClick={handlePrev}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-white hover:bg-pink-600 hover:border-pink-500 active:scale-95 transition-all"
+              >
+                <span>‹</span>
+                <span>Previous Story</span>
+              </button>
+              <span className="text-[#8a7ba8] font-mono">
+                {currentIndex + 1} of {total}
+              </span>
+              <button
+                type="button"
+                onClick={handleNext}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-semibold text-white hover:bg-pink-600 hover:border-pink-500 active:scale-95 transition-all"
+              >
+                <span>Next Story</span>
+                <span>›</span>
+              </button>
+            </div>
+
+            {/* SWIPE HINT FOR MOBILE USERS */}
+            <div className="flex sm:hidden items-center justify-center gap-1.5 mt-2 text-[11px] text-[#8a7ba8]">
+              <span>←</span>
+              <span>Swipe left/right or tap side preview to slide</span>
+              <span>→</span>
+            </div>
+          </div>
         </div>
 
-        {/* SIDEBAR COLUMN: Student Profile, Key Quote & Community Comments (5 cols on desktop) */}
-        <div className="lg:col-span-5 flex flex-col gap-4">
+        {/* RIGHT COLUMN: STUDENT SPOTLIGHT & COMMUNITY COMMENTS (Desktop: Right Side | Mobile: Bottom) */}
+        <div className="lg:col-span-6 xl:col-span-6 flex flex-col gap-5 w-full">
           {/* Active Student Spotlight Card */}
-          <div className="rounded-3xl border border-white/10 bg-[#160d2b]/80 p-5 backdrop-blur-xl shadow-xl">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 backdrop-blur-md shadow-xl">
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3.5">
                 <img
                   src={currentItem.img}
                   alt={currentItem.name}
-                  className="h-12 w-12 rounded-2xl object-cover ring-2 ring-pink-500/50 shadow-md"
+                  className="h-14 w-14 rounded-2xl object-cover ring-2 ring-pink-500/60 shadow-lg shrink-0"
                 />
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-1.5">
-                    {currentItem.name}
-                    <span className="text-pink-400 text-xs">✓ Verified</span>
-                  </h3>
-                  <p className="text-xs text-pink-300 font-medium">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-white leading-tight">
+                      {currentItem.name}
+                    </h3>
+                    <span className="rounded-full bg-pink-500/20 border border-pink-500/40 px-2 py-0.5 text-[10px] font-bold text-pink-300">
+                      ✓ Verified Graduate
+                    </span>
+                  </div>
+                  <p className="text-xs text-pink-300 font-semibold mt-0.5">
                     {currentItem.skill} {currentItem.schoolOrRole ? `· ${currentItem.schoolOrRole}` : ""}
                   </p>
                 </div>
               </div>
 
               <button
-                onClick={handleShare}
-                className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.05] px-3 py-1.5 text-xs font-semibold text-white hover:border-pink-500/40 hover:bg-pink-500/10 active:scale-95 transition-all"
+                onClick={handleShareActive}
+                className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15 active:scale-95 transition-all shadow-sm shrink-0"
+                title="Share this student's story"
               >
                 <Icon name="share" size={13} />
-                <span>Share</span>
+                <span className="hidden sm:inline">Share</span>
               </button>
             </div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3.5">
-              <p className="text-xs italic text-[#e8ddf5] leading-relaxed">
+            {/* Student's Featured Quote */}
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/40 p-4 relative">
+              <span className="absolute -top-2.5 left-4 px-2 py-0.5 rounded-md bg-gradient-pink text-[10px] font-bold tracking-wider uppercase text-white shadow">
+                Student Highlight
+              </span>
+              <p className="text-xs sm:text-sm italic text-[#e8ddf5] leading-relaxed pt-1">
                 "{currentItem.caption}"
               </p>
             </div>
           </div>
 
-          {/* Interactive Community Comments & Encouragements Card */}
-          <div className="rounded-3xl border border-white/10 bg-[#160d2b]/80 p-5 backdrop-blur-xl shadow-xl flex flex-col">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          {/* COMMUNITY COMMENTS & APPRECIATION */}
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 backdrop-blur-md shadow-xl flex flex-col flex-1">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
-                <Icon name="message" size={17} className="text-pink-400" />
-                <h4 className="font-bold text-white text-sm">Community Voices</h4>
-                <span className="rounded-full bg-pink-500/20 px-2 py-0.5 text-[11px] font-bold text-pink-300">
-                  {comments.length}
-                </span>
+                <span className="text-pink-400">💬</span>
+                <h4 className="text-sm font-bold text-white">
+                  Community Cheers ({comments.length})
+                </h4>
               </div>
-              <span className="text-[11px] text-[#8a7ba8]">Cheer on {currentItem.name.split(" ")[0]}</span>
+              <span className="text-xs text-[#8a7ba8]">
+                Cheer for {currentItem.name.split(" ")[0]}
+              </span>
             </div>
 
-            {/* Comment Form */}
-            <form onSubmit={handlePostComment} className="mt-3 flex flex-col gap-2">
+            {/* Comment input form */}
+            <form onSubmit={handlePostComment} className="mt-4 flex flex-col gap-2">
               {!currentUser && (
                 <input
                   type="text"
@@ -552,8 +786,8 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               </div>
             </form>
 
-            {/* Comments Scrollable Feed */}
-            <div className="mt-4 max-h-[220px] overflow-y-auto space-y-2.5 pr-1 text-xs">
+            {/* Comments Feed */}
+            <div className="mt-4 max-h-[260px] xl:max-h-[300px] overflow-y-auto space-y-2.5 pr-1 text-xs">
               {comments.length === 0 ? (
                 <p className="py-4 text-center text-xs text-[#8a7ba8]">
                   No comments yet. Be the first to congratulate {currentItem.name}!
@@ -580,6 +814,7 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
                     <p className="text-[#d8cde8] leading-relaxed mt-0.5">{c.comment}</p>
                     <div className="mt-1 flex items-center justify-end">
                       <button
+                        type="button"
                         onClick={() => handleLike(c.id)}
                         className="flex items-center gap-1 text-[11px] text-[#8a7ba8] hover:text-pink-400 active:scale-90 transition-all"
                       >
@@ -592,70 +827,6 @@ export default function TestimonialCarousel({ items }: { items: Testimonial[] })
               )}
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* PLAYLIST REEL STRIP (Horizontal row of student stories) */}
-      <div className="mt-8 border-t border-white/10 pt-6">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <div className="flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-pink-500 animate-ping" />
-            <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-              Continuous Student Reel
-            </h4>
-          </div>
-          <p className="text-xs text-[#8a7ba8]">
-            Auto-advances seamlessly · Latest upload leads
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {ordered.map((item, idx) => {
-            const isSelected = idx === currentIndex;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setCurrentIndex(idx)}
-                className={`flex items-center gap-3 rounded-2xl p-3 text-left transition-all backdrop-blur-md border ${
-                  isSelected
-                    ? "border-pink-500 bg-gradient-to-r from-pink-500/20 via-purple-500/10 to-transparent shadow-lg"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
-                }`}
-              >
-                <div className="relative h-14 w-11 shrink-0 rounded-xl overflow-hidden bg-black ring-1 ring-white/20">
-                  <img
-                    src={item.img}
-                    alt={item.name}
-                    className="h-full w-full object-cover"
-                  />
-                  {isSelected && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-pink-500 text-white text-[10px]">
-                        ▶
-                      </span>
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <p className={`text-xs font-bold truncate ${isSelected ? "text-pink-300" : "text-white"}`}>
-                      {item.name}
-                    </p>
-                    {idx === 0 && (
-                      <span className="shrink-0 rounded bg-pink-500/30 px-1 py-0.5 text-[9px] font-bold text-pink-300">
-                        NEW
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-[#b8aecf] truncate">{item.skill}</p>
-                  <p className="text-[10px] text-[#7d6f96] truncate">
-                    {item.schoolOrRole || "KR8 Student"}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
         </div>
       </div>
     </div>

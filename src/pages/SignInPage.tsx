@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSeo } from "../lib/useSeo";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -14,6 +15,7 @@ import Icon from "../components/Icon";
 import { authenticateWithBiometrics, getRegisteredBiometrics } from "../utils/biometrics";
 
 export default function SignInPage() {
+  useSeo({ path: "/signin", noindex: true });
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, signIn, signOut, addNotification } = useAuth();
@@ -98,12 +100,33 @@ export default function SignInPage() {
     }
 
     const all = getAccounts();
-    const existing = all.find((a) => normalizeEmail(a.email) === emailClean);
+    const existing = all.find(
+      (a) =>
+        (a.googleAuth?.enabled && normalizeEmail(a.googleAuth.linkedEmail) === emailClean) ||
+        normalizeEmail(a.email) === emailClean
+    );
 
     if (existing) {
+      // SECURITY CHECK: User must explicitly enable Google Sign-In in Account Settings
+      if (!existing.googleAuth?.enabled) {
+        setStatusMsg({
+          type: "error",
+          text: `Security Policy: Google Sign-In has not been enabled for this account (${existing.email}). To protect account security, please sign in with your email/phone and password first, then enable Google Sign-In in your Account Settings.`,
+        });
+        return;
+      }
+
+      if (normalizeEmail(existing.googleAuth.linkedEmail) !== emailClean) {
+        setStatusMsg({
+          type: "error",
+          text: `Access Denied: The Google account "${emailClean}" does not match the linked Google address on record for this account.`,
+        });
+        return;
+      }
+
       signIn(existing);
-      addNotification(`Signed in with Google as ${existing.name}!`);
-      navigate("/dashboard");
+      addNotification(`Signed in with verified Google Account as ${existing.name}!`);
+      navigate(existing.type === "tribe" ? "/tribe" : "/academy");
     } else {
       setStatusMsg({
         type: "error",
@@ -167,6 +190,15 @@ export default function SignInPage() {
     <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">
       <div className="mx-auto max-w-lg">
         <div className="text-center mb-8">
+          <div className="mx-auto mb-4 flex justify-center">
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-pink-500/25 via-purple-500/15 to-transparent p-2 border border-pink-500/40 shadow-2xl shadow-pink-500/30">
+              <img
+                src="/branding/kr8_logo.png"
+                alt="KR8 Digitals Logo"
+                className="h-full w-full object-contain filter drop-shadow"
+              />
+            </div>
+          </div>
           <Pill>Member Portal</Pill>
           <h1 className="font-display mt-4 text-3xl sm:text-4xl font-bold text-white">
             Sign In to <span className="text-gradient">KR8 Platform</span>
@@ -371,7 +403,6 @@ export default function SignInPage() {
               </div>
             </form>
           )}
-
           {/* METHOD 2: SIGN IN WITH GOOGLE */}
           {mode === "google" && (
             <form onSubmit={handleGoogleSignIn} className="space-y-4">

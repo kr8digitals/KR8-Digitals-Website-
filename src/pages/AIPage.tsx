@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Pill, GradientButton } from "../components/ui";
 import Icon from "../components/Icon";
+import { useSeo } from "../lib/useSeo";
 
 type Msg = { role: "user" | "ai"; text: string };
 
@@ -27,6 +28,12 @@ function reply(q: string): string {
 }
 
 export default function AIPage() {
+  useSeo({
+    title: "KR8 AI — Your Always-On Creative Mentor | KR8 Digitals",
+    description:
+      "KR8 AI is your always-on creative mentor — ask anything about skills, projects, roadmaps, and tools, straight inside the KR8 Digitals platform.",
+    path: "/ai",
+  });
   const { student } = useAuth();
   const LIMIT = 3;
   const [msgs, setMsgs] = useState<Msg[]>([
@@ -56,12 +63,12 @@ export default function AIPage() {
     <div className="section-bg min-h-screen">
       <div className="mx-auto max-w-4xl px-5 py-14">
         <div className="text-center">
-          <Pill>KR8 AI</Pill>
-          <h1 className="font-display mt-5 text-5xl uppercase text-white sm:text-6xl">
-            Your creative mentor. <span className="text-gradient">Always on.</span>
+          <Pill>Always-On Creative Copilot</Pill>
+          <h1 className="font-display mt-5 text-4xl text-white sm:text-6xl font-bold">
+            Your 24/7 Creative Mentor. <span className="text-gradient">Zero Judgment.</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-lg text-[#b8aecf]">
-            Ask KR8 AI anything — skill guidance, project feedback, roadmaps, tool recommendations.
+          <p className="mx-auto mt-4 max-w-xl text-base text-[#cabfe0] leading-relaxed">
+            Stuck on client pricing? Need a critique on your visual balance? Brainstorming high-retention video hooks? Ask KR8 AI for battle-tested advice calibrated for real market demand.
           </p>
         </div>
 
@@ -122,7 +129,7 @@ export default function AIPage() {
 
         {!student && (
           <p className="mt-6 text-center text-xs text-[#8a7ba8]">
-            Signed-in accounts get unlimited access & saved history. <Link to="/academy" className="text-pink-400">Register free →</Link>
+            Signed-in accounts get unlimited access & saved history. <Link to="/register" className="text-pink-400 font-bold hover:underline">Register free →</Link>
           </p>
         )}
       </div>

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /attendance-review
+Disallow: /settings
+
+Sitemap: https://kr8digitals.com/sitemap.xml

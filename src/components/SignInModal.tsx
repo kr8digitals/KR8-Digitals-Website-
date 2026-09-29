@@ -121,10 +121,31 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
     if (!emailPrompt) return;
     const clean = normalizeEmail(emailPrompt);
     const all = getAccounts();
-    const existing = all.find((a) => normalizeEmail(a.email) === clean);
+    const existing = all.find(
+      (a) =>
+        (a.googleAuth?.enabled && normalizeEmail(a.googleAuth.linkedEmail) === clean) ||
+        normalizeEmail(a.email) === clean
+    );
+
     if (existing) {
+      if (!existing.googleAuth?.enabled) {
+        setStatusMsg({
+          type: "error",
+          text: `Security Policy: Google Sign-In has not been enabled for this account (${existing.email}). To protect account security, please sign in with your password first, then enable Google Sign-In in your Account Settings.`,
+        });
+        return;
+      }
+
+      if (normalizeEmail(existing.googleAuth.linkedEmail) !== clean) {
+        setStatusMsg({
+          type: "error",
+          text: `Access Denied: The Google account "${clean}" is not linked to this profile.`,
+        });
+        return;
+      }
+
       signIn(existing);
-      addNotification(`Signed in with Google as ${existing.name}!`);
+      addNotification(`Signed in with verified Google Account as ${existing.name}!`);
       onClose();
     } else {
       setStatusMsg({
@@ -198,13 +219,20 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
       >
         {/* Header with Close */}
         <div className="flex items-start justify-between border-b border-white/10 pb-4">
-          <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-pink-400">
-              KR8 Digitals Portal
-            </span>
-            <h3 className="font-display text-2xl font-bold text-white mt-0.5">
-              {mode === "signin" ? "Sign In to Account" : "Reset Account Password"}
-            </h3>
+          <div className="flex items-center gap-3">
+            <img
+              src="/branding/kr8_logo.png"
+              alt="KR8 Logo"
+              className="h-10 w-10 rounded-xl object-contain shadow-md shadow-pink-500/20 shrink-0"
+            />
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-pink-400">
+                KR8 Digitals Portal
+              </span>
+              <h3 className="font-display text-2xl font-bold text-white mt-0.5">
+                {mode === "signin" ? "Sign In to Account" : "Reset Account Password"}
+              </h3>
+            </div>
           </div>
           <button
             onClick={onClose}

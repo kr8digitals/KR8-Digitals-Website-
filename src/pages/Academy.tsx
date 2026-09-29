@@ -2,18 +2,25 @@ import { useState, useEffect, type ChangeEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  SKILLS, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
+  getSkills, getSkill, getSkillName, areAllRegistrationsClosed, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
+  getStudentCertificates, getStudentNotifications, markNotificationRead, type CertificateRecord, type StudentNotification,
   registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
   submitAttendance, getStudentAttendance, getAttendanceTypesSettings, type AttendanceSubmission,
+  getStudentConversations,
   type Account, type Skill,
 } from "../data/store";
 import { Pill, GradientButton, GhostButton, SectionHead, Card, Avatar, Check, ImageWithFallback } from "../components/ui";
+import { useSeo } from "../lib/useSeo";
 import Marquee from "../components/Marquee";
 import TestimonialCarousel from "../components/TestimonialCarousel";
+import CoachingSection from "../components/CoachingSection";
 import Icon from "../components/Icon";
 import CountryPhone from "../components/CountryPhone";
-import { downloadCertificatePdf } from "../utils/certificate";
+import { downloadCertificatePdf, downloadCertificateImage } from "../utils/certificate";
 import { authenticateWithBiometrics, getRegisteredBiometrics } from "../utils/biometrics";
+import CertificateDocumentView from "../components/CertificateDocumentView";
+import GraduationShareModal from "../components/GraduationShareModal";
+import { getSiteContent, type SiteContent } from "../data/cmsStore";
 
 export default function Academy() {
   const { student } = useAuth();
@@ -26,12 +33,51 @@ export default function Academy() {
 const inputCls = "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none";
 
 function GuestAcademy() {
+  useSeo({
+    title: "Academy — Free Digital Skills Training | KR8 Digitals",
+    description:
+      "Intensive, practical tuition-free tracks in graphic design, video editing, web development, front-end development and more — taught by senior practitioners who ship client work. Claim your verifiable KR8 ID.",
+    path: "/academy",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "ItemList",
+      name: "KR8 Digitals Academy Tracks",
+      itemListElement: getSkills()
+        .filter((s) => s.available)
+        .map((s, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          item: {
+            "@type": "Course",
+            name: s.name,
+            description: s.snippet,
+            url: "https://kr8digitals.com/academy",
+            provider: {
+              "@type": "Organization",
+              name: "KR8 Digitals",
+              url: "https://kr8digitals.com",
+            },
+          },
+        })),
+    },
+  });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signIn, addNotification } = useAuth();
   const [view, setView] = useState<"skills" | "auth">("skills");
   const [curriculum, setCurriculum] = useState<Skill | null>(null);
   const [preSkill] = useState<string>("");
+  const [cms, setCms] = useState<SiteContent>(() => getSiteContent());
+
+  useEffect(() => {
+    const syncCms = () => setCms(getSiteContent());
+    window.addEventListener("kr8:cms-updated", syncCms);
+    window.addEventListener("storage", syncCms);
+    return () => {
+      window.removeEventListener("kr8:cms-updated", syncCms);
+      window.removeEventListener("storage", syncCms);
+    };
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("auth") === "true" || searchParams.get("register") === "true" || window.location.hash === "#auth") {
@@ -44,30 +90,44 @@ function GuestAcademy() {
       <section className="section-bg py-16">
         <div className="mx-auto max-w-7xl px-5">
           <div className="max-w-3xl">
-            <Pill>The Academy</Pill>
+            <Pill>{cms.academy.heroBadge || "The Academy"}</Pill>
             <h1 className="font-display mt-5 text-4xl text-white sm:text-6xl font-bold">
-              Master high-income craft — <span className="text-gradient">completely free.</span>
+              {cms.academy.heroHeadline ? (
+                cms.academy.heroHeadline.includes("completely free.") ? (
+                  <>Master high-income craft — <span className="text-gradient">completely free.</span></>
+                ) : (
+                  cms.academy.heroHeadline
+                )
+              ) : (
+                <>Master high-income craft — <span className="text-gradient">completely free.</span></>
+              )}
             </h1>
             <p className="mt-5 text-base sm:text-lg text-[#cabfe0] leading-relaxed">
-              Stop letting expensive bootcamps gatekeep your future. We offer intensive, practical tracks taught by senior practitioners who ship client work every single day. Pick your track, claim your verifiable KR8 ID, and turn your craft into income.
+              {cms.academy.heroSubtitle || "Stop letting expensive bootcamps gatekeep your future. We offer intensive, practical tracks taught by senior practitioners who ship client work every single day. Pick your track, claim your verifiable KR8 ID, and turn your craft into income."}
             </p>
             <div className="mt-7 flex flex-wrap gap-3.5">
-              <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
-                Join the Free Cohort →
-              </GradientButton>
-              <GhostButton to="/verify">Verify a Graduate KR8 ID</GhostButton>
+              {areAllRegistrationsClosed() ? (
+                <GradientButton to="/waitlist" className="shadow-xl shadow-pink-500/25">
+                  Admissions Full — Join WhatsApp Waitlist 📲
+                </GradientButton>
+              ) : (
+                <GradientButton to="/register" className="shadow-xl shadow-pink-500/25">
+                  {cms.academy.primaryCtaText || "Join the Free Cohort →"}
+                </GradientButton>
+              )}
+              <GhostButton to="/verify">{cms.academy.secondaryCtaText || "Verify a Graduate KR8 ID"}</GhostButton>
             </div>
           </div>
 
           {/* Skill cards */}
           <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {SKILLS.map((s) => (
+            {getSkills().filter((s) => s.available).map((s) => (
               (() => {
                 const founderKey = s.key === "graphic" ? "stevenson" : s.key === "video" ? "daniel" : s.key === "web" ? "timfire" : "";
                 const instructor = founderKey ? getFounders().find((founder) => founder.key === founderKey) : null;
                 const displayInstructor = instructor ? { name: instructor.name, photo: instructor.photo, bio: instructor.bio } : s.instructor;
                 return (
-              <Card key={s.key} className={`flex flex-col ${!s.available ? "opacity-80" : ""}`}>
+              <Card key={s.key} className="flex flex-col">
                 <div className="flex items-center justify-between">
                   <span className="text-pink-300"><Icon name={s.icon as Parameters<typeof Icon>[0]["name"]} size={25} /></span>
                   <span className="rounded-full bg-pink-500/10 px-3 py-1 font-mono text-[11px] text-pink-400">{s.suffix}</span>
@@ -77,7 +137,7 @@ function GuestAcademy() {
 
                 {/* instructor */}
                 <div className="mt-4 flex items-center gap-3 rounded-2xl bg-black/20 p-3">
-                  {s.available && displayInstructor ? (
+                  {displayInstructor ? (
                     <>
                       <InstructorPhoto src={displayInstructor.photo} name={displayInstructor.name} />
                       <div>
@@ -86,28 +146,27 @@ function GuestAcademy() {
                       </div>
                     </>
                   ) : (
-                    <p className="text-sm text-[#8a7ba8]">{s.available ? "Instructor: To be announced" : "Not Available"}</p>
+                    <p className="text-sm text-[#8a7ba8]">Instructor: KR8 Master Practitioner</p>
                   )}
                 </div>
 
                 {/* status */}
-                {s.available && (
-                  <p className={`mt-3 text-xs font-semibold ${getSkillRegistration(s.key) ? "text-green-400" : "text-yellow-300"}`}>
-                    {getSkillRegistration(s.key) ? "● Registration open" : "● Registration closed"}
-                  </p>
-                )}
+                <p className={`mt-3 text-xs font-semibold ${getSkillRegistration(s.key) ? "text-green-400" : "text-yellow-300"}`}>
+                  {getSkillRegistration(s.key) ? "● Registration open" : "● Registration closed"}
+                </p>
 
                 <div className="mt-4 flex gap-2">
                   <button
-                    onClick={() => s.available && setCurriculum(s)}
-                    disabled={!s.available}
-                    className="flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white hover:border-pink-400/60 disabled:opacity-40"
+                    onClick={() => setCurriculum(s)}
+                    className="flex-1 rounded-full border border-white/15 px-4 py-2.5 text-xs font-semibold text-white hover:border-pink-400/60"
                   >View Curriculum</button>
                   <button
                     onClick={() => navigate(`/register?skill=${s.key}`)}
-                    disabled={!s.available || !getSkillRegistration(s.key)}
-                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 hover:scale-[1.02] transition-transform"
-                  >Register</button>
+                    disabled={!getSkillRegistration(s.key)}
+                    className="flex-1 rounded-full bg-gradient-pink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] transition-transform"
+                  >
+                    {getSkillRegistration(s.key) ? "Register" : "Closed"}
+                  </button>
                 </div>
               </Card>
                 );
@@ -127,6 +186,11 @@ function GuestAcademy() {
               preSkill={preSkill}
               onStudent={(s) => {
                 signIn(s);
+                try {
+                  sessionStorage.setItem("kr8_just_registered", s.id);
+                } catch {
+                  /* ignore */
+                }
                 addNotification(
                   s.type === "founder"
                     ? "Welcome, Founder & CEO — executive identity confirmed."
@@ -179,6 +243,9 @@ function GuestAcademy() {
         </div>
       </section>
 
+      {/* NEW 1-ON-1 COACHING (PAY-AS-YOU-LEARN) SECTION */}
+      <CoachingSection />
+
       {curriculum && (
         <CurriculumModal
           skill={curriculum}
@@ -212,13 +279,23 @@ function CurriculumModal({ skill, onClose, onRegister }: { skill: Skill; onClose
         </div>
         <p className="mt-3 text-sm text-[#b8aecf]">{skill.snippet}</p>
         <div className="mt-6 space-y-4">
-          {skill.curriculum.map((w) => (
-            <div key={w.week} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">{w.week}</p>
-              <h4 className="mt-1 font-bold text-white">{w.title}</h4>
-              <ul className="mt-3 space-y-2">{w.points.map((p) => <Check key={p}>{p}</Check>)}</ul>
+          {skill.curriculum && skill.curriculum.length > 0 ? (
+            skill.curriculum.map((w) => (
+              <div key={w.week} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">{w.week}</p>
+                <h4 className="mt-1 font-bold text-white">{w.title}</h4>
+                <ul className="mt-3 space-y-2">{w.points.map((p) => <Check key={p}>{p}</Check>)}</ul>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-black/30 p-8 text-center">
+              <span className="text-3xl">📋</span>
+              <h4 className="text-base font-bold text-white mt-2">Curriculum Under Final Review</h4>
+              <p className="text-xs text-[#a594c7] mt-1.5 max-w-sm mx-auto leading-relaxed">
+                The detailed weekly syllabus and project roadmap for {skill.name} is being finalized and will be uploaded shortly by {skill.instructor?.name || "the instructional lead"}. You can register now to secure your spot.
+              </p>
             </div>
-          ))}
+          )}
         </div>
         <div className="mt-6 rounded-2xl bg-pink-500/10 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-pink-400">Certification criteria</p>
@@ -259,7 +336,7 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
   if (result) {
     const isFounder = result.type === "founder";
     const isCoFounder = result.type === "co-founder";
-    const skill = SKILLS.find((s) => s.key === result.skill)!;
+    const skill = getSkill(result.skill);
 
     return (
       <Card className="text-center">
@@ -338,7 +415,11 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
         <input type="password" className={inputCls} placeholder="Create a password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         <select className={inputCls} value={form.skill} onChange={(e) => setForm({ ...form, skill: e.target.value })}>
           <option value="">Select a skill…</option>
-          {SKILLS.map((s) => <option key={s.key} value={s.key} disabled={!s.available || !getSkillRegistration(s.key)}>{s.name}{!s.available ? " (Not Available)" : !getSkillRegistration(s.key) ? " (Closed)" : ""}</option>)}
+          {getSkills().filter((s) => s.available).map((s) => (
+            <option key={s.key} value={s.key} disabled={!getSkillRegistration(s.key)}>
+              {s.name}{!getSkillRegistration(s.key) ? " (Closed)" : ""}
+            </option>
+          ))}
         </select>
         <div>
           <label className="mb-1.5 block text-xs uppercase tracking-wider text-[#8a7ba8]">Date of birth</label>
@@ -558,13 +639,22 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
 
 /* ============ Student profile ============ */
 function Profile({ student }: { student: Account }) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [showWelcomeBanner, setShowWelcomeBanner] = useState(() => {
+    try {
+      return searchParams.get("registered") === "true" || sessionStorage.getItem("kr8_just_registered") === student.id;
+    } catch {
+      return false;
+    }
+  });
   const [tab, setTab] = useState<"posts" | "portfolio" | "activity" | "about">("posts");
   const [profile, setProfile] = useState(student);
   const [expanded, setExpanded] = useState(!!student.expandedVisibility);
   const [password, setPassword] = useState(profile.password ?? "");
-  const [copiedVerify, setCopiedVerify] = useState(false);
-  const { signIn, addNotification } = useAuth();
-  const skill = SKILLS.find((s) => s.key === profile.skill);
+  const [copiedId, setCopiedId] = useState(false);
+  const { signIn, signOut, addNotification } = useAuth();
+  const skill = getSkill(profile.skill);
   const ranked = getStudents().filter((account) => !account.isPlaceholder).sort((a, b) => b.points - a.points);
   const rank = ranked.findIndex((s) => s.id === profile.id) + 1;
   const studentTestimonial = getTestimonials().find(
@@ -590,18 +680,32 @@ function Profile({ student }: { student: Account }) {
     reader.readAsDataURL(file);
   };
 
-  const copyVerifyLink = () => {
-    const url = `${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}`;
-    navigator.clipboard.writeText(url);
-    setCopiedVerify(true);
-    setTimeout(() => setCopiedVerify(false), 2000);
-  };
-
   const handleDownload = () => {
     if (profile.certificateUrl) {
       downloadCertificatePdf(profile.name, profile.certificateUrl);
     } else {
       downloadCertificate(profile, skill?.name ?? "KR8 Digitals");
+    }
+  };
+
+  const handleCopyId = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(profile.id);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = profile.id;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      setCopiedId(true);
+      addNotification(`KR8 ID copied to clipboard: ${profile.id}`);
+      setTimeout(() => setCopiedId(false), 2000);
+    } catch {
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
     }
   };
 
@@ -635,8 +739,8 @@ function Profile({ student }: { student: Account }) {
                 profile.vip && <span className="rounded-full bg-gradient-pink px-3 py-1 text-xs font-bold text-white">VIP</span>
               )}
               {profile.graduated && profile.type === "student" && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-xs text-[#cabfe0]">
-                  <Icon name="certificate" size={13} /> {profile.certTier}
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-pink px-3.5 py-1 text-xs font-bold text-white shadow-lg glow-pink-sm">
+                  <Icon name="certificate" size={13} /> 🎓 KR8 Certified Graduate · {profile.certTier}
                 </span>
               )}
               {profile.admin && (
@@ -648,7 +752,31 @@ function Profile({ student }: { student: Account }) {
                 </Link>
               )}
             </div>
-            <p className="mt-1 font-mono text-sm text-pink-400">{profile.id}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm font-bold text-pink-300 bg-pink-500/10 border border-pink-500/25 px-2.5 py-0.5 rounded-lg select-all">
+                {profile.id}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyId}
+                title="Copy KR8 Student ID"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/[0.05] px-2.5 py-1 text-xs font-semibold text-white transition-all hover:bg-white/[0.1] hover:border-pink-500 active:scale-95"
+              >
+                {copiedId ? (
+                  <span className="text-emerald-400 text-xs font-bold">✓ Copied!</span>
+                ) : (
+                  <>
+                    <Icon name="paperclip" size={12} className="text-[#cabfe0]" />
+                    <span className="text-xs text-[#cabfe0]">Copy ID</span>
+                  </>
+                )}
+              </button>
+              {copiedId && (
+                <span className="rounded-md bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold text-emerald-300 animate-pulse">
+                  Copied to clipboard!
+                </span>
+              )}
+            </div>
             <span className="mt-2 inline-block rounded-full bg-pink-500/10 px-3 py-1 text-xs font-semibold text-pink-400">
               {profile.type === "founder" ? "Founder & CEO · Executive Leadership" : profile.type === "co-founder" ? "Co-Founder · Executive Leadership" : skill?.name}
             </span>
@@ -667,10 +795,31 @@ function Profile({ student }: { student: Account }) {
               </div>
             )}
           </div>
-          <div className="flex gap-6 pb-2">
-            <div className="text-center"><div className="font-display text-2xl text-gradient">#{rank}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Rank</div></div>
-            <div className="text-center"><div className="font-display text-2xl text-gradient">{profile.points}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Points</div></div>
-            <div className="text-center"><div className="font-display text-2xl text-gradient">{profile.referrals}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Referrals</div></div>
+          <div className="flex flex-col sm:items-end justify-between gap-3 pb-2">
+            <div className="flex gap-6">
+              <div className="text-center"><div className="font-display text-2xl text-gradient">#{rank}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Rank</div></div>
+              <div className="text-center"><div className="font-display text-2xl text-gradient">{profile.points}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Points</div></div>
+              <div className="text-center"><div className="font-display text-2xl text-gradient">{profile.referrals}</div><div className="text-[10px] uppercase text-[#8a7ba8]">Referrals</div></div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
+              <Link
+                to="/settings"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/[0.04] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-white/[0.08] transition-colors"
+              >
+                <Icon name="cog" size={13} />
+                <span>Settings</span>
+              </Link>
+              <button
+                onClick={() => {
+                  signOut();
+                  navigate("/");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-3.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
+              >
+                <span>Sign Out</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -693,6 +842,103 @@ function Profile({ student }: { student: Account }) {
               addNotification("Role promotion offer dismissed and expired.");
             }}
           />
+        )}
+
+        {/* STEP 15: POST-REGISTRATION CONGRATULATORY ONBOARDING CARD */}
+        {showWelcomeBanner && (
+          <div className="mt-6 overflow-hidden rounded-3xl border-2 border-pink-500/50 bg-gradient-to-r from-pink-950/60 via-[#180829] to-purple-950/60 p-6 sm:p-8 shadow-2xl relative">
+            <button
+              onClick={() => {
+                setShowWelcomeBanner(false);
+                try {
+                  sessionStorage.removeItem("kr8_just_registered");
+                } catch {
+                  /* ignore */
+                }
+              }}
+              className="absolute top-4 right-4 rounded-full border border-white/20 bg-black/40 p-2 text-xs text-[#cabfe0] hover:text-white"
+              title="Dismiss announcement"
+            >
+              ✕
+            </button>
+
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-pink text-white text-2xl shadow-lg shadow-pink-500/30">
+                    🎉
+                  </span>
+                  <div>
+                    <span className="rounded-full bg-pink-500/20 border border-pink-500/30 px-3 py-0.5 text-xs font-bold text-pink-300">
+                      Welcome to KR8 Digitals Academy!
+                    </span>
+                    <h2 className="text-xl sm:text-2xl font-bold text-white mt-1">
+                      Congratulations on Registering, {profile.name}!
+                    </h2>
+                  </div>
+                </div>
+
+                <p className="text-xs sm:text-sm text-[#cabfe0] max-w-2xl leading-relaxed">
+                  Your tuition-free seat is officially locked in for <strong className="text-white">{skill?.name}</strong>. Here is your official verifiable Student ID:
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <span className="font-mono text-base sm:text-lg font-bold text-pink-300 bg-pink-500/20 border border-pink-500/40 px-3.5 py-1 rounded-xl select-all">
+                    {profile.id}
+                  </span>
+                  <button
+                    onClick={handleCopyId}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/[0.08] px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/[0.15] active:scale-95 transition-all"
+                  >
+                    {copiedId ? "✓ Copied!" : "Copy Student ID"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons: Track WhatsApp + General Tribe WhatsApp */}
+              <div className="flex flex-col gap-2.5 w-full md:w-auto shrink-0">
+                {skill && (
+                  <a
+                    href={getSkillWhatsApp(skill.key)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-5 py-3 text-xs font-bold text-white shadow-lg shadow-emerald-500/25 transition-all hover:scale-[1.02]"
+                  >
+                    <span>📲 Join Official {skill.name} WhatsApp Group →</span>
+                  </a>
+                )}
+                <a
+                  href={getTribeWhatsApp()}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-pink-500/40 bg-pink-500/10 hover:bg-pink-500/20 px-5 py-2.5 text-xs font-semibold text-pink-200 transition-all"
+                >
+                  <span>🌐 Join General KR8 Tribe Community Group →</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Profile Completion Checklist */}
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-pink-300 mb-2">
+                Next Steps to Complete Your Profile:
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-[#cabfe0]">
+                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <p className="font-semibold text-white">1. Add Profile Picture & Bio</p>
+                  <p className="text-[11px] text-[#8a7ba8] mt-1">Tap the avatar pen above to upload your photo and edit your story.</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <p className="font-semibold text-white">2. Enable Quick Sign-In</p>
+                  <p className="text-[11px] text-[#8a7ba8] mt-1">Visit Settings to link your Google account or device fingerprint.</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                  <p className="font-semibold text-white">3. Review Weekly Curriculum</p>
+                  <p className="text-[11px] text-[#8a7ba8] mt-1">Explore weekly modules below and prepare for your first live session.</p>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Congratulatory / Executive Leadership Banner */}
@@ -853,7 +1099,11 @@ function Profile({ student }: { student: Account }) {
                   <Check>{profile.submissions} assignments submitted & accepted</Check>
                   <Check>{profile.referrals} successful referrals</Check>
                   <Check>{skill?.name} skill track badge earned</Check>
-                  {profile.graduated && <Check>Certificate of {profile.certTier} earned</Check>}
+                  {profile.graduated && (
+                    <Check>
+                      <strong>Certified Graduate:</strong> Official Certificate of {profile.certTier} earned in {skill?.name ?? "Professional Skill"} ({new Date(profile.graduatedAt || Date.now()).getFullYear()})
+                    </Check>
+                  )}
                 </ul>
               </Card>
             )}
@@ -919,67 +1169,8 @@ function Profile({ student }: { student: Account }) {
                     Open Public Co-Founder Verification Page ↗
                   </Link>
                 </div>
-              ) : profile.graduated ? (
-                <div className="mt-3 space-y-4">
-                  <div>
-                    <p className="text-sm font-semibold text-white">Certificate of {profile.certTier ?? "Completion"}</p>
-                    <p className="text-xs text-[#8a7ba8]">{skill?.name} · KR8 Digitals</p>
-                    {profile.certRecognition && <p className="mt-1 text-xs text-pink-400">"{profile.certRecognition}"</p>}
-                  </div>
-
-                  {profile.certificateUrl && (
-                    <div className="group relative overflow-hidden rounded-2xl border border-white/15 bg-black/40">
-                      <img
-                        src={profile.certificateUrl}
-                        alt={`Certificate of ${profile.name}`}
-                        className="w-full object-contain"
-                      />
-                      <div className="p-2.5 bg-black/70 text-center border-t border-white/10">
-                        <span className="text-[11px] text-green-300 font-semibold flex items-center justify-center gap-1">
-                          <Icon name="check" size={12} /> Includes verifiable QR code
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <GradientButton onClick={handleDownload} className="w-full flex items-center justify-center gap-2">
-                    <Icon name="certificate" size={15} /> Download Certificate (PDF) →
-                  </GradientButton>
-
-                  {/* Shareable Verification Link */}
-                  <div className="rounded-2xl border border-pink-400/30 bg-pink-500/5 p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-white">Verification Link</p>
-                      <span className="text-[10px] text-pink-300">Direct proof</span>
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-[#b8aecf]">
-                      Share this link with employers, clients or on LinkedIn to confirm your certificate without needing to scan the QR code:
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <input
-                        readOnly
-                        value={`${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}`}
-                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-pink-300 focus:outline-none select-all"
-                      />
-                      <button
-                        onClick={copyVerifyLink}
-                        className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20 whitespace-nowrap"
-                      >
-                        {copiedVerify ? "Copied! ✓" : "Copy Link"}
-                      </button>
-                    </div>
-                    <a
-                      href={`/verify?id=${encodeURIComponent(profile.id)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block text-center text-xs text-pink-300 underline underline-offset-2 hover:text-white pt-1"
-                    >
-                      Open My Verify Page ↗
-                    </a>
-                  </div>
-                </div>
               ) : (
-                <p className="mt-2 text-sm text-[#8a7ba8]">You don't have a certificate yet — complete your training to earn one.</p>
+                <StudentCertificateSection profile={profile} onDownload={handleDownload} />
               )}
             </Card>
             <Card>
@@ -1043,28 +1234,55 @@ function PortfolioManager({ profile, onSave }: { profile: Account; onSave: (port
   );
 }
 
-function ConnectionsCard({ profile, onSave }: { profile: Account; onSave: (patch: Partial<Account>) => void }) {
-  const [targetId, setTargetId] = useState("");
-  const [message, setMessage] = useState("");
-  const [notice, setNotice] = useState("");
-  const people = getStudents().filter((account) => account.id !== profile.id && !account.isPlaceholder);
-  const target = people.find((account) => account.id === targetId);
-  const follow = () => {
-    if (!target) return;
-    const following = profile.following ?? [];
-    const nextFollowing = following.includes(target.id) ? following.filter((id) => id !== target.id) : [...following, target.id];
-    const followers = target.followers ?? [];
-    updateAccount(target.id, { followers: followers.includes(profile.id) ? followers.filter((id) => id !== profile.id) : [...followers, profile.id] });
-    onSave({ following: nextFollowing });
-    setNotice(nextFollowing.includes(target.id) ? `You now follow ${target.name}.` : `You unfollowed ${target.name}.`);
-  };
-  const send = () => {
-    if (!target || !message.trim()) return;
-    if (target.messagePrivacy === "No one" || (target.messagePrivacy === "Friends only" && !(profile.following ?? []).includes(target.id))) { setNotice("This student has limited message privacy."); return; }
-    setNotice(`Message sent to ${target.name}. You can block or report a conversation at any time.`);
-    setMessage("");
-  };
-  return <Card><h3 className="flex items-center gap-2 font-bold text-white"><Icon name="users" size={18} /> Connections & messaging</h3><p className="mt-2 text-sm text-[#b8aecf]">Students can follow and message one another without needing a mutual follow first. Safety controls stay available.</p><select value={targetId} onChange={(event) => setTargetId(event.target.value)} className={`${inputCls} mt-4`}><option value="">Choose a student</option>{people.map((person) => <option key={person.id} value={person.id}>{person.name} · {person.id}</option>)}</select>{target && <><div className="mt-3 flex gap-2"><button onClick={follow} className="rounded-full border border-pink-400/40 px-4 py-2 text-xs font-semibold text-pink-300">{(profile.following ?? []).includes(target.id) ? "Unfollow" : "Follow"}</button><button onClick={() => setNotice("Conversation safety: block and report are available on every thread.")} className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#cabfe0]">Safety</button></div><div className="mt-4 flex gap-2"><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Message this student..." className={`${inputCls} flex-1`} /><button onClick={send} className="rounded-xl bg-gradient-pink px-4 text-xs font-bold text-white">Send</button></div><div className="mt-2 flex gap-2 text-[11px] text-[#8a7ba8]"><button onClick={() => setNotice("Student blocked. Their messages will no longer reach you.")}>Block</button><button onClick={() => setNotice("Conversation reported to admin moderation.")}>Report</button></div></>}{notice && <p className="mt-3 rounded-lg bg-pink-500/10 px-3 py-2 text-xs text-pink-200">{notice}</p>}</Card>;
+function ConnectionsCard({ profile, onSave: _onSave }: { profile: Account; onSave: (patch: Partial<Account>) => void }) {
+  const [convCount, setConvCount] = useState(0);
+  const [unreadTotal, setUnreadTotal] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      const convs = getStudentConversations(profile.id);
+      setConvCount(convs.length);
+      setUnreadTotal(convs.reduce((sum, c) => sum + c.unreadCount, 0));
+    };
+    update();
+    window.addEventListener("kr8:direct-messages-updated", update);
+    return () => window.removeEventListener("kr8:direct-messages-updated", update);
+  }, [profile.id]);
+
+  const followingCount = (profile.following || []).length;
+  const followersCount = (profile.followers || []).length;
+
+  return (
+    <Card>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h3 className="flex items-center gap-2 font-bold text-white text-base">
+            <Icon name="message" size={18} className="text-pink-400" /> Connections & messaging
+          </h3>
+          <p className="mt-2 text-sm text-[#b8aecf]">
+            Connect, collaborate, and chat with fellow KR8 students across tracks. Students can follow and message one another directly without needing a mutual follow first. Safety controls remain active on every thread.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Link
+          to="/messages"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-pink px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-pink-500/20 hover:opacity-95 transition-all"
+        >
+          <Icon name="message" size={16} /> Messages
+          {unreadTotal > 0 && (
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-black text-pink-600">
+              {unreadTotal}
+            </span>
+          )}
+        </Link>
+        <span className="text-xs text-[#8a7ba8]">
+          {convCount} conversation{convCount === 1 ? "" : "s"} · {followingCount} following · {followersCount} followers
+        </span>
+      </div>
+    </Card>
+  );
 }
 
 function AttendanceWidget({ student }: { student: Account }) {
@@ -1114,7 +1332,7 @@ function AttendanceWidget({ student }: { student: Account }) {
       return;
     }
     const finalScreenshot = screenshotData || "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800";
-    const skillName = SKILLS.find((s) => s.key === student.skill)?.name ?? "General";
+    const skillName = getSkillName(student.skill);
 
     submitAttendance({
       studentId: student.id,
@@ -1506,3 +1724,273 @@ function RoleOfferActivationModal({
   );
 }
 
+
+
+/* ---------------- Student Certificate Section (Multiple Certificates & Verification) ---------------- */
+
+function StudentCertificateSection({
+  profile,
+  onDownload,
+}: {
+  profile: Account;
+  onDownload: () => void;
+}) {
+  const [certs, setCerts] = useState<CertificateRecord[]>(() => getStudentCertificates(profile.id));
+  const [notifs, setNotifs] = useState<StudentNotification[]>(() => getStudentNotifications(profile.id));
+  const [selectedCertId, setSelectedCertId] = useState<string>(() => {
+    const list = getStudentCertificates(profile.id);
+    return list[0]?.id || "";
+  });
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const refresh = () => {
+    const list = getStudentCertificates(profile.id);
+    setCerts(list);
+    setNotifs(getStudentNotifications(profile.id));
+    if (!selectedCertId && list.length > 0) {
+      setSelectedCertId(list[0].id);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    window.addEventListener("kr8:accounts-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("kr8:accounts-updated", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, [profile.id]);
+
+  const activeCert = certs.find((c) => c.id === selectedCertId) || certs[0];
+  const [shareModalCert, setShareModalCert] = useState<CertificateRecord | null>(null);
+
+  const handleCopyLink = (certId?: string) => {
+    const cid = certId || activeCert?.id;
+    const url = `${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}${cid ? `&cert=${encodeURIComponent(cid)}` : ""}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleDismissNotif = (nid: string) => {
+    markNotificationRead(profile.id, nid);
+    setNotifs(getStudentNotifications(profile.id));
+  };
+
+  return (
+    <div className="mt-3 space-y-4">
+      {/* 1. NOTIFICATIONS BANNER (Congratulations / Withdrawal) */}
+      {notifs.filter((n) => !n.read).map((n) => (
+        <div
+          key={n.id}
+          className={`rounded-2xl p-4 border transition-all ${
+            n.type === "graduation"
+              ? "border-green-500/40 bg-gradient-to-r from-green-950/40 via-[#0d1f11] to-black text-green-200"
+              : n.type === "withdrawal"
+              ? "border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-[#1f1608] to-black text-amber-200"
+              : "border-pink-500/40 bg-pink-950/30 text-pink-200"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">
+                {n.type === "graduation" ? "🎓" : n.type === "withdrawal" ? "⚠️" : "📢"}
+              </span>
+              <h4 className="font-bold text-sm text-white">{n.title}</h4>
+            </div>
+            <button
+              onClick={() => handleDismissNotif(n.id)}
+              className="text-xs text-white/60 hover:text-white"
+              title="Dismiss notice"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-white/90">{n.message}</p>
+          {n.reason && (
+            <div className="mt-2.5 rounded-xl bg-black/40 p-2.5 text-xs border border-white/10 text-amber-200">
+              <strong>Stated Reason:</strong> <em>"{n.reason}"</em>
+            </div>
+          )}
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={() => handleDismissNotif(n.id)}
+              className="rounded-lg bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20"
+            >
+              Acknowledge ✓
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {/* 2. CERTIFICATES DISPLAY */}
+      {certs.length > 0 ? (
+        <div className="space-y-4">
+          {/* Multi-Certificate Selector Tabs (Requirement 7 & 16) */}
+          {certs.length > 1 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-[#8a7ba8] mb-1.5">
+                Your Credentials ({certs.length} Certificates)
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {certs.map((c) => {
+                  const isSelected = c.id === activeCert?.id;
+                  const isWithdrawn = c.status === "withdrawn";
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCertId(c.id)}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold transition-all border ${
+                        isSelected
+                          ? "border-pink-500 bg-gradient-pink text-white shadow-md glow-pink-sm"
+                          : "border-white/15 bg-black/30 text-[#cabfe0] hover:border-white/30"
+                      }`}
+                    >
+                      {c.skillName} · {c.tier} {isWithdrawn ? "(Withdrawn)" : "✓"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeCert && (
+            <div className="space-y-3">
+              {/* Certificate Metadata */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-base">Certificate of {activeCert.tier}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        activeCert.status === "withdrawn"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-green-500/20 text-green-300 border border-green-500/30"
+                      }`}
+                    >
+                      {activeCert.status === "withdrawn" ? "Withdrawn ✕" : "Active & Valid ✓"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#8a7ba8] mt-0.5">
+                    {activeCert.skillName} · Issued on {new Date(activeCert.issuedAt).toLocaleDateString()}
+                  </p>
+                  {activeCert.additionalNotes && (
+                    <p className="mt-1 text-xs text-pink-300 font-medium">"{activeCert.additionalNotes}"</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Withdrawn Notice */}
+              {activeCert.status === "withdrawn" && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3.5 text-xs text-amber-200 space-y-1">
+                  <p className="font-bold text-amber-300">⚠️ This certificate has been withdrawn</p>
+                  <p className="text-[#fae8c8]">
+                    Reason: <em>"{activeCert.withdrawalReason || "Administrative review"}"</em>
+                  </p>
+                  <p className="text-[11px] text-[#eed6b4] pt-1">
+                    The QR code remains active for verification accountability. If you have questions, please reach out to the KR8 administration team.
+                  </p>
+                </div>
+              )}
+
+              {/* Certificate Image Document */}
+              <CertificateDocumentView
+                cert={activeCert}
+                student={profile}
+                maxHeight="380px"
+              />
+
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <GradientButton
+                    onClick={() => downloadCertificatePdf(profile.name, null, activeCert, profile)}
+                    className="w-full flex items-center justify-center gap-2"
+                  >
+                    <Icon name="certificate" size={15} /> Download PDF →
+                  </GradientButton>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadCertificateImage(profile.name, activeCert, profile)}
+                    className="w-full flex items-center justify-center gap-2 rounded-full border border-pink-500/40 bg-pink-500/10 py-2.5 text-xs font-bold text-pink-300 hover:bg-pink-500/20 transition-colors"
+                  >
+                    <Icon name="palette" size={15} /> Download Image (PNG) ↓
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShareModalCert(activeCert)}
+                  className="w-full flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 py-2.5 text-xs font-bold text-white hover:bg-white/10 transition-colors"
+                >
+                  <Icon name="share" size={14} /> Share on Social Media (X, LinkedIn, WhatsApp) →
+                </button>
+
+                {/* Shareable Verification Link */}
+                <div className="rounded-2xl border border-pink-400/30 bg-pink-500/5 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-white">Shareable Verification Reference</p>
+                    <span className="text-[10px] text-pink-300 font-mono">Live QR Target</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-[#b8aecf]">
+                    Employers, partners, and clients can verify your certificate status instantly:
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value={`${window.location.origin}/verify?id=${encodeURIComponent(profile.id)}&cert=${encodeURIComponent(activeCert.id)}`}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 font-mono text-[11px] text-pink-300 focus:outline-none select-all"
+                    />
+                    <button
+                      onClick={() => handleCopyLink(activeCert.id)}
+                      className="rounded-lg bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/20 whitespace-nowrap"
+                    >
+                      {copiedLink ? "Copied! ✓" : "Copy Link"}
+                    </button>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 text-xs">
+                    <a
+                      href={`/verify?id=${encodeURIComponent(profile.id)}&cert=${encodeURIComponent(activeCert.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-pink-300 underline underline-offset-2 hover:text-white"
+                    >
+                      Test My Verification Page ↗
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : profile.graduated && profile.certificateUrl ? (
+        /* Legacy fallback */
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Certificate of {profile.certTier ?? "Completion"}</p>
+          <div className="rounded-xl overflow-hidden border border-white/15 bg-black">
+            <img src={profile.certificateUrl} alt="Certificate" className="w-full object-contain" />
+          </div>
+          <GradientButton onClick={onDownload} className="w-full flex items-center justify-center gap-2">
+            <Icon name="certificate" size={15} /> Download Certificate (PDF) →
+          </GradientButton>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-[#8a7ba8]">
+          You don't have an issued certificate yet — complete your coursework and live attendance to earn one.
+        </p>
+      )}
+
+      {shareModalCert && (
+        <GraduationShareModal
+          isOpen={true}
+          onClose={() => setShareModalCert(null)}
+          cert={shareModalCert}
+          student={profile}
+        />
+      )}
+    </div>
+  );
+}

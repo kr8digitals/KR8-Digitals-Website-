@@ -45,23 +45,53 @@ export function getFounders(): FounderProfile[] {
 }
 export function saveFounders(founders: FounderProfile[]) {
   save(FOUNDERS_KEY, founders);
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("kr8:founders-updated"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:founders-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
 
 const DEFAULT_TEAM: TeamProfile[] = [
-  { key: "nicodemus", name: "Odobe Nicodemus C (BioNicz)", role: "KR8 Financial Strategist", bio: "Supports KR8 Digitals with financial strategy, structure and sustainable growth thinking.", photo: "https://drive.google.com/uc?export=view&id=1Oq4UOw-8us6cbnoWiCs8lx2YwNEA1GlT" },
-  { key: "chimnonyerem", name: "Chimnonyerem Mercy", role: "Project Director & Frontend Coach", bio: "Coordinates projects and coaches builders toward clear, practical frontend execution.", photo: "https://drive.google.com/uc?export=view&id=10WVxXW4M28PPi_91oCBRHl5DClrSrTEK" },
-  { key: "favour", name: "Nwefuru Favour Chizurum", role: "General Manager", bio: "Keeps people, programs and operations moving in one clear direction.", photo: "https://drive.google.com/uc?export=view&id=1zLxtrqh-D_Q6YKWUn5nbFXxHVU8ALXj_" },
-  { key: "covenant", name: "Covenant Afinidi", role: "Accountability Partner", bio: "Helps the KR8 community keep showing up, following through and growing together.", photo: "https://drive.google.com/uc?export=view&id=1_YKIPM1eCuFq9Ebav8Rwe1sT6TmbrE7N" },
+  {
+    key: "nicodemus",
+    name: "Odobe Nicodemus C (BioNicz)",
+    role: "KR8 Financial Strategist",
+    bio: "Supports KR8 Digitals with financial strategy, structure and sustainable growth thinking. Nicodemus ensures the institution's tuition-free mission remains economically sound, scalable, and built for long-term viability.",
+    photo: "/team/nicodemus.png",
+  },
+  {
+    key: "chimnonyerem",
+    name: "Chimnonyerem Mercy",
+    role: "Project Director & Frontend Coach",
+    bio: "Coordinates technical initiatives and coaches builders toward clear, practical frontend execution. Mercy oversees project lifecycles, ensuring student developers bridge theory into real, responsive web interfaces.",
+    photo: "/team/chimnonyerem.jpg",
+  },
+  {
+    key: "favour",
+    name: "Nwefuru Favour Chizurum",
+    role: "General Manager",
+    bio: "Keeps people, programs and academy operations moving in one synchronized direction. Favour manages daily administrative workflows, cohort schedules, and institutional logistics across all skill tracks.",
+    photo: "/team/favour.jpg",
+  },
+  {
+    key: "covenant",
+    name: "Covenant Afinidi",
+    role: "Accountability Partner",
+    bio: "Helps the KR8 community keep showing up, following through and growing together. Covenant works directly with learners to maintain daily momentum, resolve learning blockers, and ensure students follow through to graduation.",
+    photo: "/team/covenant.png",
+  },
 ];
-const TEAM_KEY = "kr8_team_v1";
+const TEAM_KEY = "kr8_team_v2";
 export function getTeam(): TeamProfile[] { return load(TEAM_KEY, DEFAULT_TEAM); }
 export function saveTeam(team: TeamProfile[]) {
   save(TEAM_KEY, team);
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("kr8:team-updated"));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:team-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
 
-export const SKILLS: Skill[] = [
+export const DEFAULT_SKILLS: Skill[] = [
   {
     key: "graphic",
     name: "Graphic Design",
@@ -71,14 +101,9 @@ export const SKILLS: Skill[] = [
     regOpen: true,
     snippet: "An 8-week programme taking complete beginners from zero design knowledge to a professional portfolio — covering design fundamentals, flyer design, branding & identity, advanced photo manipulation, and responsible AI-assisted design.",
     icon: "palette",
-    instructor: { name: "Stevenson (Motionverse)", photo: INSTRUCTOR_PHOTOS.stevenson, bio: "Stevenson leads Graphic Design at KR8 Digitals under his creative studio, Motionverse. He's spent years turning raw ideas into brand-ready visuals, and brings that same eye for clarity and impact into every lesson he teaches." },
+    instructor: { name: "Stevenson (Motionverse)", photo: INSTRUCTOR_PHOTOS.stevenson, bio: "Stevenson leads Graphic Design at KR8 Digitals under his creative studio, Motionverse. He has spent years turning raw ideas into brand-ready visuals, and brings that same eye for clarity and impact into every lesson he teaches." },
     criteria: "Submit 6 accepted assignments + a final brand identity project.",
-    curriculum: [
-      { week: "Week 1", title: "Design Foundations", points: ["Design thinking & the creative brief", "Colour theory & harmony", "Composition & visual hierarchy"] },
-      { week: "Week 2", title: "Typography & Layout", points: ["Type anatomy & pairing", "Grids & alignment", "Poster & flyer layout"] },
-      { week: "Week 3", title: "Tools Mastery", points: ["Working in your design tool", "Vectors, shapes & masks", "Exporting for print & web"] },
-      { week: "Week 4", title: "Branding & Identity", points: ["Logo systems", "Brand guidelines", "Final capstone project"] },
-    ],
+    curriculum: [],
   },
   {
     key: "video",
@@ -91,12 +116,7 @@ export const SKILLS: Skill[] = [
     icon: "video",
     instructor: { name: "Daniel (Creative Expression)", photo: INSTRUCTOR_PHOTOS.daniel, bio: "Daniel heads up Video Editing & Animation at KR8 Digitals, running his own studio, Creative Expression. From raw footage to polished, scroll-stopping content, he teaches students to edit with intention — not just software skills." },
     criteria: "Submit 6 accepted edits + a final showreel.",
-    curriculum: [
-      { week: "Week 1", title: "Editing Foundations", points: ["The editing workflow", "Cutting to rhythm & pacing", "Storytelling with footage"] },
-      { week: "Week 2", title: "Audio & Colour", points: ["Audio leveling & cleanup", "Colour correction", "Colour grading looks"] },
-      { week: "Week 3", title: "Motion & Effects", points: ["Keyframes & transitions", "Simple 2D motion graphics", "Text animation"] },
-      { week: "Week 4", title: "Short-Form & Delivery", points: ["Viral short-form edits", "Export presets", "Final showreel"] },
-    ],
+    curriculum: [],
   },
   {
     key: "web",
@@ -109,30 +129,50 @@ export const SKILLS: Skill[] = [
     icon: "code",
     instructor: { name: "Timfire (Kenneth Timothy Iziogo)", photo: INSTRUCTOR_PHOTOS.timfire, bio: "Founder & Website Development instructor at KR8 Digitals." },
     criteria: "Submit 6 accepted builds + a final deployed website.",
-    curriculum: [
-      { week: "Week 1", title: "Web Foundations", points: ["How the web works", "HTML structure", "Semantic markup"] },
-      { week: "Week 2", title: "Styling", points: ["CSS fundamentals", "Responsive layouts", "Flexbox & grid"] },
-      { week: "Week 3", title: "Interactivity", points: ["JavaScript basics", "DOM & events", "Forms & validation"] },
-      { week: "Week 4", title: "Build & Deploy", points: ["Multi-page sites", "Hosting & domains", "Final client-style project"] },
-    ],
+    curriculum: [],
   },
   {
-    key: "content",
-    name: "Content Creation & Social Media",
-    suffix: "CCSMVFD",
+    key: "frontend",
+    name: "Front-End Development",
+    suffix: "FEDVFD",
+    whatsapp: "https://chat.whatsapp.com/EqdAOw1TxiM7KqTB5EXh8v?s=cl&p=a&mlu=4&ilr=4",
+    available: true,
+    regOpen: true,
+    snippet: "An 8-week engineering track taking you from semantic foundations to production-ready interfaces — mastering responsive CSS & Tailwind, modern JavaScript ES6+, React component architecture, API data fetching, state management, and real client web application deployment.",
+    icon: "code",
+    instructor: {
+      name: "Nonye Mercy",
+      photo: "/team/chimnonyerem.jpg",
+      bio: "Project Director & Frontend Coach at KR8 Digitals. Coordinates technical initiatives and coaches builders toward clear, practical frontend execution, ensuring student developers bridge theory into real, responsive web interfaces.",
+    },
+    criteria: "Submit 6 accepted frontend builds + a deployed modern web application.",
+    curriculum: [],
+  },
+  {
+    key: "content_creation",
+    name: "Content Creation",
+    suffix: "CCVFD",
     whatsapp: "https://chat.whatsapp.com/KRnuYK0hIhh0lobi7Tl7Kz?s=cl&p=a&mlu=4&ilr=4",
     available: true,
     regOpen: true,
-    snippet: "An 8-week, phone-only programme taking beginners from zero to a live, consistently-posted content account — covering platform setup, editing, ideation, growth, personal branding, and monetization.",
+    snippet: "An 8-week creator programme taking you from zero to a high-retention creator — covering smartphone cinematography, mobile lighting & audio, CapCut editing, Canva visual design, AI B-roll & ideation, short-form vs long-form architecture, personal branding, and creator media kits.",
+    icon: "video",
+    instructor: null,
+    criteria: "Submit 6 accepted content pieces + a 30-day creator calendar and media kit.",
+    curriculum: [],
+  },
+  {
+    key: "smm",
+    name: "Social Media Management",
+    suffix: "SMMVFD",
+    whatsapp: "https://chat.whatsapp.com/KRnuYK0hIhh0lobi7Tl7Kz?s=cl&p=a&mlu=4&ilr=4",
+    available: true,
+    regOpen: true,
+    snippet: "An 8-week business programme training you to manage and scale brand pages professionally — covering social SEO & algorithm mechanics, 30-day editorial calendars, persuasive social copywriting, community management & lead nurture, analytics & ROI reporting, pricing, contracts, and client pitching.",
     icon: "mobile",
     instructor: null,
-    criteria: "Submit 6 accepted content pieces + a 30-day content calendar.",
-    curriculum: [
-      { week: "Week 1", title: "Content Foundations", points: ["Finding your niche & voice", "Platform strategy", "Hooks that stop the scroll"] },
-      { week: "Week 2", title: "Creating Content", points: ["Shooting with a phone", "Captions & copywriting", "Batch creation"] },
-      { week: "Week 3", title: "Growth", points: ["Algorithms & reach", "Community building", "Analytics"] },
-      { week: "Week 4", title: "Monetization", points: ["Brand deals", "Managing pages", "Final content calendar"] },
-    ],
+    criteria: "Submit 30-day brand strategy calendar + professional social media audit.",
+    curriculum: [],
   },
   {
     key: "marketing",
@@ -145,49 +185,12 @@ export const SKILLS: Skill[] = [
     icon: "chart",
     instructor: null,
     criteria: "Submit 6 accepted assignments + a full campaign plan.",
-    curriculum: [
-      { week: "Week 1", title: "Marketing Foundations", points: ["The marketing funnel", "Audience & positioning", "Offer creation"] },
-      { week: "Week 2", title: "Organic & Content", points: ["Content marketing", "SEO basics", "Email marketing"] },
-      { week: "Week 3", title: "Paid Ads", points: ["Meta & Google ads", "Targeting & budgets", "Ad creative"] },
-      { week: "Week 4", title: "Analytics & Scale", points: ["Tracking & attribution", "Optimising campaigns", "Final campaign plan"] },
-    ],
-  },
-  {
-    key: "frontend",
-    name: "Frontend Development",
-    suffix: "FDVFD",
-    whatsapp: "https://chat.whatsapp.com/EqdAOw1TxiM7KqTB5EXh8v?s=cl&p=a&mlu=4&ilr=4",
-    available: false,
-    regOpen: false,
-    snippet: "Not Available (curriculum not yet published).",
-    icon: "spark",
-    instructor: { name: "Chimnonyerem Mercy", photo: INSTRUCTOR_PHOTOS.chimnonyerem, bio: "Frontend Development instructor — track opening to be announced." },
-    criteria: "Restricted access track.",
     curriculum: [],
   },
 ];
 
-const SKILL_SETTINGS_KEY = "kr8_skill_settings_v1";
-type SkillSettings = Record<string, { regOpen: boolean; whatsapp: string }>;
-function skillSettings(): SkillSettings {
-  return load(SKILL_SETTINGS_KEY, Object.fromEntries(SKILLS.map((skill) => [skill.key, { regOpen: skill.regOpen, whatsapp: skill.whatsapp }])));
-}
-export function getSkillRegistration(key: string) {
-  return skillSettings()[key]?.regOpen ?? SKILLS.find((skill) => skill.key === key)?.regOpen ?? false;
-}
-export function getSkillWhatsApp(key: string) {
-  return skillSettings()[key]?.whatsapp ?? SKILLS.find((skill) => skill.key === key)?.whatsapp ?? "";
-}
-export function saveSkillSetting(key: string, patch: Partial<SkillSettings[string]>) {
-  const next = { ...skillSettings(), [key]: { ...skillSettings()[key], ...patch } };
-  save(SKILL_SETTINGS_KEY, next);
-  const skill = SKILLS.find((item) => item.key === key);
-  if (skill) { if (patch.regOpen !== undefined) skill.regOpen = patch.regOpen; if (patch.whatsapp !== undefined) skill.whatsapp = patch.whatsapp; }
-}
-
-/* The full Academy curriculum is intentionally kept as editable content data,
-   so the admin Academy section can replace it without touching the UI. */
-const FULL_CURRICULA: Record<string, Week[]> = {
+/* Curricula definitions */
+export const FULL_CURRICULA: Record<string, Week[]> = {
   graphic: [
     { week: "Week 1", title: "Design Basics", points: ["Intro to Graphic Design & Principles (balance, contrast, alignment, hierarchy, proximity)", "Typography & Color Theory", "Layout, Composition & Tool Setup (Canva, Photoshop)"] },
     { week: "Week 2", title: "Social Media Flyer Design", points: ["Intro to Flyer Design", "Design Hierarchy & Visual Engagement", "Practical Flyer Project (promotional + event flyer)"] },
@@ -218,15 +221,25 @@ const FULL_CURRICULA: Record<string, Week[]> = {
     { week: "Week 7", title: "UGC & AI Ad Video Creation", points: ["UGC Ad Videos", "Stickman Animation Using AI", "Business Advert Video Creation Using AI"] },
     { week: "Week 8", title: "Final Project & Graduation", points: ["Project 1 (Paired) — collaborative short-form viral-style edited video.", "Project 2 (Individual) — an animation piece using any technique learned."] },
   ],
-  content: [
-    { week: "Week 1", title: "Intro to Content Creation", points: ["What it is, opportunities, mindset", "Types of content creation", "Choosing a niche"] },
-    { week: "Week 2", title: "Content Creation Platforms", points: ["Platform overview (TikTok, Instagram, YouTube, Facebook, Threads/X, LinkedIn, Pinterest)", "Creating accounts & basic settings", "Advanced platform settings (analytics, monetization eligibility)"] },
-    { week: "Week 3", title: "Tools of the Trade", points: ["Video Editing for Creators (CapCut)", "Graphic Design & Photo Editing (Canva)", "Introduction to AI in Content Creation"] },
-    { week: "Week 4", title: "Ideation & Content Planning", points: ["Sourcing ideas", "Turning ideas into content (hook/body/CTA)", "Building a content library and calendar"] },
-    { week: "Week 5", title: "Testing Content With Your Audience", points: ["First Post analysis", "Improved Post", "Better Post — iterative, data-backed refinement"] },
-    { week: "Week 6", title: "Growth, Engagement & Consistency", points: ["How platforms work", "Engagement & community building", "Consistency without burnout"] },
-    { week: "Week 7", title: "Personal Branding & Monetization", points: ["Personal branding", "Monetization routes (payouts, brand deals, affiliate, digital products/services)", "Pitching brands & media kits"] },
-    { week: "Week 8", title: "Final Project & Graduation", points: ["Project 1 (Paired) — a 3-part Day in the Life/How-To content series.", "Project 2 (Individual) — a live 7-day content portfolio (optimised bio, 7 posted pieces, performance review, basic media kit)."] },
+  content_creation: [
+    { week: "Week 1", title: "Foundations of Content Creation & Creative Voice", points: ["What makes great content in 2026 & creator mindset", "Choosing your niche & sub-topics", "The 4 Content Pillars (Educational, Entertaining, Inspiring, Relatable)", "High-retention storytelling frameworks"] },
+    { week: "Week 2", title: "Smartphone Cinematography & Mobile Audio", points: ["Phone camera settings, resolution, frame rates (4K vs 1080p, 24fps vs 60fps)", "Rule of thirds, dynamic angles & smooth camera movement", "Budget lighting techniques (natural, ring light, 3-point setups)", "Clear mobile audio, external mics, and noise cancellation"] },
+    { week: "Week 3", title: "Mobile Video Editing for Creators (CapCut & InShot)", points: ["Timeline editing, trimming & split workflows", "Cutting on action, dynamic pacing & pattern interrupts", "Sound effects (SFX), sound bridges & music layering", "Auto-captions, animated kinetic typography & overlays"] },
+    { week: "Week 4", title: "Scriptwriting & The 3-Second Hook", points: ["The psychology of stopping the scroll (visual, verbal, text hooks)", "Structuring the body for maximum viewer retention", "Avoiding mid-video drop-offs & dead air", "Call-to-action (CTA) formulas that drive engagement and follows"] },
+    { week: "Week 5", title: "Visual Design & Thumbnail Mastery", points: ["Canva for content creators: principles & workflows", "Designing high-CTR video thumbnails and cover cards", "Contrast, text hierarchy, emotion, and facial expressions", "Creating reusable branded templates & color palettes"] },
+    { week: "Week 6", title: "AI-Powered Creation & Generative Assets", points: ["AI ideation and script generation with Claude & ChatGPT", "Generative AI B-roll, dynamic b-roll inserts & visual assets", "Voiceover enhancement & ethical AI voice synthesis", "Automating repurposing pipelines with AI"] },
+    { week: "Week 7", title: "Long-Form YouTube & Multi-Platform Repurposing", points: ["Long-form YouTube architecture (concept, title, thumbnail, payoff)", "The 1-to-10 Repurposing Framework: turn 1 long video into 10 viral clips", "Platform adaptations: TikTok vs Reels vs Shorts vs LinkedIn", "Batch production scheduling: film a week's content in 3 hours"] },
+    { week: "Week 8", title: "Personal Branding, Media Kit & Creator Launch", points: ["Project 1 (Paired) — A 3-part viral video series with retention analytics breakdown.", "Project 2 (Individual) — Live 7-day multi-format content portfolio + professional creator media kit.", "Rate card setting, pitching brands for sponsorship & graduation showcase."] },
+  ],
+  smm: [
+    { week: "Week 1", title: "The SMM Profession & Strategic Ecosystem", points: ["Role of a Social Media Manager vs. Content Creator", "Understanding client business models & digital marketing objectives", "Conducting a comprehensive brand profile audit", "Competitor research, benchmarking & SWOT analysis"] },
+    { week: "Week 2", title: "Profile Architecture & Social SEO Optimization", points: ["Crafting high-converting business bios and value propositions", "Optimizing profile handles, SEO keywords & search indexing", "Highlights funnel architecture and lead capture link setups", "Algorithm mechanics across Instagram, TikTok, LinkedIn, Facebook, and X"] },
+    { week: "Week 3", title: "Content Strategy & 30-Day Editorial Calendars", points: ["Defining core content pillars and sub-themes for a brand", "Building comprehensive 30-day editorial content calendars", "Balancing brand awareness, engagement, community trust, and direct sales", "Scheduling automation tools (Meta Business Suite, Buffer, Later)"] },
+    { week: "Week 4", title: "Persuasive Copywriting & Community Management", points: ["Developing and documenting a brand tone of voice", "Writing persuasive captions with clear conversion triggers", "Community engagement strategy: proactive vs reactive engagement", "Direct message (DM) lead qualification, customer service & crisis management"] },
+    { week: "Week 5", title: "Organic Growth Hacking & Trend Hijacking", points: ["Researching trending audios, hashtags & viral formats", "Ethical newsjacking and timely cultural trend integration", "Strategic collaborations, co-author posts & influencer outreach", "Cross-platform audience migration tactics"] },
+    { week: "Week 6", title: "Analytics, Performance Metrics & Client ROI Reporting", points: ["Mastering native analytics dashboards (Meta Insights, TikTok Analytics, LinkedIn)", "Key metrics that matter: Reach, Impressions, ER, CTR, Saves & Shares", "Translating vanity metrics into real business outcomes and sales leads", "Building professional monthly client performance decks with actionable recommendations"] },
+    { week: "Week 7", title: "SMM Business Operations, Pricing & Client Acquisition", points: ["Packaging your SMM services: management, strategy, community only", "Pricing models: monthly retainers vs project fees vs setup packages", "Crafting winning client proposals, contracts & scopes of work (SOW)", "Client onboarding checklists, communication boundaries & managing multiple accounts"] },
+    { week: "Week 8", title: "Capstone Project, Portfolio & SMM Certification", points: ["Project 1 — Complete 30-day brand strategy and content calendar for a real business.", "Project 2 — Full social media audit report and strategic pitch deck ready for client presentation.", "Final client pitch presentation, portfolio review, and Certificate of Social Media Management."] },
   ],
   marketing: [
     { week: "Week 1", title: "Intro to Digital Marketing", points: ["What it is", "Types and requirements", "Choosing your path among the three tracks"] },
@@ -240,20 +253,191 @@ const FULL_CURRICULA: Record<string, Week[]> = {
   ],
 };
 
-SKILLS.forEach((skill) => {
-  if (FULL_CURRICULA[skill.key]) skill.curriculum = FULL_CURRICULA[skill.key];
-});
+// Backward-compatible alias
+FULL_CURRICULA.content = FULL_CURRICULA.content_creation;
 
 export const CERTIFICATION_CRITERIA: Record<string, string> = {
   graphic: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 5+ projects including one AI-assisted piece · passing feedback in ≥2 Thursday review sessions · ≥2 Mindset Shift sessions + 1 Monthly Hangout attended · demonstrated proficiency across fundamentals, branding, advanced editing, and responsible AI collaboration.",
   web: "≥80% live session attendance · both Week 7 final projects submitted · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across AI websites, CMS/WordPress, e-commerce, and landing pages.",
+  frontend: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 6+ frontend application builds including one React application · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across modern HTML/CSS/Tailwind, JavaScript ES6+, React, and API integration.",
   video: "≥80% live session attendance · both Week 8 projects submitted · portfolio of 6+ pieces covering both editing and animation · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency across editing fundamentals, short-form editing, and at least one animation technique.",
-  content: "≥80% live session attendance · both Week 8 projects submitted · an active, consistently-posted account maintained for the full 8 weeks · a completed content library/calendar submitted · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · ability to read basic analytics and explain next improvements.",
+  content_creation: "≥80% live session attendance · both Week 8 projects submitted · an active creator account with a 7-day multi-format portfolio + creator media kit · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated proficiency in mobile production, dynamic editing, and audience retention.",
+  content: "≥80% live session attendance · both Week 8 projects submitted · an active creator account with a 7-day multi-format portfolio + creator media kit · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance.",
+  smm: "≥80% live session attendance · complete 30-day brand strategy and content calendar submitted · professional social media audit and pitch deck for a real brand · passing feedback in ≥2 Thursday review sessions · required Mindset Shift and Monthly Hangout attendance · demonstrated competency in client reporting and KPI analytics.",
   marketing: "≥80% live session attendance · real deliverables completed in ≥2 of the 3 final project tracks · a working 1688 account OR live/approved affiliate account OR active bounty promotion (matching chosen tracks) · passing feedback in ≥2 Thursday review sessions · ≥3 Mindset Shift sessions + 1 Monthly Hangout attended · demonstrated honest, professional communication with customers/suppliers.",
-  frontend: "Not available until the Frontend Development curriculum is published.",
 };
 
-SKILLS.forEach((skill) => { skill.criteria = CERTIFICATION_CRITERIA[skill.key]; });
+const CUSTOM_SKILLS_KEY = "kr8_custom_skills_v3";
+const SKILL_SETTINGS_KEY = "kr8_skill_settings_v3";
+const WAITLIST_WHATSAPP_KEY = "kr8_waitlist_whatsapp_url_v1";
+const DYNAMIC_CURRICULA_KEY = "kr8_dynamic_curricula_v1";
+export const DEFAULT_WAITLIST_WHATSAPP = "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8";
+
+export function getDynamicCurricula(): Record<string, Week[]> {
+  return load<Record<string, Week[]>>(DYNAMIC_CURRICULA_KEY, {});
+}
+
+export function saveDynamicCurriculum(skillKey: string, weeks: Week[]): void {
+  const current = getDynamicCurricula();
+  current[skillKey] = weeks;
+  save(DYNAMIC_CURRICULA_KEY, current);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+export function getCustomSkills(): Skill[] {
+  return load<Skill[]>(CUSTOM_SKILLS_KEY, []);
+}
+
+export function saveCustomSkill(skill: Skill): void {
+  const current = getCustomSkills();
+  const existingIdx = current.findIndex((s) => s.key === skill.key);
+  if (existingIdx >= 0) {
+    current[existingIdx] = skill;
+  } else {
+    current.push(skill);
+  }
+  save(CUSTOM_SKILLS_KEY, current);
+  saveSkillSetting(skill.key, { regOpen: skill.regOpen, whatsapp: skill.whatsapp, available: skill.available });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+export function deleteCustomSkill(key: string): void {
+  const current = getCustomSkills().filter((s) => s.key !== key);
+  save(CUSTOM_SKILLS_KEY, current);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+type SkillSettings = Record<string, { regOpen?: boolean; whatsapp?: string; available?: boolean }>;
+function skillSettings(): SkillSettings {
+  return load<SkillSettings>(SKILL_SETTINGS_KEY, {});
+}
+
+export function getSkills(): Skill[] {
+  const custom = getCustomSkills();
+  const settings = skillSettings();
+  const dynamicCurricula = getDynamicCurricula();
+  
+  const baseMap = new Map<string, Skill>();
+  DEFAULT_SKILLS.forEach((s) => baseMap.set(s.key, { ...s }));
+  custom.forEach((s) => baseMap.set(s.key, { ...s }));
+
+  return Array.from(baseMap.values()).map((s) => {
+    const setting = settings[s.key];
+    const curriculum = dynamicCurricula[s.key] || FULL_CURRICULA[s.key] || s.curriculum || [];
+    const criteria = CERTIFICATION_CRITERIA[s.key] || s.criteria || "Attendance and coursework completion.";
+    return {
+      ...s,
+      regOpen: setting?.regOpen !== undefined ? setting.regOpen : s.regOpen,
+      whatsapp: setting?.whatsapp !== undefined ? setting.whatsapp : s.whatsapp,
+      available: setting?.available !== undefined ? setting.available : s.available,
+      curriculum,
+      criteria,
+    };
+  });
+}
+
+export const SKILLS: Skill[] = getSkills();
+
+export function getSkill(key?: string): Skill | undefined {
+  if (!key) return undefined;
+  const k = key.trim().toLowerCase();
+  const all = getSkills();
+  const direct = all.find((s) => s.key.toLowerCase() === k);
+  if (direct) return direct;
+  if (k === "content") {
+    const legacy = all.find((s) => s.key === "content");
+    if (legacy) return legacy;
+    return {
+      key: "content",
+      name: "Content Creation & Social Media Management",
+      suffix: "CCSMVFD",
+      whatsapp: "https://chat.whatsapp.com/G5mSP8JeelfELvnljpgSJ8",
+      available: false,
+      regOpen: false,
+      snippet: "Comprehensive combined track covering content creation and social media management.",
+      icon: "video",
+      instructor: { name: "Iwuagwu Miracle & Ozioma", photo: "", bio: "Senior Mentors" },
+      curriculum: [],
+      criteria: "≥80% live attendance · all assignments submitted · capstone completion.",
+    };
+  }
+  if (k === "content-creation" || k === "content_creation") {
+    return all.find((s) => s.key === "content_creation");
+  }
+  if (k === "smm" || k === "social_media" || k === "social-media" || k === "social-media-management") {
+    return all.find((s) => s.key === "smm");
+  }
+  if (k === "graphic-design" || k === "graphic") {
+    return all.find((s) => s.key === "graphic");
+  }
+  if (k === "video-editing" || k === "video") {
+    return all.find((s) => s.key === "video");
+  }
+  if (k === "website-development" || k === "web") {
+    return all.find((s) => s.key === "web");
+  }
+  if (k === "digital-marketing" || k === "marketing") {
+    return all.find((s) => s.key === "marketing");
+  }
+  return all.find((s) => s.key.toLowerCase().includes(k) || s.name.toLowerCase().includes(k));
+}
+
+export function getSkillName(key?: string): string {
+  const s = getSkill(key);
+  return s?.name ?? key ?? "Digital Skills";
+}
+
+export function getSkillRegistration(key: string): boolean {
+  const setting = skillSettings()[key];
+  if (setting?.regOpen !== undefined) return setting.regOpen;
+  const s = getSkill(key);
+  return s?.regOpen ?? false;
+}
+
+export function getSkillWhatsApp(key: string): string {
+  const setting = skillSettings()[key];
+  if (setting?.whatsapp !== undefined) return setting.whatsapp;
+  const s = getSkill(key);
+  return s?.whatsapp ?? "";
+}
+
+export function saveSkillSetting(key: string, patch: { regOpen?: boolean; whatsapp?: string; available?: boolean }) {
+  const next = { ...skillSettings(), [key]: { ...skillSettings()[key], ...patch } };
+  save(SKILL_SETTINGS_KEY, next);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:skills-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+export function getWaitlistWhatsAppUrl(): string {
+  return load<string>(WAITLIST_WHATSAPP_KEY, DEFAULT_WAITLIST_WHATSAPP);
+}
+
+export function saveWaitlistWhatsAppUrl(url: string): void {
+  save<string>(WAITLIST_WHATSAPP_KEY, url.trim());
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(new Event("kr8:waitlist-updated"));
+      window.dispatchEvent(new Event("storage"));
+    } catch {}
+  }
+}
+
+export function areAllRegistrationsClosed(): boolean {
+  const availableSkills = getSkills().filter((s) => s.available);
+  if (availableSkills.length === 0) return true;
+  return availableSkills.every((s) => !getSkillRegistration(s.key));
+}
 
 const VIP_PHONES = [
   "+2349043870282", "09043870282",
@@ -293,8 +477,18 @@ function save<T>(key: string, val: T) {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(key, JSON.stringify(val));
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn(`localStorage save error for key ${key}:`, err);
+    try {
+      if (typeof localStorage !== "undefined") {
+        // Clear obsolete scratch/backup keys to immediately recover quota
+        localStorage.removeItem("kr8_accounts_backup");
+        localStorage.removeItem("kr8_accounts_v2");
+        localStorage.setItem(key, JSON.stringify(val));
+      }
+    } catch {
+      /* ignore */
+    }
   }
   memoryStorage.set(key, JSON.stringify(val));
 }
@@ -387,6 +581,43 @@ export function generateDefaultAvatar(name: string, id: string = ""): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+export type CertificateTier = "Professionalism" | "Completion";
+
+export type CertificateRecord = {
+  id: string; // Unique Certificate reference ID
+  studentId: string; // Student KR8 ID
+  studentName: string; // Registered student name
+  formattedName: string; // Formatted ALL CAPS name
+  skill: string; // e.g. "content_creation"
+  skillName: string; // e.g. "Content Creation"
+  tier: CertificateTier;
+  templateUrl: string;
+  achievementText: string;
+  additionalNotes?: string;
+  issuedAt: number;
+  issuedBy?: string;
+  status: "active" | "withdrawn";
+  withdrawalReason?: string;
+  withdrawnAt?: number;
+  withdrawnBy?: string;
+  certificateImageUrl?: string;
+  pdfUrl?: string;
+};
+
+export type StudentNotification = {
+  id: string;
+  type: "graduation" | "withdrawal" | "achievement" | "info";
+  title: string;
+  message: string;
+  reason?: string;
+  certificateId?: string;
+  skill?: string;
+  skillName?: string;
+  tier?: CertificateTier;
+  timestamp: number;
+  read: boolean;
+};
+
 /* ---------------- Accounts ---------------- */
 export type Account = {
   type: "student" | "tribe" | "founder" | "co-founder";
@@ -407,12 +638,19 @@ export type Account = {
   submissions: number;
   referrals: number;
   graduated: boolean;
+  skills?: string[];
+  graduatedSkills?: string[];
+  previousIds?: string[];
+  milestones?: string[];
+  multiSkillCount?: number;
   certTier?: "Completion" | "Professionalism" | null;
   certRecognition?: string;
   certificateUrl?: string;
   certificateFileType?: "image" | "pdf";
   verifyRemark?: string;
   graduatedAt?: number;
+  certificates?: CertificateRecord[];
+  notifications?: StudentNotification[];
   avatar: string;
   joined: number;
   expandedVisibility?: boolean;
@@ -429,6 +667,9 @@ export type Account = {
   resetCode?: string;
   resetCodeExpires?: number;
   restricted?: boolean;
+  isModerator?: boolean;
+  moderatorRole?: string;
+  moderatorAssignedAt?: number;
   pendingRoleOffer?: {
     title: string;
     role: "admin" | "coach" | "assistant";
@@ -437,8 +678,14 @@ export type Account = {
     offeredAt: number;
     offeredBy: string;
   };
+  googleAuth?: {
+    enabled: boolean;
+    linkedEmail: string;
+    linkedAt: number;
+    verifiedToken?: string;
+  };
   admin?: {
-    role: "ultimate" | "admin" | "coach" | "assistant";
+    role: "ultimate" | "admin" | "coach" | "assistant" | "attendance_reviewer";
     title?: string;
     permissions: string[];
     adminPassword?: string;
@@ -563,9 +810,20 @@ export function resetAdminPassword(targetId: string) {
   return adminPassword;
 }
 
+export function getSkillSuffix(skillKey: string): string {
+  const s = getSkill(skillKey);
+  if (s?.suffix) return s.suffix;
+  const clean = (skillKey || "KR8").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
+  return `${clean}VFD`;
+}
+
+export function getSkillCode(skillKey: string): string {
+  const suffix = getSkillSuffix(skillKey);
+  return suffix.replace(/VFD$/i, "") || skillKey.toUpperCase().slice(0, 3);
+}
+
 function kr8id(name: string, skill: string, serial: number): string {
-  const s = SKILLS.find((x) => x.key === skill)!;
-  return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${s.suffix}`;
+  return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${getSkillSuffix(skill)}`;
 }
 
 // v3 is the durable account namespace.
@@ -653,6 +911,126 @@ const DEFAULT_COFOUNDER_1: Account = {
   },
 };
 
+/* ---------------- Co-Founder Identity Integrity ----------------
+ * Canonical co-founder identity registry, keyed by normalized phone.
+ * Historically, co-founder registration/sign-in resolution could merge a
+ * co-founder's credentials into the OTHER co-founder's record (first-match
+ * lookup), leaving the affected person with a profile carrying false details
+ * (e.g. Daniel showing "Graphic Design" / Motionverse). Every account load
+ * repairs such records back to the canonical identity owned by their phone.
+ */
+const COFOUNDER_IDENTITY: Record<string, { id: string; name: string; title: string; skill: string; avatar: string; certRecognition: string; brand: string }> = {
+  "+2348089344434": {
+    id: "KR8-COFOUNDER-STEVENSON",
+    name: "Stevenson (Motionverse)",
+    title: "Co-Founder · Media Director",
+    skill: "graphic",
+    avatar: INSTRUCTOR_PHOTOS.stevenson,
+    certRecognition: "Co-Founder & Media Director",
+    brand: "motionverse",
+  },
+  "+2348106068523": {
+    id: "KR8-COFOUNDER-DANIEL",
+    name: "Daniel (Creative Expression)",
+    title: "Co-Founder · COO",
+    skill: "video",
+    avatar: INSTRUCTOR_PHOTOS.daniel,
+    certRecognition: "Co-Founder & COO",
+    brand: "creative expression",
+  },
+};
+
+function coFounderCanonFor(phone?: string): (typeof COFOUNDER_IDENTITY)[string] | undefined {
+  if (!phone) return undefined;
+  return COFOUNDER_IDENTITY[normalizePhone(phone)];
+}
+
+/**
+ * Repairs co-founder identity corruption:
+ * - Collapses duplicate records claiming the same co-founder phone into one.
+ * - Re-asserts canonical id/name/title/skill/avatar/certRecognition for the
+ *   phone owner when a record was merged with the other co-founder's data.
+ * - Preserves personal fields (email, password, points, history) and keeps
+ *   old ids resolvable via previousIds.
+ */
+function healCoFounderIdentity(combined: Account[]): Account[] {
+  const groups = new Map<string, Account[]>();
+  const rest: Account[] = [];
+  for (const acc of combined) {
+    const canon = coFounderCanonFor(acc.phone);
+    if (canon) {
+      groups.set(canon.id, [...(groups.get(canon.id) || []), acc]);
+    } else {
+      rest.push(acc);
+    }
+  }
+  if (groups.size === 0) return combined;
+
+  const canons = Object.values(COFOUNDER_IDENTITY);
+  const healedByKeeper = new Map<Account, Account>();
+  const keeperFor = new Map<Account, Account>(); // every group member -> its keeper
+
+  for (const [canonId, group] of groups) {
+    const canon = canons.find((c) => c.id === canonId)!;
+    const other = canons.find((c) => c.id !== canonId)!;
+    // Keeper precedence: personalized record (real password) > canonical ID > first
+    const keeper =
+      group.find((o) => o.password && o.password !== MAIN_ADMIN_PASSWORD) ||
+      group.find((o) => normalizeIdentity(o.id || "") === normalizeIdentity(canonId)) ||
+      group[0];
+    // Merge duplicate records' personal data into the keeper
+    for (const o of group) {
+      if (o === keeper) continue;
+      keeper.previousIds = Array.from(new Set([...(keeper.previousIds || []), ...(o.previousIds || []), o.id]));
+      if (!keeper.email && o.email) keeper.email = o.email;
+      if (!keeper.password && o.password) keeper.password = o.password;
+    }
+    // Re-assert canonical identity fields for this phone's owner
+    const lowerName = (keeper.name || "").trim().toLowerCase();
+    const nameCorrupted =
+      !lowerName || lowerName === other.name.toLowerCase() || lowerName.includes(other.brand);
+    if (normalizeIdentity(keeper.id || "") !== normalizeIdentity(canonId)) {
+      keeper.previousIds = Array.from(new Set([...(keeper.previousIds || []), keeper.id]));
+    }
+    for (const o of group) keeperFor.set(o, keeper);
+    healedByKeeper.set(keeper, {
+      ...keeper,
+      id: canonId,
+      type: "co-founder",
+      executiveRole: "Co-Founder",
+      title: canon.title,
+      skill: canon.skill,
+      certRecognition: canon.certRecognition,
+      name: nameCorrupted ? canon.name : keeper.name,
+      avatar:
+        !keeper.avatar ||
+        keeper.avatar === other.avatar ||
+        keeper.avatar.startsWith("data:") ||
+        keeper.avatar.includes("pexels")
+          ? canon.avatar
+          : keeper.avatar,
+      previousIds: Array.from(new Set(keeper.previousIds || [])),
+    });
+  }
+
+  // Reassemble: each group's keeper takes the group's first original slot,
+  // duplicates are dropped, non-co-founder accounts keep their positions.
+  const consumed = new Set<Account>();
+  const result: Account[] = [];
+  for (const acc of combined) {
+    const keeper = keeperFor.get(acc);
+    if (!keeper) {
+      result.push(acc);
+      continue;
+    }
+    if (!consumed.has(keeper)) {
+      consumed.add(keeper);
+      result.push(healedByKeeper.get(keeper)!);
+    }
+  }
+  return result;
+}
+
 const DEFAULT_COFOUNDER_2: Account = {
   type: "co-founder",
   executiveRole: "Co-Founder",
@@ -693,22 +1071,313 @@ const DEFAULT_COFOUNDER_2: Account = {
   },
 };
 
-const seed: Account[] = [DEFAULT_FOUNDER_ACCOUNT, DEFAULT_COFOUNDER_1, DEFAULT_COFOUNDER_2];
+const VERIFIED_COHORT_STUDENTS: Account[] = [
+  {
+    type: "student",
+    id: "KR82026GD001",
+    name: "Grant Gideon",
+    email: "grant.gideon@student.kr8digitals.com",
+    phone: "+2348011110001",
+    country: "NG",
+    skill: "graphic-design",
+    dob: "2000-05-12",
+    year: COHORT_YEAR,
+    serial: 1,
+    vip: false,
+    points: 1450,
+    attendanceAccepted: 14,
+    submissions: 8,
+    referrals: 7,
+    graduated: true,
+    certTier: "Professionalism",
+    avatar: "/videos/testimonial_grant_gideon_poster.jpg",
+    joined: 1718000000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026VE002",
+    name: "Bio Nicz",
+    email: "bio.nicz@student.kr8digitals.com",
+    phone: "+2348011110002",
+    country: "NG",
+    skill: "video-editing",
+    dob: "1999-08-20",
+    year: COHORT_YEAR,
+    serial: 2,
+    vip: false,
+    points: 1320,
+    attendanceAccepted: 14,
+    submissions: 8,
+    referrals: 5,
+    graduated: true,
+    certTier: "Professionalism",
+    avatar: "/videos/testimonial_bio_nicz_poster.jpg",
+    joined: 1718100000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026VE003",
+    name: "Madukaku Samuel",
+    email: "madukaku.samuel@student.kr8digitals.com",
+    phone: "+2348011110003",
+    country: "NG",
+    skill: "video-editing",
+    dob: "2001-02-14",
+    year: COHORT_YEAR,
+    serial: 3,
+    vip: false,
+    points: 1280,
+    attendanceAccepted: 13,
+    submissions: 7,
+    referrals: 4,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_maduka_samuel_poster.jpg",
+    joined: 1718200000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026GD004",
+    name: "Elizabeth Oyejobi",
+    email: "elizabeth.oyejobi@student.kr8digitals.com",
+    phone: "+2348011110004",
+    country: "NG",
+    skill: "graphic-design",
+    dob: "2002-11-03",
+    year: COHORT_YEAR,
+    serial: 4,
+    vip: false,
+    points: 1190,
+    attendanceAccepted: 12,
+    submissions: 7,
+    referrals: 3,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_elizabeth_oyejobi_poster.jpg",
+    joined: 1718300000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026GD005",
+    name: "Afolayan Grace Taiwo",
+    email: "afolayan.grace@student.kr8digitals.com",
+    phone: "+2348011110005",
+    country: "NG",
+    skill: "graphic-design",
+    dob: "2000-09-17",
+    year: COHORT_YEAR,
+    serial: 5,
+    vip: false,
+    points: 1120,
+    attendanceAccepted: 13,
+    submissions: 6,
+    referrals: 6,
+    graduated: true,
+    certTier: "Professionalism",
+    avatar: "/videos/testimonial_afolayan_grace_poster.jpg",
+    joined: 1718400000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026GD006",
+    name: "Adrian Washington",
+    email: "adrian.washington@student.kr8digitals.com",
+    phone: "+2348011110006",
+    country: "NG",
+    skill: "graphic-design",
+    dob: "1998-12-05",
+    year: COHORT_YEAR,
+    serial: 6,
+    vip: false,
+    points: 1080,
+    attendanceAccepted: 12,
+    submissions: 6,
+    referrals: 2,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_new_3_poster.jpg",
+    joined: 1718500000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026VE007",
+    name: "William Marvelous",
+    email: "william.marvelous@student.kr8digitals.com",
+    phone: "+2348011110007",
+    country: "NG",
+    skill: "video-editing",
+    dob: "2001-07-22",
+    year: COHORT_YEAR,
+    serial: 7,
+    vip: false,
+    points: 980,
+    attendanceAccepted: 11,
+    submissions: 5,
+    referrals: 3,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_new_2_poster.jpg",
+    joined: 1718600000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026WD008",
+    name: "Emmanuel Nweke",
+    email: "emmanuel.nweke@student.kr8digitals.com",
+    phone: "+2348011110008",
+    country: "NG",
+    skill: "web-development",
+    dob: "2000-01-30",
+    year: COHORT_YEAR,
+    serial: 8,
+    vip: false,
+    points: 940,
+    attendanceAccepted: 11,
+    submissions: 5,
+    referrals: 4,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_new_7_poster.jpg",
+    joined: 1718700000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026GD009",
+    name: "Ibeh Chinenye Helen",
+    email: "ibeh.chinenye@student.kr8digitals.com",
+    phone: "+2348011110009",
+    country: "NG",
+    skill: "graphic-design",
+    dob: "2003-04-18",
+    year: COHORT_YEAR,
+    serial: 9,
+    vip: false,
+    points: 910,
+    attendanceAccepted: 10,
+    submissions: 5,
+    referrals: 2,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_ibeh_chinenye_poster.jpg",
+    joined: 1718800000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+  {
+    type: "student",
+    id: "KR82026VE010",
+    name: "Obo Peter",
+    email: "obo.peter@student.kr8digitals.com",
+    phone: "+2348011110010",
+    country: "NG",
+    skill: "video-editing",
+    dob: "2002-06-11",
+    year: COHORT_YEAR,
+    serial: 10,
+    vip: false,
+    points: 870,
+    attendanceAccepted: 10,
+    submissions: 5,
+    referrals: 1,
+    graduated: true,
+    certTier: "Completion",
+    avatar: "/videos/testimonial_obo_peter_poster.jpg",
+    joined: 1718900000000,
+    expandedVisibility: true,
+    isPlaceholder: false,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+  },
+];
+
+export const REGISTRATION_VAULT_KEY = "kr8_registered_students_vault";
+
+const seed: Account[] = [
+  DEFAULT_FOUNDER_ACCOUNT,
+  DEFAULT_COFOUNDER_1,
+  DEFAULT_COFOUNDER_2,
+  ...VERIFIED_COHORT_STUDENTS,
+];
 
 function migrateAccountsSafely() {
   if (typeof window === "undefined") return;
   try {
-    const existingV3 = localStorage.getItem(ACCOUNT_STORAGE_KEY);
-    if (existingV3 && existingV3 !== "[]") return;
+    const v3Raw = localStorage.getItem(ACCOUNT_STORAGE_KEY);
+    const backupRaw = localStorage.getItem("kr8_accounts_backup");
+    const v2Raw = localStorage.getItem("kr8_accounts_v2");
+    const vaultRaw = localStorage.getItem(REGISTRATION_VAULT_KEY);
 
-    const backup = localStorage.getItem("kr8_accounts_backup");
-    if (backup && backup !== "[]") {
-      localStorage.setItem(ACCOUNT_STORAGE_KEY, backup);
-      return;
-    }
-    const v2 = localStorage.getItem("kr8_accounts_v2");
-    if (v2 && v2 !== "[]") {
-      localStorage.setItem(ACCOUNT_STORAGE_KEY, v2);
+    const v3List: Account[] = v3Raw ? JSON.parse(v3Raw) : [];
+    const backupList: Account[] = backupRaw ? JSON.parse(backupRaw) : [];
+    const v2List: Account[] = v2Raw ? JSON.parse(v2Raw) : [];
+    const vaultList: Account[] = vaultRaw ? JSON.parse(vaultRaw) : [];
+
+    // Combine all accounts, ensuring no registered student is ever lost
+    const merged = new Map<string, Account>();
+    [...v2List, ...backupList, ...vaultList, ...v3List].forEach((acc) => {
+      if (acc && acc.id) {
+        const normKey = normalizeIdentity(acc.id);
+        const existing = merged.get(normKey);
+        merged.set(normKey, existing ? { ...existing, ...acc } : acc);
+      }
+    });
+
+    if (merged.size > v3List.length) {
+      localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(Array.from(merged.values())));
     }
   } catch {
     // Storage access restricted in private mode
@@ -718,17 +1387,95 @@ function migrateAccountsSafely() {
 export function getAccounts(): Account[] {
   migrateAccountsSafely();
   const stored = load<Account[]>(ACCOUNT_STORAGE_KEY, seed);
+  const vault = load<Account[]>(REGISTRATION_VAULT_KEY, []);
+  const backup = load<Account[]>("kr8_accounts_backup", []);
   let changed = false;
 
-  // Ensure default executive leadership accounts are always present in the database
-  const hasFounder = stored.some((a) => isFounderAccount(a.phone, a.email) || a.type === "founder");
-  const hasCofounder1 = stored.some((a) => a.phone === "+2348089344434");
-  const hasCofounder2 = stored.some((a) => a.phone === "+2348106068523");
-  if (!hasFounder) { stored.unshift(DEFAULT_FOUNDER_ACCOUNT); changed = true; }
-  if (!hasCofounder1) { stored.push(DEFAULT_COFOUNDER_1); changed = true; }
-  if (!hasCofounder2) { stored.push(DEFAULT_COFOUNDER_2); changed = true; }
+  // Build merged accounts map keyed by normalized identity
+  const map = new Map<string, Account>();
 
-  const accounts = stored.map((account) => {
+  // 1. Default seed accounts
+  seed.forEach((acc) => map.set(normalizeIdentity(acc.id), acc));
+
+  // 2. Backup & Vault accounts
+  backup.forEach((acc) => {
+    if (acc?.id) {
+      const k = normalizeIdentity(acc.id);
+      map.set(k, { ...map.get(k), ...acc });
+    }
+  });
+
+  vault.forEach((acc) => {
+    if (acc?.id) {
+      const k = normalizeIdentity(acc.id);
+      map.set(k, { ...map.get(k), ...acc });
+    }
+  });
+
+  // 3. Current stored accounts
+  stored.forEach((acc) => {
+    if (acc?.id) {
+      const k = normalizeIdentity(acc.id);
+      map.set(k, { ...map.get(k), ...acc });
+    }
+  });
+
+  // 4. Also check active logged-in user in localStorage
+  if (typeof localStorage !== "undefined") {
+    try {
+      const cur = localStorage.getItem("kr8_current");
+      if (cur) {
+        const parsed = JSON.parse(cur) as Account;
+        if (parsed?.id) {
+          const k = normalizeIdentity(parsed.id);
+          map.set(k, { ...map.get(k), ...parsed });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const combined = Array.from(map.values());
+
+  // Ensure default executive leadership accounts are always present in the database
+  const hasFounder = combined.some((a) => isFounderAccount(a.phone, a.email) || a.type === "founder");
+  const hasCofounder1 = combined.some((a) => a.phone === "+2348089344434");
+  const hasCofounder2 = combined.some((a) => a.phone === "+2348106068523");
+  if (!hasFounder) { combined.unshift(DEFAULT_FOUNDER_ACCOUNT); changed = true; }
+  if (!hasCofounder1) { combined.push(DEFAULT_COFOUNDER_1); changed = true; }
+  if (!hasCofounder2) { combined.push(DEFAULT_COFOUNDER_2); changed = true; }
+
+  // Ensure verified cohort students are seeded if stored has no students
+  const hasStudents = combined.some((a) => a.type === "student");
+  if (!hasStudents) {
+    combined.push(...VERIFIED_COHORT_STUDENTS);
+    changed = true;
+  }
+
+  // Self-heal co-founder identity corruption (cheap pre-check before full heal)
+  const needsCoFounderHeal = combined.some((acc) => {
+    const canon = coFounderCanonFor(acc.phone);
+    if (!canon) return false;
+    const otherBrand = canon.id === "KR8-COFOUNDER-STEVENSON" ? "creative expression" : "motionverse";
+    return (
+      normalizeIdentity(acc.id || "") !== normalizeIdentity(canon.id) ||
+      (acc.skill !== undefined && acc.skill !== canon.skill) ||
+      !acc.name ||
+      acc.name.trim().toLowerCase().includes(otherBrand) ||
+      (acc.title !== undefined && acc.title !== canon.title)
+    );
+  });
+  if (needsCoFounderHeal) {
+    const healed = healCoFounderIdentity(combined);
+    if (JSON.stringify(healed) !== JSON.stringify(combined)) {
+      combined.length = 0;
+      combined.push(...healed);
+      changed = true;
+    }
+  }
+
+  const accounts = combined.map((account) => {
     const isFounder = isFounderAccount(account.phone, account.email);
     const isCoFounder = isCoFounderAccount(account.phone, account.email);
     const resolvedType: Account["type"] = isFounder ? "founder" : isCoFounder ? "co-founder" : account.type;
@@ -778,15 +1525,114 @@ export function getAccounts(): Account[] {
   return accounts;
 }
 
+function sanitizeAccountsForStorage(accounts: Account[]): Account[] {
+  return accounts.map((acc) => {
+    // If certificateUrl is a massive data URL (> 15KB), do not keep it in localStorage
+    let cleanCertUrl = acc.certificateUrl;
+    if (cleanCertUrl && cleanCertUrl.startsWith("data:image/") && cleanCertUrl.length > 15000) {
+      cleanCertUrl = `cert-stored:${acc.id}`;
+    }
+
+    const cleanCerts = (acc.certificates || []).map((c) => {
+      let img = c.certificateImageUrl;
+      if (img && img.startsWith("data:image/") && img.length > 15000) {
+        img = `cert-stored:${c.id}`;
+      }
+      return {
+        ...c,
+        certificateImageUrl: img,
+      };
+    });
+
+    return {
+      ...acc,
+      certificateUrl: cleanCertUrl,
+      certificates: cleanCerts,
+    };
+  });
+}
+
+// True for "no value" encodings. Used by saveAccounts' change detection so
+// that re-encoding an empty field (undefined -> null -> "" -> [] -> {}) is
+// never reported as a change.
+function isEmptyValue(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (typeof v === "string") return v.length === 0;
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
+}
+
 export function saveAccounts(a: Account[]) {
-  save(ACCOUNT_STORAGE_KEY, a);
+  const sanitized = sanitizeAccountsForStorage(a);
+  const prev = load<Account[]>(ACCOUNT_STORAGE_KEY, []);
+  const prevMap = new Map(prev.map((p) => [normalizeIdentity(p.id || ""), p as Account]));
+  const addedIds: string[] = [];
+  const updatedIds: string[] = [];
+  const removedIds: string[] = [];
+  const seen = new Set<string>();
+  for (const acc of sanitized) {
+    const key = normalizeIdentity(acc.id || "");
+    seen.add(key);
+    const beforeRaw = prevMap.get(key);
+    if (beforeRaw === undefined) {
+      addedIds.push(acc.id);
+    } else {
+      // Field-by-field comparison (key-order independent): a full JSON
+      // stringify compare is fragile because the same account can be
+      // constructed with different key orders (e.g. a cloud merge spread vs
+      // the previously stored object) and would be flagged as "updated" even
+      // when every value is identical — re-broadcasting the whole roster and
+      // re-triggering the cloud push loop.
+      const before = beforeRaw as Account;
+      let differs = false;
+      const keys = new Set<string>([...Object.keys(before), ...Object.keys(acc)]);
+      for (const k of keys) {
+        const bv = (before as any)[k];
+        const av = (acc as any)[k];
+        // Transitions between "empty" encodings (undefined / null / "" / [] /
+        // {}) are NOT a meaningful change. Without this, the raw form
+        // (certificates: undefined) written by getAccounts()'s plain save vs
+        // the sanitized form (certificates: []) written by saveAccounts() is
+        // flagged as an update on every account, re-broadcasting and
+        // re-pushing the entire roster and re-opening the sync feedback loop.
+        if (isEmptyValue(bv) && isEmptyValue(av)) continue;
+        if (JSON.stringify(bv) !== JSON.stringify(av)) {
+          differs = true;
+          break;
+        }
+      }
+      if (differs) updatedIds.push(acc.id);
+    }
+  }
+  for (const p of prev) {
+    const key = normalizeIdentity(p.id || "");
+    if (!seen.has(key)) removedIds.push(p.id);
+  }
+  save(ACCOUNT_STORAGE_KEY, sanitized);
   try {
     // Keep secondary backup in case another key is modified
-    localStorage.setItem("kr8_accounts_backup", JSON.stringify(a));
+    localStorage.setItem("kr8_accounts_backup", JSON.stringify(sanitized));
+    // Persist all verified/real accounts into immutable registration vault
+    const vaultAccounts = sanitized.filter((acc) => !acc.isPlaceholder);
+    localStorage.setItem(REGISTRATION_VAULT_KEY, JSON.stringify(vaultAccounts));
   } catch {
     /* ignore */
   }
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("kr8:accounts-updated"));
+  if (typeof window !== "undefined") {
+    // Detail carries the exact change set so the cloud sync layer can push only
+    // what changed (prevents the full-roster re-push feedback storm).
+    window.dispatchEvent(
+      new CustomEvent("kr8:accounts-updated", {
+        detail: { changedIds: [...addedIds, ...updatedIds], addedIds, updatedIds, removedIds },
+      })
+    );
+    try {
+      window.dispatchEvent(new StorageEvent("storage", { key: ACCOUNT_STORAGE_KEY }));
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export function updateAccount(id: string, patch: Partial<Account>): Account | undefined {
@@ -901,7 +1747,14 @@ export function registerStudent(input: { name: string; email: string; phone: str
     const defaultSkill = isStevenson ? "graphic" : "video";
     const coId = isStevenson ? "KR8-COFOUNDER-STEVENSON" : "KR8-COFOUNDER-DANIEL";
 
-    let cofounder = accts.find((a) => a.type === "co-founder" || isCoFounderAccount(a.phone, a.email));
+    // Resolve the registering co-founder by THEIR identity (own phone / canonical ID),
+    // never by first co-founder in the list (that merged credentials into the
+    // wrong co-founder's record).
+    const otherCoFounderPhone = isStevenson ? "+2348106068523" : "+2348089344434";
+    let cofounder =
+      accts.find((a) => a.phone && normalizePhone(a.phone) === phone) ||
+      accts.find((a) => normalizeIdentity(a.id || "") === normalizeIdentity(coId)) ||
+      accts.find((a) => a.type === "co-founder" && (!a.phone || normalizePhone(a.phone) !== otherCoFounderPhone));
     if (cofounder) {
       cofounder = {
         ...cofounder,
@@ -984,16 +1837,114 @@ export function registerStudent(input: { name: string; email: string; phone: str
     };
   }
 
-  // Regular students
-  if (accts.some((s) => normalizeEmail(s.email) === email))
-    return { ok: false, error: "This email is already registered." };
-  if (accts.some((s) => normalizePhone(s.phone) === phone))
-    return { ok: false, error: "This phone number is already registered." };
-  const skill = SKILLS.find((s) => s.key === input.skill);
+  // Progression Rule:
+  // NO STUDENT IS PERMITTED TO REGISTER FOR ANOTHER SKILL UNLESS THEY ARE GRADUATED FROM THEIR CURRENT SKILL.
+  const existing = accts.find(
+    (s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone
+  );
+
+  if (existing) {
+    // If existing account is a Tribe member, transition cleanly from Tribe Member to Student!
+    if (existing.type === "tribe") {
+      const newSkill = getSkill(input.skill);
+      if (!newSkill) return { ok: false, error: "Please select a valid skill." };
+      if (!newSkill.available) return { ok: false, error: `${newSkill.name} is currently not available.` };
+      if (!getSkillRegistration(input.skill)) return { ok: false, error: `Registration for ${newSkill.name} is currently closed.` };
+
+      const oldId = existing.id;
+      const serial = nextSerial(input.skill);
+      const studentId = kr8id(existing.name, input.skill, serial);
+
+      existing.type = "student";
+      existing.id = studentId;
+      existing.previousIds = Array.from(new Set([...(existing.previousIds || []), oldId]));
+      existing.skill = input.skill;
+      existing.skills = [input.skill];
+      existing.serial = serial;
+      existing.year = COHORT_YEAR;
+      existing.dob = input.dob || existing.dob;
+      existing.points = (existing.points || 0) + 100; // Registration bonus
+      existing.milestones = Array.from(
+        new Set([
+          ...(existing.milestones || []),
+          `Milestone: Transitioned from Tribe Member (${oldId}) to Academy Scholar in ${newSkill.name}`,
+        ])
+      );
+
+      updateAccount(oldId, existing);
+      addFeed({
+        kind: "registration",
+        name: existing.name,
+        skill: newSkill.name,
+        avatar: existing.avatar,
+      });
+
+      return { ok: true, student: existing };
+    }
+
+    const targetSkillKey = input.skill;
+    const currentSkillName = getSkillName(existing.skill);
+    const targetSkillName = getSkillName(targetSkillKey);
+
+    // If enrolling in same skill
+    if (existing.skill === targetSkillKey || (existing.skills && existing.skills.includes(targetSkillKey))) {
+      return {
+        ok: false,
+        error: `You are already registered for ${targetSkillName}. Please sign in to your dashboard to access your classes and coursework.`,
+      };
+    }
+
+    // Must be graduated from current skill (proven by certificate)
+    const isGraduated = !!existing.graduated || !!existing.certificateUrl || (existing.graduatedSkills && existing.graduatedSkills.includes(existing.skill || ""));
+    if (!isGraduated) {
+      return {
+        ok: false,
+        error: `Academic Progression Notice: You are currently enrolled in ${currentSkillName}. In accordance with KR8 Academy standards, no student is permitted to register for another skill unless they have graduated from their current skill (proven by certificate). Please complete your coursework and graduate first before enrolling in ${targetSkillName}.`,
+      };
+    }
+
+    // If graduated, allow new registration & append skill code to their existing ID!
+    const newSkill = getSkill(targetSkillKey);
+    if (!newSkill) return { ok: false, error: "Please select a valid skill." };
+    if (!newSkill.available) return { ok: false, error: `${newSkill.name} is currently not available.` };
+    if (!getSkillRegistration(targetSkillKey)) return { ok: false, error: `Registration for ${newSkill.name} is currently closed.` };
+
+    const oldId = existing.id;
+    const newCode = getSkillCode(targetSkillKey);
+    const updatedId = `${oldId}-${newCode}`;
+
+    existing.id = updatedId;
+    existing.previousIds = Array.from(new Set([...(existing.previousIds || []), oldId]));
+    existing.skills = Array.from(new Set([...(existing.skills || [existing.skill || ""]), targetSkillKey]));
+    existing.graduatedSkills = Array.from(new Set([...(existing.graduatedSkills || [existing.skill || ""])]));
+    existing.skill = targetSkillKey; // Active skill track
+    existing.graduated = false; // In training for the new skill track
+    existing.certTier = null;
+    existing.certificateUrl = undefined;
+    existing.points = (existing.points || 0) + 500; // Milestone achievement bonus
+    existing.multiSkillCount = (existing.multiSkillCount || 1) + 1;
+    existing.milestones = Array.from(
+      new Set([
+        ...(existing.milestones || []),
+        `Milestone: Graduated ${currentSkillName} (Certificate Verified) · Enrolled in ${targetSkillName}`,
+      ])
+    );
+
+    updateAccount(oldId, existing);
+    addFeed({
+      kind: "registration",
+      name: existing.name,
+      skill: `${targetSkillName} (Milestone ID: ${updatedId})`,
+      avatar: existing.avatar,
+    });
+    return { ok: true, student: existing };
+  }
+
+  const skill = getSkill(input.skill);
   if (!skill) return { ok: false, error: "Please select a valid skill." };
-  if (!skill.available && !fdAllowed(phone))
-    return { ok: false, error: `${skill.name} is currently restricted.` };
-  if (!getSkillRegistration(input.skill) && !fdAllowed(phone))
+  if (!skill.available)
+    return { ok: false, error: `${skill.name} is currently not available.` };
+  if (!getSkillRegistration(input.skill))
     return { ok: false, error: `Registration for ${skill.name} is currently closed.` };
 
   const serial = nextSerial(input.skill);
@@ -1003,6 +1954,11 @@ export function registerStudent(input: { name: string; email: string; phone: str
     type: "student",
     id: studentId,
     name: input.name.trim(), email, phone, country: input.country || "NG", skill: input.skill,
+    skills: [input.skill],
+    graduatedSkills: [],
+    previousIds: [],
+    milestones: [`Enrolled in ${skill.name}`],
+    multiSkillCount: 1,
     dob: input.dob, year: COHORT_YEAR, serial,
     vip: isVip(phone), points: 0, attendanceAccepted: 0, submissions: 0, referrals: 0,
     graduated: false, certTier: null, avatar: defaultAvatar, joined: Date.now(), expandedVisibility: false, password: input.password,
@@ -1026,7 +1982,7 @@ export function adminRegisterStudent(input: {
 }): { ok: boolean; error?: string; student?: Account } {
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Full name is required." };
-  const skill = SKILLS.find((item) => item.key === input.skill);
+  const skill = getSkill(input.skill);
   if (!skill) return { ok: false, error: "Please select a valid skill." };
   const accounts = getAccounts();
   const email = normalizeEmail(input.email);
@@ -1035,18 +1991,14 @@ export function adminRegisterStudent(input: {
   const isFounder = isFounderAccount(phone, email);
   const isCoFounder = isCoFounderAccount(phone, email);
 
-  if (!isFounder && !isCoFounder) {
-    if (accounts.some((account) => normalizeEmail(account.email) === email)) {
-      return { ok: false, error: "This email is already registered." };
-    }
-    if (accounts.some((account) => normalizePhone(account.phone) === phone)) {
-      return { ok: false, error: "This phone number is already registered." };
-    }
-  }
-
   const password = input.password?.trim() || "TempChangeMe2026";
   if (password.length < 6) {
     return { ok: false, error: "Password must be at least 6 characters." };
+  }
+
+  // If existing student, delegate to registerStudent so progression & milestone ID rules apply
+  if (accounts.some((a) => normalizeEmail(a.email) === email || normalizePhone(a.phone) === phone)) {
+    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
   }
 
   if (isFounder) {
@@ -1157,11 +2109,64 @@ export function registerTribe(input: {
   return { ok: true, member };
 }
 
-export function findStudent(id: string): Account | undefined {
-  const normalized = normalizeIdentity(id);
+export function findStudent(idOrQuery: string): Account | undefined {
+  if (!idOrQuery) return undefined;
+  const raw = idOrQuery.trim();
+  const normalized = normalizeIdentity(raw);
+  const emailQuery = normalizeEmail(raw);
+  const phoneQuery = normalizePhone(raw);
   const accounts = getAccounts();
-  const direct = accounts.find((s) => normalizeIdentity(s.id) === normalized);
+
+  // 1. Direct or normalized ID match
+  const direct = accounts.find((s) => {
+    if (s.id === raw || normalizeIdentity(s.id) === normalized) return true;
+    if (s.previousIds && s.previousIds.some((p) => p === raw || normalizeIdentity(p) === normalized)) return true;
+    return false;
+  });
   if (direct) return direct;
+
+  // 2. Direct Email match
+  const byEmail = accounts.find((s) => s.email && normalizeEmail(s.email) === emailQuery);
+  if (byEmail) return byEmail;
+
+  // 3. Direct Phone match
+  if (phoneQuery.length >= 7) {
+    const byPhone = accounts.find((s) => s.phone && normalizePhone(s.phone) === phoneQuery);
+    if (byPhone) return byPhone;
+  }
+
+  // 4. Exact Full Name match (case-insensitive)
+  const byName = accounts.find((s) => s.name && s.name.trim().toLowerCase() === raw.toLowerCase());
+  if (byName) return byName;
+
+  // 5. Substring or prefix match on ID (e.g. searching without skill suffix or without hyphens)
+  const prefixMatch = accounts.find((s) => {
+    const sNorm = normalizeIdentity(s.id);
+    return sNorm.startsWith(normalized) || normalized.startsWith(sNorm) || sNorm.includes(normalized);
+  });
+  if (prefixMatch) return prefixMatch;
+
+  // 6. Check active logged-in user in localStorage
+  if (typeof localStorage !== "undefined") {
+    try {
+      const cur = localStorage.getItem("kr8_current");
+      if (cur) {
+        const parsed = JSON.parse(cur) as Account;
+        if (
+          parsed.id === raw ||
+          normalizeIdentity(parsed.id) === normalized ||
+          (parsed.email && normalizeEmail(parsed.email) === emailQuery) ||
+          (parsed.name && parsed.name.trim().toLowerCase() === raw.toLowerCase())
+        ) {
+          return parsed;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 7. Leadership Aliases
   if (normalized.includes("FOUNDER") || normalized.includes("TIMFIRE")) {
     return accounts.find((s) => s.type === "founder");
   }
@@ -1181,10 +2186,21 @@ export function recoverId(query: string): Account | undefined {
   const direct = accounts.find((s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone);
   if (direct) return direct;
   if (isFounderAccount(phone, email)) {
-    return accounts.find((s) => s.type === "founder" || isFounderAccount(s.phone, s.email));
+    return (
+      accounts.find((s) => s.phone && phone && normalizePhone(s.phone) === phone) ||
+      accounts.find((s) => s.email && email && normalizeEmail(s.email) === email) ||
+      accounts.find((s) => s.type === "founder" || isFounderAccount(s.phone, s.email))
+    );
   }
   if (isCoFounderAccount(phone, email)) {
-    return accounts.find((s) => s.type === "co-founder" || isCoFounderAccount(s.phone, s.email));
+    // Match the specific co-founder that owns this phone (never first-match)
+    const canon = coFounderCanonFor(phone);
+    const otherPhone = Object.keys(COFOUNDER_IDENTITY).find((p) => p !== phone);
+    return (
+      accounts.find((s) => s.phone && phone && normalizePhone(s.phone) === phone) ||
+      (canon ? accounts.find((s) => normalizeIdentity(s.id || "") === normalizeIdentity(canon.id)) : undefined) ||
+      accounts.find((s) => s.type === "co-founder" && (!s.phone || !otherPhone || normalizePhone(s.phone) !== otherPhone))
+    );
   }
   return undefined;
 }
@@ -1465,11 +2481,324 @@ export function getReferralUrl(id: string): string {
   return `${origin}/academy?ref=${encodeURIComponent(id)}`;
 }
 
+
+/* ---------------- Certificate System Management ---------------- */
+
+export function getStudentCertificates(studentId: string): CertificateRecord[] {
+  const acc = findStudent(studentId);
+  if (!acc) return [];
+  if (acc.certificates && acc.certificates.length > 0) {
+    return acc.certificates;
+  }
+  // Synthesize certificate if account is graduated
+  if (acc.graduated) {
+    const tier = (acc.certTier as CertificateTier) || "Completion";
+    const skillKey = acc.skill || "graphic";
+    const skillName = getSkillName(skillKey);
+    const synthesizedCert: CertificateRecord = {
+      id: `CERT-KR8-${acc.id}-${skillKey.toUpperCase()}`,
+      studentId: acc.id,
+      studentName: acc.name,
+      formattedName: acc.name.toUpperCase(),
+      skill: skillKey,
+      skillName,
+      tier,
+      templateUrl: `/certificates/reusable_${tier.toLowerCase()}.png`,
+      achievementText:
+        tier === "Professionalism"
+          ? "demonstrating excellence and proficiency in turning client requests into client satisfaction."
+          : "gaining hands-on experience in turning client requests into finished designs.",
+      additionalNotes: acc.certRecognition || acc.verifyRemark,
+      issuedAt: acc.graduatedAt || acc.joined || Date.now(),
+      status: "active",
+      certificateImageUrl: acc.certificateUrl && !acc.certificateUrl.startsWith("cert-stored:") ? acc.certificateUrl : undefined,
+    };
+    return [synthesizedCert];
+  }
+  // Synthesize legacy certificate if available
+  if (acc.certificateUrl) {
+    const legacyCert: CertificateRecord = {
+      id: `CERT-LEGACY-${acc.id}`,
+      studentId: acc.id,
+      studentName: acc.name,
+      formattedName: acc.name.toUpperCase(),
+      skill: acc.skill || "graphic",
+      skillName: getSkillName(acc.skill),
+      tier: (acc.certTier as CertificateTier) || "Completion",
+      templateUrl: acc.certificateUrl,
+      achievementText:
+        acc.certTier === "Professionalism"
+          ? "demonstrating excellence and proficiency in turning client requests into client satisfaction."
+          : "gaining hands-on experience in turning client requests into finished designs.",
+      additionalNotes: acc.certRecognition || acc.verifyRemark,
+      issuedAt: acc.graduatedAt || acc.joined || Date.now(),
+      status: "active",
+      certificateImageUrl: acc.certificateUrl && !acc.certificateUrl.startsWith("cert-stored:") ? acc.certificateUrl : undefined,
+    };
+    return [legacyCert];
+  }
+  return [];
+}
+
+export function getCertificateById(certId: string): { certificate?: CertificateRecord; account?: Account } {
+  if (!certId) return {};
+  const accounts = getAccounts();
+  for (const acc of accounts) {
+    const certs = getStudentCertificates(acc.id);
+    const found = certs.find((c) => c.id.toLowerCase() === certId.toLowerCase());
+    if (found) {
+      return { certificate: found, account: acc };
+    }
+  }
+  return {};
+}
+
+export function issueCertificate(
+  studentId: string,
+  cert: CertificateRecord
+): { ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string } {
+  const accounts = getAccounts();
+  const accIndex = accounts.findIndex(
+    (s) => normalizeIdentity(s.id) === normalizeIdentity(studentId)
+  );
+  if (accIndex === -1) {
+    return { ok: false, error: `Student with ID ${studentId} not found.` };
+  }
+
+  const acc = accounts[accIndex];
+  const existingCerts = getStudentCertificates(acc.id);
+
+  // If active certificate for this skill already exists, replace it; otherwise append
+  const existingIdx = existingCerts.findIndex(
+    (c) => c.skill === cert.skill && c.status === "active"
+  );
+  if (existingIdx >= 0) {
+    existingCerts[existingIdx] = cert;
+  } else {
+    existingCerts.push(cert);
+  }
+
+  // Update graduatedSkills set
+  const graduatedSkills = new Set(acc.graduatedSkills || []);
+  if (cert.skill) graduatedSkills.add(cert.skill);
+  if (acc.skill) graduatedSkills.add(acc.skill);
+
+  // Create congratulations notification
+  const notifs = acc.notifications ? [...acc.notifications] : [];
+  const notifExists = notifs.some((n) => n.certificateId === cert.id);
+  if (!notifExists) {
+    notifs.unshift({
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: "graduation",
+      title: `Congratulations! Your Certificate of ${cert.tier} has been issued! 🎓`,
+      message: `You have successfully graduated from ${cert.skillName} at KR8 Digitals! Your verified Certificate of ${cert.tier} is now available in your profile to view, download, and share.`,
+      certificateId: cert.id,
+      skill: cert.skill,
+      skillName: cert.skillName,
+      tier: cert.tier,
+      timestamp: Date.now(),
+      read: false,
+    });
+  }
+
+  const updated: Account = {
+    ...acc,
+    graduated: true,
+    certTier: cert.tier,
+    certificateUrl: `cert-stored:${cert.id}`,
+    certRecognition: cert.additionalNotes || acc.certRecognition,
+    graduatedAt: cert.issuedAt,
+    certificates: existingCerts,
+    graduatedSkills: Array.from(graduatedSkills),
+    notifications: notifs,
+  };
+
+  accounts[accIndex] = updated;
+  saveAccounts(accounts);
+
+  // Sync current user session if the graduated student is currently signed in
+  try {
+    const curRaw = localStorage.getItem("kr8_current");
+    if (curRaw) {
+      const cur = JSON.parse(curRaw) as Account;
+      if (normalizeIdentity(cur.id) === normalizeIdentity(studentId)) {
+        localStorage.setItem("kr8_current", JSON.stringify(updated));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // Push to global notifications list so Navbar bell lights up
+  try {
+    const globalNotifs = JSON.parse(localStorage.getItem("kr8_notifs") || "[]");
+    globalNotifs.unshift({
+      id: Math.random().toString(36).slice(2),
+      text: `🎓 Congratulations, ${updated.name}! Your Certificate of ${cert.tier} in ${cert.skillName} has been issued!`,
+      ts: Date.now(),
+    });
+    localStorage.setItem("kr8_notifs", JSON.stringify(globalNotifs.slice(0, 20)));
+  } catch {
+    /* ignore */
+  }
+
+  addFeed({
+    kind: "graduation",
+    name: updated.name,
+    skill: cert.skillName,
+    avatar: updated.avatar,
+  });
+
+  return { ok: true, account: updated, certificate: cert };
+}
+
+export function withdrawCertificate(
+  studentId: string,
+  certId: string,
+  reason: string,
+  withdrawnBy?: string
+): { ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string } {
+  if (!reason || !reason.trim()) {
+    return { ok: false, error: "A withdrawal reason is required." };
+  }
+
+  const accounts = getAccounts();
+  const accIndex = accounts.findIndex(
+    (s) => normalizeIdentity(s.id) === normalizeIdentity(studentId)
+  );
+  if (accIndex === -1) {
+    return { ok: false, error: `Student with ID ${studentId} not found.` };
+  }
+
+  const acc = accounts[accIndex];
+  const certs = getStudentCertificates(acc.id);
+  const certIndex = certs.findIndex(
+    (c) => c.id.toLowerCase() === certId.toLowerCase()
+  );
+
+  if (certIndex === -1) {
+    return { ok: false, error: `Certificate reference ID "${certId}" not found for student.` };
+  }
+
+  const targetCert = certs[certIndex];
+  const updatedCert: CertificateRecord = {
+    ...targetCert,
+    status: "withdrawn",
+    withdrawalReason: reason.trim(),
+    withdrawnAt: Date.now(),
+    withdrawnBy: withdrawnBy || "Administrator",
+  };
+
+  certs[certIndex] = updatedCert;
+
+  // Add withdrawal notification to student profile
+  const notifs = acc.notifications ? [...acc.notifications] : [];
+  notifs.unshift({
+    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type: "withdrawal",
+    title: `Notice: Certificate of ${targetCert.tier} Withdrawn`,
+    message: `Your Certificate of ${targetCert.tier} in ${targetCert.skillName} has been withdrawn by the administrator.`,
+    reason: reason.trim(),
+    certificateId: targetCert.id,
+    skill: targetCert.skill,
+    skillName: targetCert.skillName,
+    tier: targetCert.tier,
+    timestamp: Date.now(),
+    read: false,
+  });
+
+  // Calculate remaining active certificates
+  const remainingActive = certs.filter((c) => c.status === "active");
+  const stillGraduated = remainingActive.length > 0;
+  const latestActive = stillGraduated ? remainingActive[remainingActive.length - 1] : undefined;
+
+  const updated: Account = {
+    ...acc,
+    certificates: certs,
+    graduated: stillGraduated,
+    certTier: latestActive?.tier || null,
+    certificateUrl: latestActive?.certificateImageUrl || undefined,
+    notifications: notifs,
+  };
+
+  accounts[accIndex] = updated;
+  saveAccounts(accounts);
+
+  return { ok: true, account: updated, certificate: updatedCert };
+}
+
+export function getStudentNotifications(studentId: string): StudentNotification[] {
+  const acc = findStudent(studentId);
+  return acc?.notifications || [];
+}
+
+export function markNotificationRead(studentId: string, notifId: string): void {
+  const accounts = getAccounts();
+  const acc = accounts.find((s) => normalizeIdentity(s.id) === normalizeIdentity(studentId));
+  if (!acc || !acc.notifications) return;
+  const target = acc.notifications.find((n) => n.id === notifId);
+  if (target) {
+    target.read = true;
+    saveAccounts(accounts);
+  }
+}
+
 /* ---------------- Verify ---------------- */
-export function verifyId(id: string): { ok: boolean; account?: Account } {
-  const acc = findStudent(id);
-  if (!acc || (acc.type !== "student" && acc.type !== "founder" && acc.type !== "co-founder")) return { ok: false };
-  return { ok: true, account: acc };
+export type VerificationResult = {
+  ok: boolean;
+  account?: Account;
+  certificate?: CertificateRecord;
+  certificates?: CertificateRecord[];
+  isWithdrawn?: boolean;
+  withdrawalReason?: string;
+  withdrawnAt?: number;
+};
+
+export function verifyId(id: string, certId?: string): VerificationResult {
+  const cleanId = (id || "").trim();
+  const cleanCert = (certId || "").trim();
+
+  // 1. Direct Certificate Reference Lookup
+  const targetCertId = cleanCert || (cleanId.startsWith("CERT-") ? cleanId : "");
+  if (targetCertId) {
+    const { certificate, account } = getCertificateById(targetCertId);
+    if (certificate && account) {
+      return {
+        ok: true,
+        account,
+        certificate,
+        certificates: getStudentCertificates(account.id),
+        isWithdrawn: certificate.status === "withdrawn",
+        withdrawalReason: certificate.withdrawalReason,
+        withdrawnAt: certificate.withdrawnAt,
+      };
+    }
+  }
+
+  // 2. Student / Member Identity Lookup
+  const acc = findStudent(cleanId);
+  if (!acc) {
+    return { ok: false };
+  }
+
+  const certs = getStudentCertificates(acc.id);
+  // Match specific certificate or default to active primary
+  let matchedCert = targetCertId
+    ? certs.find((c) => c.id.toLowerCase() === targetCertId.toLowerCase())
+    : undefined;
+  if (!matchedCert && certs.length > 0) {
+    matchedCert = certs.find((c) => c.status === "active") || certs[certs.length - 1];
+  }
+
+  return {
+    ok: true,
+    account: acc,
+    certificate: matchedCert,
+    certificates: certs,
+    isWithdrawn: matchedCert ? matchedCert.status === "withdrawn" : false,
+    withdrawalReason: matchedCert?.withdrawalReason,
+    withdrawnAt: matchedCert?.withdrawnAt,
+  };
 }
 
 /* ---------------- Live feed ---------------- */
@@ -1596,6 +2925,19 @@ export function getHomepageSettings(): HomepageSettings {
 export function saveHomepageSettings(settings: HomepageSettings) {
   save(HOMEPAGE_SETTINGS_KEY, settings);
   if (typeof window !== "undefined") {
+    try {
+      const rawCms = localStorage.getItem("kr8_cms_content_v2");
+      if (rawCms) {
+        const cms = JSON.parse(rawCms);
+        if (!cms.home) cms.home = {};
+        if (settings.heroHeadline) cms.home.heroHeadline = settings.heroHeadline;
+        if (settings.projectsDone) cms.home.projectsDone = settings.projectsDone;
+        localStorage.setItem("kr8_cms_content_v2", JSON.stringify(cms));
+        window.dispatchEvent(new Event("kr8:cms-updated"));
+      }
+    } catch {
+      /* ignore */
+    }
     window.dispatchEvent(new Event("kr8:homepage-settings-updated"));
   }
 }
@@ -1609,10 +2951,12 @@ export function saveAnnouncementBar(value: typeof ANNOUNCEMENT_BAR) {
 
 export type Announcement = {
   id: string;
-  type: "text" | "flyer";
+  type: "text" | "flyer" | "image" | "video";
   title: string;
   body?: string;
   image?: string;
+  videoUrl?: string;
+  videoPoster?: string;
   caption?: string;
   date: string;
   author: string;
@@ -1932,6 +3276,40 @@ export function getPortfolio() {
 }
 export function savePortfolio(items: typeof PORTFOLIO) {
   save("kr8_portfolio_v3", items);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:portfolio-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
+}
+
+export type XpRule = {
+  id: string;
+  action: string;
+  pts: number;
+  category: "attendance" | "assignment" | "community" | "referral" | "graduation" | "custom";
+  description?: string;
+};
+
+export const DEFAULT_XP_RULES: XpRule[] = [
+  { id: "xp-atd", action: "Attendance Approved", pts: 10, category: "attendance", description: "Awarded when student attendance is verified and accepted" },
+  { id: "xp-assign", action: "Assignment Accepted", pts: 25, category: "assignment", description: "Awarded when skill track instructor reviews and accepts drill submission" },
+  { id: "xp-hangout", action: "Community Hangout", pts: 15, category: "community", description: "Participation in community town hall, workshop or live drill" },
+  { id: "xp-referral", action: "Successful Referral", pts: 20, category: "referral", description: "Awarded when an invited student completes onboarding" },
+  { id: "xp-grad", action: "Graduate Certification", pts: 100, category: "graduation", description: "Milestone credential awarded upon official graduation" },
+];
+
+const XP_RULES_KEY = "kr8_xp_rules_v2";
+
+export function getXpRules(): XpRule[] {
+  return load(XP_RULES_KEY, DEFAULT_XP_RULES);
+}
+
+export function saveXpRules(rules: XpRule[]) {
+  save(XP_RULES_KEY, rules);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:xp-rules-updated"));
+    window.dispatchEvent(new Event("storage"));
+  }
 }
 
 export type BlogComment = {
@@ -2370,6 +3748,240 @@ export const REAL_STUDENT_TESTIMONIALS: Testimonial[] = [
       { start: 80.0, end: 86.0, text: "KR8 Digitals is the real deal — join us today!" },
     ],
   },
+  {
+    id: "vid-new-1",
+    name: "Adeola Collins",
+    schoolOrRole: "Cohort Student",
+    skill: "Graphic Design",
+    caption: "At first I thought it was just another random WhatsApp group, but KR8 Digitals gave real structured training and assignments.",
+    img: "/videos/testimonial_new_1_poster.jpg",
+    video: "/videos/testimonial_new_1.mp4",
+    duration: 114,
+    createdAt: 1726000000000 + 490000,
+    captions: [
+      { start: 0.0, end: 4.5, text: "I'm excited to share with you my experience with KR8 Digitals." },
+      { start: 4.5, end: 11.0, text: "Several months ago I came across KR8 Digitals when someone shared their link in a group." },
+      { start: 11.0, end: 18.0, text: "At first I thought it was just one random free WhatsApp class that only teaches basic things." },
+      { start: 18.0, end: 26.0, text: "But when I joined, they introduced structured assignments and real design feedback." },
+      { start: 26.0, end: 35.0, text: "100% free with dedicated tutors who guide you step by step." },
+    ],
+  },
+  {
+    id: "vid-new-2",
+    name: "William Marvelous",
+    schoolOrRole: "Cohort Student",
+    skill: "Video Editing & Animation",
+    caption: "The classes, practical drills, and tutor feedback pushed me from a total novice to creating industry-grade video edits.",
+    img: "/videos/testimonial_new_2_poster.jpg",
+    video: "/videos/testimonial_new_2.mp4",
+    duration: 266,
+    createdAt: 1726000000000 + 480000,
+    captions: [
+      { start: 0.0, end: 5.0, text: "Hello everyone, my name is William Marvelous and I'm a student of KR8 Digitals." },
+      { start: 5.0, end: 12.0, text: "I heard about KR8 Digitals when I was just scrolling on my feed." },
+      { start: 12.0, end: 20.0, text: "Learning video editing here has been an incredible experience with real hands-on projects." },
+      { start: 20.0, end: 30.0, text: "The mentors guide you patiently through pacing, transitions, and industry techniques." },
+      { start: 30.0, end: 42.0, text: "100% free with structured cohort assignments. Join KR8 Digitals today!" },
+    ],
+  },
+  {
+    id: "vid-new-3",
+    name: "Adrian Washington",
+    schoolOrRole: "Cohort Graduate",
+    skill: "Brand Identity & Graphic Design",
+    caption: "KR8 Digitals transformed how I understand branding and creative problem solving. 100% free with real mentorship.",
+    img: "/videos/testimonial_new_3_poster.jpg",
+    video: "/videos/testimonial_new_3.mp4",
+    duration: 304,
+    createdAt: 1726000000000 + 470000,
+    captions: [
+      { start: 0.0, end: 5.0, text: "Hello everyone, my name is Adrian Washington and I'd like to share my story with you." },
+      { start: 5.0, end: 12.0, text: "It was a sunny afternoon when I saw an opportunity to join the creative tribe." },
+      { start: 12.0, end: 22.0, text: "KR8 Digitals taught me valuable high-income branding principles completely free." },
+      { start: 22.0, end: 32.0, text: "The mentors review your work thoroughly and show you how to design for real clients." },
+      { start: 32.0, end: 45.0, text: "If you want to transform your creative career, join KR8 Digitals today!" },
+    ],
+  },
+  {
+    id: "vid-new-4",
+    name: "Amos Blessing",
+    schoolOrRole: "Cohort Graduate",
+    skill: "Graphic Design",
+    caption: "One of the graduate students of KR8 Digitals Design. The tutors take their time to review assignments and ensure you improve daily.",
+    img: "/videos/testimonial_new_4_poster.jpg",
+    video: "/videos/testimonial_new_4.mp4",
+    duration: 137,
+    createdAt: 1726000000000 + 460000,
+    captions: [
+      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Amos Blessing, one of the graduate students of KR8 Digitals." },
+      { start: 4.5, end: 12.0, text: "I joined the Graphic Design cohort and the practical assignments pushed me to grow." },
+      { start: 12.0, end: 20.0, text: "Thank you KR8 Digitals for giving us the platform to learn free of charge!" },
+    ],
+  },
+  {
+    id: "vid-new-5",
+    name: "David Ebuka",
+    schoolOrRole: "Cohort Student",
+    skill: "Digital Skills & Design",
+    caption: "I saw a WhatsApp status about KR8 Digitals and made inquiries. Found out it was completely free — no hidden fees or charges.",
+    img: "/videos/testimonial_new_5_poster.jpg",
+    video: "/videos/testimonial_new_5.mp4",
+    duration: 156,
+    createdAt: 1726000000000 + 450000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Good day everyone, my name is David Ebuka." },
+      { start: 4.0, end: 10.5, text: "I heard about KR8 Digitals from someone's WhatsApp status." },
+      { start: 10.5, end: 18.0, text: "When I made inquiries, I found out it was a 100% free digital platform." },
+      { start: 18.0, end: 26.0, text: "You learn high-demand digital skills with zero hidden charges." },
+    ],
+  },
+  {
+    id: "vid-new-6",
+    name: "Calistus Precious",
+    schoolOrRole: "Cohort Student",
+    skill: "Content Creation & Design",
+    caption: "Before KR8, I had zero digital skills. The structured timetable, assignments, and cohort community gave me the guidance I needed.",
+    img: "/videos/testimonial_new_6_poster.jpg",
+    video: "/videos/testimonial_new_6.mp4",
+    duration: 209,
+    createdAt: 1726000000000 + 440000,
+    captions: [
+      { start: 0.0, end: 3.5, text: "Hello everyone, my name is Calistus Precious." },
+      { start: 3.5, end: 10.0, text: "Before I joined KR8 Digitals, I had zero digital design skills." },
+      { start: 10.0, end: 18.0, text: "The daily drills and mentor feedback helped me build real confidence." },
+    ],
+  },
+  {
+    id: "vid-new-7",
+    name: "Emmanuel Nweke",
+    schoolOrRole: "Cohort Graduate",
+    skill: "Web Development",
+    caption: "Graduating from KR8 Digitals. I learned practical coding and digital craft with dedicated tutors backing every student.",
+    img: "/videos/testimonial_new_7_poster.jpg",
+    video: "/videos/testimonial_new_7.mp4",
+    duration: 83,
+    createdAt: 1726000000000 + 430000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Hello, to all the graduating students and tutors at KR8 Digitals." },
+      { start: 4.0, end: 11.0, text: "Joining this cohort was the best decision for my tech journey." },
+      { start: 11.0, end: 18.0, text: "We learned real development skills with zero financial barriers." },
+    ],
+  },
+  {
+    id: "vid-new-8",
+    name: "Onyenaturuchi Chisom Mbanu",
+    schoolOrRole: "Cohort Student",
+    skill: "Video Editing & Social Media",
+    caption: "I can create high-impact videos myself and I'm proud of it. I was skeptical at first, but KR8 didn't collect a single dime from us.",
+    img: "/videos/testimonial_new_8_poster.jpg",
+    video: "/videos/testimonial_new_8.mp4",
+    duration: 120,
+    createdAt: 1726000000000 + 420000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "My name is Onyenaturuchi Chisom Mbanu." },
+      { start: 4.0, end: 10.5, text: "I can create these videos myself and I am really proud of it." },
+      { start: 10.5, end: 18.0, text: "At first I was skeptical about free training, but they didn't collect a single dime." },
+      { start: 18.0, end: 26.0, text: "They gave us the opportunity to practice, learn, and grow consistently." },
+    ],
+  },
+  {
+    id: "vid-new-9",
+    name: "Blessing Ogbonna",
+    schoolOrRole: "Cohort Student",
+    skill: "Graphic Design",
+    caption: "I joined KR8 Digitals without knowing what to expect. The assignments and daily tutor feedback pushed me to build real work.",
+    img: "/videos/testimonial_new_9_poster.jpg",
+    video: "/videos/testimonial_new_9.mp4",
+    duration: 96,
+    createdAt: 1726000000000 + 410000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Hello everyone, my name is Blessing." },
+      { start: 4.0, end: 11.0, text: "I was invited randomly to KR8 Digitals and decided to check it out." },
+      { start: 11.0, end: 19.0, text: "The graphic design classes opened my eyes to professional visual principles." },
+    ],
+  },
+  {
+    id: "vid-new-10",
+    name: "Prosper Chukwu",
+    schoolOrRole: "Cohort Student",
+    skill: "Digital Skills & Marketing",
+    caption: "Saw a flyer on WhatsApp for KR8 Digitals Tribe. The community accountability and live sessions make learning stick.",
+    img: "/videos/testimonial_new_10_poster.jpg",
+    video: "/videos/testimonial_new_10.mp4",
+    duration: 65,
+    createdAt: 1726000000000 + 400000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Standing before you to share my experience with KR8 Digitals." },
+      { start: 4.0, end: 11.0, text: "I got to know KR8 Tribe while going through WhatsApp status." },
+      { start: 11.0, end: 18.0, text: "It was a flyer offering free digital skills training, and it delivered on every promise." },
+    ],
+  },
+  {
+    id: "vid-new-11",
+    name: "Esther Adeyemi",
+    schoolOrRole: "Cohort Student",
+    skill: "Social Media Strategy",
+    caption: "KR8 Digitals opened my eyes to how digital skills create direct earning power for youth across Africa.",
+    img: "/videos/testimonial_new_11_poster.jpg",
+    video: "/videos/testimonial_new_11.mp4",
+    duration: 44,
+    createdAt: 1726000000000 + 390000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Hello everyone, learning with KR8 Digitals has been inspiring." },
+      { start: 4.0, end: 11.0, text: "The mentors break down digital marketing and social growth clearly." },
+      { start: 11.0, end: 18.0, text: "Thank you KR8 Digitals for making high-value training accessible." },
+    ],
+  },
+  {
+    id: "vid-new-12",
+    name: "Blessed Ayemere Well",
+    schoolOrRole: "Cohort Student",
+    skill: "Graphic Design & Animation",
+    caption: "My name is Blessed Ayemere Well. KR8 Digitals equipped me with professional design skills with 0 cost for certificate or training.",
+    img: "/videos/testimonial_new_12_poster.jpg",
+    video: "/videos/testimonial_new_12.mp4",
+    duration: 61,
+    createdAt: 1726000000000 + 380000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Hello everyone, my name is Blessed Ayemere Well." },
+      { start: 4.0, end: 11.0, text: "KR8 Digitals equipped me with professional design skills." },
+      { start: 11.0, end: 18.0, text: "Zero cost for training, zero cost for certification, pure practical craft." },
+    ],
+  },
+  {
+    id: "vid-new-13",
+    name: "Charity Okon",
+    schoolOrRole: "Cohort Student",
+    skill: "Content Creation & Editing",
+    caption: "When a friend posted KR8 Digitals on her status, I wondered if free training could be real. Tutors guide you every step of the way!",
+    img: "/videos/testimonial_new_13_poster.jpg",
+    video: "/videos/testimonial_new_13.mp4",
+    duration: 161,
+    createdAt: 1726000000000 + 370000,
+    captions: [
+      { start: 0.0, end: 4.0, text: "Good day everyone, my name is Charity." },
+      { start: 4.0, end: 10.5, text: "When I heard about KR8 Digitals through a friend's status, I was curious." },
+      { start: 10.5, end: 18.0, text: "I wondered how digital skills could be taught for free." },
+      { start: 18.0, end: 26.0, text: "The instructors are patient, knowledgeable, and always ready to help." },
+    ],
+  },
+  {
+    id: "vid-new-14",
+    name: "Somtochukwu Favour",
+    schoolOrRole: "Cohort Student",
+    skill: "Graphic Design",
+    caption: "A friend told me about KR8 Digitals Tribe. I showed them my early designs and they pushed me to level up with real feedback!",
+    img: "/videos/testimonial_new_14_poster.jpg",
+    video: "/videos/testimonial_new_14.mp4",
+    duration: 151,
+    createdAt: 1726000000000 + 360000,
+    captions: [
+      { start: 0.0, end: 4.5, text: "Hello everyone, my name is Somtochukwu, learning Graphic Design with KR8 Digitals." },
+      { start: 4.5, end: 12.0, text: "I signed up for KR8 Digitals Tribe after a friend showed me the program." },
+      { start: 12.0, end: 20.0, text: "When I showed my designs, the mentors gave me real practical feedback to improve." },
+      { start: 20.0, end: 30.0, text: "The classes and community helped me level up my skills completely for free." },
+    ],
+  },
 ];
 
 const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
@@ -2456,7 +4068,7 @@ const DEFAULT_VIDEO_COMMENTS: VideoComment[] = [
   },
 ];
 
-const TESTIMONIAL_KEY = "kr8_testimonials_v8";
+const TESTIMONIAL_KEY = "kr8_testimonials_v16";
 const VIDEO_COMMENT_KEY = "kr8_video_comments_v3";
 
 export function getTestimonials(): Testimonial[] {
@@ -2778,7 +4390,10 @@ export const SCORING = [
 ];
 
 export function tribeCount(): number {
-  return 2480 + getAccounts().filter((account) => account.type === "tribe").length;
+  // Combination of registered tribe members and students, preserving current base statistics
+  const tribeMembers = getAccounts().filter((account) => account.type === "tribe").length;
+  const students = getStudents().length;
+  return 2480 + tribeMembers + students;
 }
 export function studentCount(): number {
   return 1200 + getStudents().length;
@@ -3457,6 +5072,9 @@ export function awardPointsToStreamViewer(
   ];
 
   updateLiveStream({ recognizedParticipants: recognized });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("kr8:points-updated", { detail: { userId, points, reason } }));
+  }
 
   sendLiveChatMessage({
     streamId,
@@ -3950,6 +5568,377 @@ export function suspendStreamActivities(streamId: string): void {
   }
 }
 
+export type ClientRequestType = "structured" | "custom_quote" | "brand_audit" | "coaching" | "partnership";
+
+export type ClientRequest = {
+  id: string;
+  type: ClientRequestType;
+  title: string;
+  name: string;
+  email: string;
+  phone: string;
+  details: Record<string, string | number | undefined>;
+  createdAt: string;
+  status: "new" | "contacted" | "closed";
+};
+
+const CLIENT_REQUESTS_KEY = "kr8_client_requests_v1";
+let memoryClientRequests: ClientRequest[] = [];
+
+export function getClientRequests(): ClientRequest[] {
+  if (typeof window === "undefined") return memoryClientRequests;
+  try {
+    const raw = localStorage.getItem(CLIENT_REQUESTS_KEY);
+    return raw ? JSON.parse(raw) : memoryClientRequests;
+  } catch {
+    return memoryClientRequests;
+  }
+}
+
+export function saveClientRequest(data: {
+  type: ClientRequestType;
+  title: string;
+  name: string;
+  email: string;
+  phone: string;
+  details: Record<string, string | number | undefined>;
+}): { success: boolean; id?: string; error?: string } {
+  try {
+    if (!data.name?.trim()) {
+      return { success: false, error: "Full Name or Organization is required." };
+    }
+    if (!data.email?.trim() && !data.phone?.trim()) {
+      return { success: false, error: "Please provide either a valid Email Address or Phone Number so we can reach you." };
+    }
+    const current = getClientRequests();
+    const newReq: ClientRequest = {
+      id: "req_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      type: data.type,
+      title: data.title || "Inbound Client Request",
+      name: data.name.trim(),
+      email: data.email?.trim() || "",
+      phone: data.phone?.trim() || "",
+      details: data.details || {},
+      createdAt: new Date().toISOString(),
+      status: "new",
+    };
+    current.unshift(newReq);
+    memoryClientRequests = current;
+
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(CLIENT_REQUESTS_KEY, JSON.stringify(current));
+        window.dispatchEvent(new Event("kr8:client-requests-updated"));
+      } catch (storageErr: any) {
+        return { success: false, error: storageErr?.message || "Storage quota exceeded" };
+      }
+    }
+    return { success: true, id: newReq.id };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to save request to database." };
+  }
+}
+
+export function updateClientRequestStatus(id: string, status: "new" | "contacted" | "closed"): void {
+  const current = getClientRequests().map((r) => (r.id === id ? { ...r, status } : r));
+  memoryClientRequests = current;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(CLIENT_REQUESTS_KEY, JSON.stringify(current));
+      window.dispatchEvent(new Event("kr8:client-requests-updated"));
+    } catch {}
+  }
+}
+
+export function deleteClientRequest(id: string): void {
+  const current = getClientRequests().filter((r) => r.id !== id);
+  memoryClientRequests = current;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(CLIENT_REQUESTS_KEY, JSON.stringify(current));
+      window.dispatchEvent(new Event("kr8:client-requests-updated"));
+    } catch {}
+  }
+}
+
 export function setBreakoutRooms(_streamId: string, breakouts: BreakoutRoom[]): void {
   updateLiveStream({ breakouts });
 }
+
+/* ==========================================================================
+   KR8 STUDENT-TO-STUDENT DIRECT MESSAGING & CONNECTIONS ARCHITECTURE
+   ========================================================================== */
+
+const DIRECT_MESSAGES_KEY = "kr8_direct_messages_v1";
+const BLOCKED_USERS_KEY = "kr8_blocked_users_v1";
+const CONVERSATION_REPORTS_KEY = "kr8_conv_reports_v1";
+
+export interface DirectMessage {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  text: string;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface ConversationSummary {
+  partner: Account;
+  lastMessage: DirectMessage;
+  unreadCount: number;
+}
+
+export function getAccountById(id: string): Account | undefined {
+  return findStudent(id) || getAccounts().find((a) => a.id === id);
+}
+
+let memoryDirectMessages: DirectMessage[] | null = null;
+
+function getRawDirectMessages(): DirectMessage[] {
+  if (memoryDirectMessages) return memoryDirectMessages;
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(DIRECT_MESSAGES_KEY);
+    memoryDirectMessages = raw ? JSON.parse(raw) : [];
+  } catch {
+    memoryDirectMessages = [];
+  }
+  return memoryDirectMessages || [];
+}
+
+function saveRawDirectMessages(messages: DirectMessage[]): void {
+  memoryDirectMessages = messages;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(DIRECT_MESSAGES_KEY, JSON.stringify(messages));
+      window.dispatchEvent(new Event("kr8:direct-messages-updated"));
+    } catch (e) {
+      console.warn("Could not persist direct messages to localStorage:", e);
+    }
+  }
+}
+
+export function getDirectMessagesBetween(idA: string, idB: string): DirectMessage[] {
+  const all = getRawDirectMessages();
+  return all.filter(
+    (m) =>
+      (m.senderId === idA && m.recipientId === idB) ||
+      (m.senderId === idB && m.recipientId === idA)
+  ).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+export function sendDirectMessage(
+  senderId: string,
+  recipientId: string,
+  text: string
+): { ok: boolean; message?: DirectMessage; error?: string } {
+  if (!text || !text.trim()) {
+    return { ok: false, error: "Message cannot be empty." };
+  }
+  if (senderId === recipientId) {
+    return { ok: false, error: "Cannot send a message to yourself." };
+  }
+
+  // Check if blocked
+  if (isStudentBlocked(senderId, recipientId) || isStudentBlocked(recipientId, senderId)) {
+    return { ok: false, error: "You cannot message this student due to privacy or block controls." };
+  }
+
+  // Check privacy rules
+  const recipient = getAccountById(recipientId);
+  const sender = getAccountById(senderId);
+  if (!recipient) {
+    return { ok: false, error: "Recipient student not found." };
+  }
+
+  const privacy = recipient.messagePrivacy || "Anyone";
+  if (privacy === "No one") {
+    return { ok: false, error: `${recipient.name} does not accept direct messages.` };
+  }
+  if (privacy === "Friends only") {
+    const senderFollows = (sender?.following || []).includes(recipientId);
+    const recipientFollows = (recipient.following || []).includes(senderId);
+    if (!senderFollows && !recipientFollows) {
+      return { ok: false, error: `${recipient.name} only accepts messages from students they are connected with.` };
+    }
+  }
+
+  const newMsg: DirectMessage = {
+    id: "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    senderId,
+    recipientId,
+    text: text.trim(),
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+
+  const all = getRawDirectMessages();
+  all.push(newMsg);
+  saveRawDirectMessages(all);
+
+  return { ok: true, message: newMsg };
+}
+
+export function markConversationRead(studentId: string, partnerId: string): void {
+  const all = getRawDirectMessages();
+  let changed = false;
+  const updated = all.map((m) => {
+    if (m.recipientId === studentId && m.senderId === partnerId && !m.read) {
+      changed = true;
+      return { ...m, read: true };
+    }
+    return m;
+  });
+  if (changed) {
+    saveRawDirectMessages(updated);
+  }
+}
+
+export function getStudentConversations(studentId: string): ConversationSummary[] {
+  const all = getRawDirectMessages();
+  const partnersMap = new Map<string, { lastMsg: DirectMessage; unread: number }>();
+
+  for (const msg of all) {
+    const partnerId = msg.senderId === studentId ? msg.recipientId : msg.recipientId === studentId ? msg.senderId : null;
+    if (!partnerId) continue;
+
+    const existing = partnersMap.get(partnerId);
+    const isUnread = msg.recipientId === studentId && !msg.read;
+
+    if (!existing) {
+      partnersMap.set(partnerId, { lastMsg: msg, unread: isUnread ? 1 : 0 });
+    } else {
+      const isNewer = new Date(msg.createdAt).getTime() > new Date(existing.lastMsg.createdAt).getTime();
+      partnersMap.set(partnerId, {
+        lastMsg: isNewer ? msg : existing.lastMsg,
+        unread: existing.unread + (isUnread ? 1 : 0),
+      });
+    }
+  }
+
+  const summaries: ConversationSummary[] = [];
+  for (const [partnerId, data] of partnersMap.entries()) {
+    const partner = getAccountById(partnerId);
+    if (partner) {
+      summaries.push({
+        partner,
+        lastMessage: data.lastMsg,
+        unreadCount: data.unread,
+      });
+    }
+  }
+
+  return summaries.sort(
+    (a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()
+  );
+}
+
+/**
+ * High-performance scalable student search:
+ * Only filters as-you-type with limit, never materializes or renders full student table in DOM.
+ */
+export function searchStudentsFast(query: string, excludeId?: string, limit: number = 20): Account[] {
+  if (!query || !query.trim()) return [];
+  const q = query.toLowerCase().trim();
+  const students = getStudents();
+  const results: Account[] = [];
+
+  for (const s of students) {
+    if (excludeId && s.id === excludeId) continue;
+    if (s.isPlaceholder) continue;
+
+    const nameMatch = s.name.toLowerCase().includes(q);
+    const idMatch = s.id.toLowerCase().includes(q);
+    const skillMatch = (s.skill || "").toLowerCase().includes(q);
+
+    if (nameMatch || idMatch || skillMatch) {
+      results.push(s);
+      if (results.length >= limit) break;
+    }
+  }
+
+  return results;
+}
+
+export function getBlockedUserIds(studentId: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(`${BLOCKED_USERS_KEY}_${studentId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function blockStudent(currentStudentId: string, targetStudentId: string): void {
+  if (typeof window === "undefined") return;
+  const current = getBlockedUserIds(currentStudentId);
+  if (!current.includes(targetStudentId)) {
+    current.push(targetStudentId);
+    localStorage.setItem(`${BLOCKED_USERS_KEY}_${currentStudentId}`, JSON.stringify(current));
+    window.dispatchEvent(new Event("kr8:blocks-updated"));
+  }
+}
+
+export function unblockStudent(currentStudentId: string, targetStudentId: string): void {
+  if (typeof window === "undefined") return;
+  const current = getBlockedUserIds(currentStudentId).filter((id) => id !== targetStudentId);
+  localStorage.setItem(`${BLOCKED_USERS_KEY}_${currentStudentId}`, JSON.stringify(current));
+  window.dispatchEvent(new Event("kr8:blocks-updated"));
+}
+
+export function isStudentBlocked(userA: string, userB: string): boolean {
+  const blocksA = getBlockedUserIds(userA);
+  return blocksA.includes(userB);
+}
+
+export function reportConversation(
+  reporterId: string,
+  reportedId: string,
+  reason: string
+): { ok: boolean; message: string } {
+  if (typeof window === "undefined") return { ok: true, message: "Report submitted." };
+  try {
+    const raw = localStorage.getItem(CONVERSATION_REPORTS_KEY);
+    const reports = raw ? JSON.parse(raw) : [];
+    reports.push({
+      id: "rep_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      reporterId,
+      reportedId,
+      reason: reason.trim(),
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
+    localStorage.setItem(CONVERSATION_REPORTS_KEY, JSON.stringify(reports));
+    window.dispatchEvent(new Event("kr8:reports-updated"));
+  } catch {}
+  return { ok: true, message: "Conversation reported to KR8 administration for moderation." };
+}
+
+export function toggleFollowStudent(
+  currentStudentId: string,
+  targetStudentId: string
+): { following: boolean; updatedProfile?: Account } {
+  const current = getAccountById(currentStudentId);
+  const target = getAccountById(targetStudentId);
+  if (!current || !target) return { following: false };
+
+  const followingList = current.following || [];
+  const isFollowing = followingList.includes(targetStudentId);
+
+  const nextFollowing = isFollowing
+    ? followingList.filter((id: string) => id !== targetStudentId)
+    : [...followingList, targetStudentId];
+
+  const targetFollowers = target.followers || [];
+  const nextTargetFollowers = isFollowing
+    ? targetFollowers.filter((id: string) => id !== currentStudentId)
+    : [...targetFollowers, currentStudentId];
+
+  updateAccount(currentStudentId, { following: nextFollowing });
+  updateAccount(targetStudentId, { followers: nextTargetFollowers });
+
+  const updatedProfile = getAccountById(currentStudentId) || current;
+  return { following: !isFollowing, updatedProfile };
+}
+

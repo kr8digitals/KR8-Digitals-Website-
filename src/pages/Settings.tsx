@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useSeo } from "../lib/useSeo";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { updateAccount, getReferralUrl, SKILLS } from "../data/store";
+import { updateAccount, getReferralUrl, getSkill } from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
@@ -9,11 +10,14 @@ import {
   getBiometricForStudent,
   removeBiometric,
   authenticateWithBiometrics,
+  checkBiometricSupport,
   type BiometricCredential,
 } from "../utils/biometrics";
 
 export default function Settings() {
+  useSeo({ path: "/settings", noindex: true });
   const { student, signIn, signOut } = useAuth();
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(!!student?.expandedVisibility);
   const [bio, setBio] = useState(student?.bio ?? "");
   const [password, setPassword] = useState("");
@@ -32,12 +36,65 @@ export default function Settings() {
   const [bioLoading, setBioLoading] = useState(false);
   const [bioMessage, setBioMessage] = useState("");
   const [bioSuccess, setBioSuccess] = useState(false);
+  const [supportInfo, setSupportInfo] = useState<{ supported: boolean; hasPlatformSensor: boolean; reason: string } | null>(null);
+
+  // Google Sign-In Enablement State (User-Enabled Security Model)
+  const [googleEmailInput, setGoogleEmailInput] = useState(student?.googleAuth?.linkedEmail || student?.email || "");
+  const [googlePasswordConfirm, setGooglePasswordConfirm] = useState("");
+  const [googleLinkOpen, setGoogleLinkOpen] = useState(false);
+  const [googleMsg, setGoogleMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (student) {
       setBiometric(getBiometricForStudent(student.id));
+      if (student.googleAuth?.linkedEmail) {
+        setGoogleEmailInput(student.googleAuth.linkedEmail);
+      }
     }
+    checkBiometricSupport().then(setSupportInfo);
   }, [student]);
+
+  const handleEnableGoogleAuth = (e: React.FormEvent) => {
+    e.preventDefault();
+    setGoogleMsg(null);
+    if (!student) return;
+    if (!googleEmailInput.trim().includes("@")) {
+      setGoogleMsg({ type: "error", text: "Please enter a valid Google Account email." });
+      return;
+    }
+    if (student.password && student.password !== googlePasswordConfirm) {
+      setGoogleMsg({ type: "error", text: "Incorrect password. You must verify your account password to authorize Google Sign-In." });
+      return;
+    }
+
+    const updated = updateAccount(student.id, {
+      googleAuth: {
+        enabled: true,
+        linkedEmail: googleEmailInput.trim().toLowerCase(),
+        linkedAt: Date.now(),
+        verifiedToken: "kr8_gauth_" + Math.random().toString(36).substring(2, 10),
+      },
+    });
+
+    if (updated) {
+      signIn(updated);
+      setGoogleLinkOpen(false);
+      setGooglePasswordConfirm("");
+      setGoogleMsg({ type: "success", text: `Google Sign-In successfully enabled and bound to ${googleEmailInput.trim().toLowerCase()}!` });
+    }
+  };
+
+  const handleDisableGoogleAuth = () => {
+    if (!student) return;
+    if (!window.confirm("Are you sure you want to disable Google Sign-In for your account? You will need your password to log in.")) return;
+    const updated = updateAccount(student.id, {
+      googleAuth: undefined,
+    });
+    if (updated) {
+      signIn(updated);
+      setGoogleMsg({ type: "success", text: "Google Sign-In has been disabled for your account." });
+    }
+  };
 
   if (!student) {
     return (
@@ -57,7 +114,7 @@ export default function Settings() {
     );
   }
 
-  const skill = SKILLS.find((s) => s.key === student.skill);
+  const skill = getSkill(student.skill);
 
   const handleToggleExpanded = (val: boolean) => {
     setExpanded(val);
@@ -106,22 +163,22 @@ export default function Settings() {
 
   const handleEnableBiometric = async () => {
     setBioLoading(true);
-    setBioMessage("");
+    setBioMessage("Awaiting hardware sensor touch... Please touch your fingerprint sensor or verify your passkey when prompted.");
     setBioSuccess(false);
     try {
       const res = await registerBiometric(student.id, student.name);
       if (res.ok && res.credential) {
         setBiometric(res.credential);
         setBioSuccess(true);
-        setBioMessage("Fingerprint & biometric security registered successfully for this device!");
-        setTimeout(() => setBioMessage(""), 4000);
+        setBioMessage("Sensor verified! Fingerprint passkey registered successfully for this device.");
+        setTimeout(() => setBioMessage(""), 5000);
       } else {
         setBioSuccess(false);
-        setBioMessage(res.error || "Could not register biometric authentication.");
+        setBioMessage(res.error || "Sensor verification was not completed.");
       }
     } catch (e: unknown) {
       setBioSuccess(false);
-      setBioMessage(e instanceof Error ? e.message : "Registration error");
+      setBioMessage(e instanceof Error ? e.message : "Sensor registration error");
     } finally {
       setBioLoading(false);
     }
@@ -129,17 +186,17 @@ export default function Settings() {
 
   const handleTestBiometric = async () => {
     setBioLoading(true);
-    setBioMessage("");
+    setBioMessage("Touch your sensor now to verify identity...");
     setBioSuccess(false);
     try {
       const res = await authenticateWithBiometrics(student.id);
       if (res.ok) {
         setBioSuccess(true);
-        setBioMessage("Biometric verification successful! Your sensor and device passkey are ready.");
-        setTimeout(() => setBioMessage(""), 4000);
+        setBioMessage("Biometric verified! Your fingerprint sensor is fully active and working.");
+        setTimeout(() => setBioMessage(""), 5000);
       } else {
         setBioSuccess(false);
-        setBioMessage(res.error || "Biometric verification failed.");
+        setBioMessage(res.error || "Biometric sensor verification failed or was cancelled.");
       }
     } catch (e: unknown) {
       setBioSuccess(false);
@@ -352,6 +409,153 @@ export default function Settings() {
         </Card>
 
         {/* Biometrics & Fingerprint Authentication */}
+        {/* Google Sign-In Security (User-Enabled Security Model) */}
+        <Card className="mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-pink text-white shadow-md">
+                <Icon name="lock" size={22} />
+              </div>
+              <div>
+                <h2 className="font-bold text-white text-lg">Google Sign-In Security</h2>
+                <p className="text-xs text-[#b8aecf]">
+                  Google Sign-In stays off until you personally link and authorize your Google account for this KR8 profile.
+                </p>
+              </div>
+            </div>
+
+            {student.googleAuth?.enabled ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-xs font-semibold text-green-300">
+                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+                Active & Protected
+              </span>
+            ) : (
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#b8aecf]">
+                Not enabled
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+            {student.googleAuth?.enabled ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-[#8a7ba8]">Linked Google Account:</span>
+                  <span className="font-mono text-pink-300">{student.googleAuth.linkedEmail}</span>
+                </div>
+                {student.googleAuth.linkedAt ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="text-[#8a7ba8]">Linked On:</span>
+                    <span className="text-[#cabfe0]">
+                      {new Date(student.googleAuth.linkedAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                ) : null}
+                <p className="pt-1 text-xs text-[#cabfe0]">
+                  You can now sign in on any device using your linked Google account. Disabling Google Sign-In means you will need your account password to log in.
+                </p>
+                <div className="mt-3">
+                  <button
+                    onClick={handleDisableGoogleAuth}
+                    className="rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20"
+                  >
+                    Disable Google Sign-In
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs leading-relaxed text-[#cabfe0]">
+                  Enable Google Sign-In to log in faster on shared or personal devices. For account security, you must verify your current KR8 password before linking — the Google address you bind can never be changed by anyone else on this account.
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setGoogleMsg(null);
+                      setGoogleLinkOpen(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform"
+                  >
+                    <Icon name="shield" size={16} />
+                    Link Google Account
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {googleMsg && (
+              <div
+                className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium ${
+                  googleMsg.type === "success"
+                    ? "bg-green-500/15 border border-green-500/30 text-green-300"
+                    : "bg-red-500/15 border border-red-500/30 text-red-300"
+                }`}
+              >
+                {googleMsg.text}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {googleLinkOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+            onClick={() => setGoogleLinkOpen(false)}
+          >
+            <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <Card className="p-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-pink text-white shadow-md">
+                    <Icon name="shield" size={22} />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-white">Link Google Account</h3>
+                    <p className="text-xs text-[#b8aecf]">
+                      Authorize Google Sign-In for this KR8 profile.
+                    </p>
+                  </div>
+                </div>
+                <form onSubmit={handleEnableGoogleAuth} className="mt-4 space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-[#cabfe0]">Google Account Email</label>
+                    <input
+                      type="email"
+                      required
+                      value={googleEmailInput}
+                      onChange={(e) => setGoogleEmailInput(e.target.value)}
+                      placeholder="your.email@gmail.com"
+                      className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-[#cabfe0]">Verify Account Password</label>
+                    <input
+                      type="password"
+                      required
+                      value={googlePasswordConfirm}
+                      onChange={(e) => setGooglePasswordConfirm(e.target.value)}
+                      placeholder="Your KR8 account password"
+                      className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white focus:border-pink-400/60 focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <GradientButton type="submit" className="flex-1 py-2.5">
+                      Enable & Link Google Sign-In
+                    </GradientButton>
+                    <GhostButton onClick={() => setGoogleLinkOpen(false)} className="px-4 py-2.5">
+                      Cancel
+                    </GhostButton>
+                  </div>
+                </form>
+              </Card>
+            </div>
+          </div>
+        )}
+
         <Card className="mt-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -379,6 +583,11 @@ export default function Settings() {
           </div>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+            {supportInfo && !supportInfo.supported && (
+              <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs font-semibold text-amber-300">
+                Biometrics are not available on this device: {supportInfo.reason} Password sign-in remains fully available.
+              </div>
+            )}
             {biometric ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -474,7 +683,10 @@ export default function Settings() {
             ← Return to My Academy Profile
           </Link>
           <button
-            onClick={signOut}
+            onClick={() => {
+              signOut();
+              navigate("/");
+            }}
             className="rounded-full border border-red-500/30 bg-red-500/10 px-5 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20"
           >
             Sign Out of Account
