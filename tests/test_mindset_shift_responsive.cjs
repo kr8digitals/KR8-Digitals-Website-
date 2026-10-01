@@ -83,7 +83,7 @@ async function unlockAdmin(page) {
     const m = await page.evaluate(() => ({
       scrollW: document.documentElement.scrollWidth,
       innerW: window.innerWidth,
-      hero: document.body.innerText.includes("MINDSET SHIFT 7.0"),
+      hero: document.body.innerText.includes("BUILDING WEALTH"),
       speaker: document.body.innerText.includes("Sagacious Tehilla"),
       register: !!document.querySelector("#register"),
     }));
@@ -103,25 +103,38 @@ async function unlockAdmin(page) {
     page.on("pageerror", (e) => pageErrors.push(String(e.message)));
     await page.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1000);
-    const submit = page.getByRole("button", { name: /Register Free/ });
-    const sb = await submit.boundingBox();
-    check(sb && sb.height >= 40, `submit button touch target ≥ 40px (got ${sb ? Math.round(sb.height) : "none"}px)`);
-
-    await page.locator("#ms-fullname").fill("Mobile Aisha");
-    await page.locator("#ms-email").fill("mobile@example.com");
-    await page.getByPlaceholder("Phone number").fill("8091234567");
-    await page.locator("#ms-heard").selectOption("WhatsApp");
-    await page.locator("#ms-hoping").fill("A clearer path out of debt.");
-    await page.locator("#ms-challenge").fill("Keeping consistent savings.");
-    await page.locator("#ms-debt").selectOption({ index: 1 });
-    await page.locator("#ms-situation").selectOption({ index: 1 });
-    await page.getByRole("button", { name: "Yes", exact: true }).click();
-    await page.locator("#ms-area").selectOption({ index: 1 });
-    await submit.click();
-    await page.waitForTimeout(1400);
+    // One question at a time, at 390px
+    await page.getByPlaceholder(/Your name/).fill("Mobile Aisha");
+    await page.getByRole("button", { name: "Continue" }).first().click();
+    await page.waitForTimeout(150);
+    check((await page.getByText(/Honest question, Mobile/).count()) === 1,
+      "personalised step renders on mobile");
+    const firstChoice = page.getByRole("button", { name: /I'm just curious/ }).first();
+    const choiceBox = await firstChoice.boundingBox();
+    check(choiceBox && choiceBox.height >= 40, `choice button touch target ≥ 40px (got ${choiceBox ? Math.round(choiceBox.height) : "none"}px)`);
+    await firstChoice.click();
+    await page.waitForTimeout(150);
+    await page.getByRole("button", { name: "I'd rather not say" }).click();
+    await page.waitForTimeout(150);
+    await page.getByPlaceholder(/My money never lasts/).fill("Keeping consistent savings.");
+    await page.getByRole("button", { name: "Continue" }).first().click();
+    await page.waitForTimeout(150);
+    await page.getByRole("button", { name: "Not yet" }).click();
+    await page.waitForTimeout(150);
+    await page.getByRole("button", { name: "Continue" }).first().click();
+    await page.waitForTimeout(150);
+    await page.getByRole("button", { name: "Skip for now" }).click();
+    await page.waitForTimeout(150);
+    await page.getByLabel("Email *").fill("mobile@example.com");
+    await page.getByLabel("Phone number").fill("8091234567");
+    await page.getByLabel("How did you find this? *").selectOption("WhatsApp");
+    await page.getByRole("button", { name: "Continue" }).first().click();
+    await page.waitForTimeout(150);
+    await page.getByRole("button", { name: "Save My Seat" }).click();
+    await page.waitForTimeout(1200);
     check(
-      (await page.getByText("You're registered, Mobile.").count()) === 1,
-      "mobile end-to-end registration succeeds"
+      (await page.getByText("You're in, Mobile.", { exact: false }).count()) === 1,
+      "mobile end-to-end onboarding succeeds"
     );
     const copyBtn = page.locator("button[aria-label^='Copy confirmation code']");
     const cb = await copyBtn.first().boundingBox().catch(() => null);
@@ -166,18 +179,18 @@ async function unlockAdmin(page) {
       `focused ${focusInfo ? focusInfo.tag : "?"} shows a visible outline (got ${focusInfo ? focusInfo.outlineStyle + " " + focusInfo.outlineWidth : "none"})`
     );
 
-    // Inputs: focus via keyboard reaches #ms-fullname eventually and
-    // typing + Enter on the submit button works without a mouse.
+    // Inputs: focus via keyboard reaches the name field eventually and
+    // typing lands in the focused field.
     await page.keyboard.press("Escape");
     let reachedName = false;
     for (let i = 0; i < 40 && !reachedName; i++) {
       await page.keyboard.press("Tab");
-      const id = await page.evaluate(() => document.activeElement && document.activeElement.id);
-      if (id === "ms-fullname") reachedName = true;
+      const label = await page.evaluate(() => document.activeElement && document.activeElement.getAttribute("aria-label"));
+      if (label === "Your name") reachedName = true;
     }
-    check(reachedName, "keyboard: #ms-fullname reachable by Tab");
+    check(reachedName, "keyboard: the name field is reachable by Tab");
     await page.keyboard.type("Key User");
-    const nameVal = await page.locator("#ms-fullname").inputValue();
+    const nameVal = await page.getByLabel("Your name").inputValue();
     check(nameVal === "Key User", "keyboard: typed input lands in the focused field");
     await ctx.close();
   }
@@ -231,7 +244,7 @@ async function unlockAdmin(page) {
     await page.waitForTimeout(400);
     await page.getByRole("button", { name: /Mindset Shift/ }).first().click();
     await page.waitForTimeout(600);
-    for (const sub of ["Verification", "Event settings", "Analytics"]) {
+    for (const sub of ["Participants", "Event settings", "Analytics"]) {
       await page.getByRole("button", { name: sub, exact: true }).click();
       await page.waitForTimeout(500);
       const m = await page.evaluate(() => ({

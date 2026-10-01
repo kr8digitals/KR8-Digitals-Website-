@@ -5,13 +5,13 @@ import MindsetShiftAnalytics from "./MindsetShiftAnalytics";
 
 /* ------------------------------------------------------------------ */
 /* Mindset Shift admin tab — sub-navigation                           */
-/*   Verification  : review share proofs, manage all participants     */
+/*   Participants  : every registration, onboarding answers, access   */
 /*   Event settings: every public-facing fact for this + next edition */
-/*   Analytics     : registrations, pipeline, sources, conversion     */
+/*   Analytics     : registrations, access, sources, conversion       */
 /* ------------------------------------------------------------------ */
 
 const SUBS = [
-  { id: "verify", label: "Verification" },
+  { id: "verify", label: "Participants" },
   { id: "event", label: "Event settings" },
   { id: "analytics", label: "Analytics" },
 ] as const;

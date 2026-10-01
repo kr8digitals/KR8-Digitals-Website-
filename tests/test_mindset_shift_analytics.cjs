@@ -68,10 +68,11 @@ const DAY = 86400000;
 const now = Date.now();
 
 const SEED = [
-  // 3 registered today
-  mk("MS7-AN1001", "Ada Obi", "+2348031111111", "an1@example.com", { createdAt: now - 3600000 }),
+  // 3 registered today (exact-timestamp "now" so the today-bar is robust
+  // across the local-day boundary, whenever the suite runs)
+  mk("MS7-AN1001", "Ada Obi", "+2348031111111", "an1@example.com", { createdAt: now }),
   mk("MS7-AN1002", "Baraka Eze", "+2348042222222", "an2@example.com", {
-    createdAt: now - 7200000,
+    createdAt: now,
     heardAbout: "Instagram",
   }),
   mk("MS7-AN1003", "Chidi Okafor", "+2348053333333", "an3@example.com", {
@@ -179,30 +180,32 @@ async function openAdmin(page, sub) {
   const kpiVal = (label) =>
     page.locator(`[data-kpi="${label}"]`).locator("p").nth(1).textContent();
   check((await kpiVal("Total registrations")).includes("8"), "total registrations KPI = 8 (prior edition excluded)");
-  check((await kpiVal("Awaiting verification")).includes("2"), "awaiting verification KPI = 2 (submitted + resubmission)");
-  check((await kpiVal("Access granted")).includes("2"), "access granted KPI = 2");
-  check((await kpiVal("Decided")).includes("3"), "decided KPI = 3 (2 granted + 1 rejected)");
+  check((await kpiVal("Access live")).includes("2"), "access live KPI = 2");
+  check((await kpiVal("Revoked or rejected")).includes("6"), "revoked/rejected KPI = 6 (3 registered + 1 legacy×2 + 1 rejected)");
+  check((await kpiVal("Access conversion")).includes("25%"), "access conversion KPI = 25%");
 
   // ================= 2. Conversion =================
   console.log("\n[analytics: conversion]");
-  const conv = await page.locator("text=Access conversion").locator("..").textContent();
-  check(conv.includes("25%") && conv.includes("2 of 8"), "conversion computed as 25% (2 of 8)");
+  const convKpi = page.locator('[data-kpi="Access conversion"]');
+  const conv = await convKpi.textContent();
+  check(conv.includes("25%") && conv.includes("2 of 8 participants"), "conversion computed as 25% (2 of 8)");
 
-  // ================= 3. Pipeline funnel =================
-  console.log("\n[analytics: pipeline funnel]");
+  // ================= 3. Access pipeline funnel =================
+  console.log("\n[analytics: access pipeline funnel]");
   check(
-    (await page.locator("div.rounded-xl", { hasText: "Verification pipeline" }).count()) === 1,
+    (await page.locator("div.rounded-xl", { hasText: "Access pipeline" }).count()) === 1,
     "funnel section renders"
   );
-  const funnelCard = page.locator("div.rounded-xl", { hasText: "Verification pipeline" }).first();
+  const funnelCard = page.locator("div.rounded-xl", { hasText: "Access pipeline" }).first();
   const funnelText = await funnelCard.textContent();
   check(
-    funnelText.includes("Registered") && funnelText.includes("Shared the event") &&
-      funnelText.includes("Access granted"),
-    "funnel stages present"
+    funnelText.includes("Completed onboarding") && funnelText.includes("Access live") &&
+      funnelText.includes("Revoked or rejected"),
+    "funnel stages present (onboarding → live access → exits)"
   );
-  // Shared = total - registered = 8 - 3 = 5; granted = 2
-  check(funnelText.includes("5") && funnelText.includes("2"), "funnel counts derived (5 shared, 2 granted)");
+  // Completed = 8; live = 2; exits = 6
+  check(funnelText.includes(": 8") || funnelText.includes("8"), "funnel shows 8 completed onboarding");
+  check(funnelText.includes("no share gate"), "funnel note explains the no-share-gate model");
 
   // ================= 4. Daily chart =================
   console.log("\n[analytics: daily chart]");
@@ -233,8 +236,9 @@ async function openAdmin(page, sub) {
 
   // ================= 6. Live update =================
   console.log("\n[analytics: live update]");
-  // Grant Doris (share_submitted) from the Verification sub-tab, then re-open Analytics
-  await page.getByRole("button", { name: "Verification", exact: true }).click();
+  // Approve legacy row Doris (share_submitted) from the Participants sub-tab,
+  // then re-open Analytics.
+  await page.getByRole("button", { name: "Participants", exact: true }).click();
   await page.waitForTimeout(500);
   await page.getByText("Doris Umeh").click();
   await page.waitForTimeout(400);
@@ -243,13 +247,13 @@ async function openAdmin(page, sub) {
   await page.getByRole("button", { name: "Analytics", exact: true }).click();
   await page.waitForTimeout(600);
   check(
-    (await kpiVal("Access granted")).includes("3"),
-    "KPI updates live after a verification decision (2 → 3)"
+    (await kpiVal("Access live")).includes("3"),
+    "KPI updates live after the decision (2 → 3)"
   );
-  const conv2 = await page.locator("text=Access conversion").locator("..").textContent();
-  check(conv2.includes("38%") && conv2.includes("3 of 8"), "conversion recalculates (38%, 3 of 8)");
-  const srcAwaits = await kpiVal("Awaiting verification");
-  check(srcAwaits.includes("1"), "awaiting count drops to 1 after the grant");
+  const conv2 = await convKpi.textContent();
+  check(conv2.includes("38%") && conv2.includes("3 of 8 participants"), "conversion recalculates (38%, 3 of 8)");
+  const exits = await kpiVal("Revoked or rejected");
+  check(exits.includes("5"), "exits count drops to 5 after the grant");
 
   // ================= 7. Page errors =================
   console.log("\n[page errors]");

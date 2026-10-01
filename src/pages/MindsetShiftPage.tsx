@@ -107,7 +107,7 @@ export default function MindsetShiftPage() {
             <div className="hero-actions mt-9 flex flex-col gap-3 sm:flex-row">
               {ev.regOpen ? (
                 <GradientButton href="#register">
-                  Register Free
+                  Claim Your Free Seat
                   <Icon name="arrowRight" size={16} />
                 </GradientButton>
               ) : (
@@ -124,10 +124,10 @@ export default function MindsetShiftPage() {
             </div>
 
             <p className="mt-8 text-sm leading-relaxed text-[#8a7ba8]">
-              A {ev.programName.toLowerCase()} conversation hosted by{" "}
-              <span className="font-semibold text-[#d9a8e8]">{ev.host.name}</span> with{" "}
-              <span className="font-semibold text-[#d9a8e8]">{ev.speaker.name}</span> — part of a
-              recurring series held twice every month, the 1st and 3rd Sunday.
+              Hosted by <span className="font-semibold text-[#d9a8e8]">{ev.host.name}</span>, in
+              conversation with <span className="font-semibold text-[#d9a8e8]">{ev.speaker.name}</span> —
+              free, online, and built for people who are ready to stop surviving and start building.
+              The series runs twice a month: the 1st and 3rd Sunday.
             </p>
           </div>
 
@@ -154,7 +154,7 @@ export default function MindsetShiftPage() {
             label={`01 · ${ev.programName} ${ev.edition}`}
             title={
               <span id="ms-story-title">
-                The conversation behind <span className="text-gradient">{ev.theme.toLowerCase()}</span>
+                Why money keeps <span className="text-gradient">leaving before it lands</span>
               </span>
             }
             sub={ev.storyIntro}
@@ -178,13 +178,14 @@ export default function MindsetShiftPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <SectionHead
             center
-            label="02 · What You'll Explore"
+            label="02 · What You'll Work Through"
             title={
               <span id="ms-explore-title">
-                Five threads of this <span className="text-gradient">edition</span>
+                Nothing generic — <span className="text-gradient">every thread</span> ties back to
+                the real problem
               </span>
             }
-            sub={"Every topic is drawn from this edition's theme — " + ev.subtitle.toLowerCase()}
+            sub="Money that won't stay. Debt that won't stop. Beliefs you never checked. These are the threads this edition pulls on."
           />
           <div className="mt-14 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {ev.topics.map((t, i) => (
@@ -324,12 +325,13 @@ export default function MindsetShiftPage() {
         <div className="relative mx-auto max-w-4xl px-4 sm:px-6">
           <div className="relative overflow-hidden rounded-[2rem] border border-pink-400/25 bg-[#12001f] p-8 text-center shadow-2xl shadow-pink-500/10 sm:p-12">
             <div className="pointer-events-none absolute -top-24 left-1/2 h-64 w-[420px] -translate-x-1/2 rounded-full bg-[#e026c4]/15 blur-3xl" />
-            <Pill>06 · Secure Your Spot</Pill>
+            <Pill>06 · Your Seat Is Waiting</Pill>
             <h2 id="ms-register-title" className="font-display mt-5 text-3xl font-bold text-white sm:text-4xl">
               {ev.regOpen ? "Registration is open" : "Registration is closed"}
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-[#b8aecf] sm:text-base">
-              {ev.programName} {ev.edition} — {ev.theme}: {ev.subtitle}
+              A few honest questions, one at a time. Your answers are what make the conversation
+              land for you — the team reads them, and the speaker prepares.
             </p>
 
             <div className="mt-7 flex flex-wrap items-center justify-center gap-2.5">

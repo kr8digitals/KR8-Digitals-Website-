@@ -514,7 +514,7 @@ export default function MindsetShiftEventManager() {
               <Icon name="lock" className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
               <p className="text-xs leading-relaxed text-amber-200/90">
                 This link is <span className="font-bold">admin-managed</span>. It is only rendered
-                for participants you have personally approved, while the switch below is on — and
+                for participants who have completed onboarding, while the switch below is on — and
                 it never appears in the page for anyone else. Update it whenever the group changes.
               </p>
             </div>

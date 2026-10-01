@@ -83,7 +83,8 @@ export const DEFAULT_MS_EVENT: MsEventConfig = {
   edition: "7.0",
   programName: "Mindset Shift",
   theme: "BUILDING WEALTH",
-  subtitle: "How To Get Out Of Debt And Build Wealth.",
+  subtitle:
+    "You're not bad with money — you were never taught. This Sunday, that changes.",
   dateLabel: "4th October 2026",
   timeLabel: "9PM",
   locationLabel: "kr8digitals.com",
@@ -95,9 +96,9 @@ export const DEFAULT_MS_EVENT: MsEventConfig = {
   flyer: "/events/mindset-shift-7-flyer.jpg",
   speaker: {
     name: "Sagacious Tehilla",
-    role: "Guest Speaker",
-    tagline: "Psychology-Driven Marketing Strategist · Copywriter · Business Growth Consultant",
-    bio: "Sagacious Tehilla is a psychology-driven marketing strategist, copywriter, author, and entrepreneur. His work sits at the intersection of psychology, persuasion, branding, and business growth — built on the idea that people don't buy products, they buy what their minds have already decided to believe. He has worked with founders, CEOs, business owners, agencies, personal brands, organizations, politicians, and celebrities, and his campaigns and systems have helped businesses sell thousands of digital products and generate millions in revenue. His Brain Seduction™ framework maps how attention, trust, desire, and buying decisions form before a person ever says yes.",
+    role: "Guest Speaker · Author & Marketing Psychologist",
+    tagline: "Author of Brain Seduction — six published works · psychology-driven strategist",
+    bio: "Sagacious Tehilla is a psychology-driven marketing strategist, copywriter, author, and entrepreneur. His work sits at the intersection of psychology, persuasion, branding, and business growth — built on the idea that people don't buy products, they buy what their minds have already decided to believe. The same mechanics that decide what we buy decide how we think about money: what we're 'allowed' to want, what comfort means, what's 'our level.' His Brain Seduction™ framework maps how attention, trust, and desire form before a person ever says yes — and this conversation turns that lens on the beliefs quietly running your finances.",
     credentials: [
       "Author of six published works, including Brain Seduction, Subconscious Marketing, Expert Visibility and The Fake Life Detector",
       "Creator of the Brain Seduction™ and Subconscious Marketing™ frameworks",
@@ -113,90 +114,90 @@ export const DEFAULT_MS_EVENT: MsEventConfig = {
     photo: "/founder_timfire.jpg",
   },
   storyIntro:
-    "Most people are not broke because they earn too little. They are stuck because of how money moves through their thinking. Income without a system is a treadmill: more hours, more stress, and the same number at the end of the month. Debt is not only a number on a statement — it is a daily tax on your attention, your choices, and your peace of mind. This conversation is about what happens when you step back and look at the whole picture: the beliefs, habits, and decisions that quietly decide whether money flows past you or stays with you long enough to become wealth.",
+    "Here's a scene. It's the 27th, and you open your banking app to do the math you've been avoiding all month. The number is smaller than your prayers. You close the app, and you tell yourself you'll sort it out from the 1st. You've said that before. The truth nobody says out loud: this is not a discipline problem, and it is not a moral failing. It's a belief problem. Long before you ever understood money, you absorbed rules about it — what you're 'allowed' to want, what success 'costs,' whether wealth is even meant for people like you. Those rules decide your finances before any budget ever gets the chance. This conversation is about finding those beliefs, the ones installed in you without your consent — and replacing the ones that are quietly keeping you poor.",
   storyPoints: [
     {
-      title: "Earning Is Not Wealth",
-      text: "A high income and a strong balance sheet are two different things. We look at why so many high earners stay financially fragile — and what separates income from wealth you can actually build on.",
+      title: "The Belief That Keeps You Poor",
+      text: "“Money is evil.” “Rich people are lucky.” “This isn't my level.” Somewhere along the way you picked up rules about money — and none of them came with receipts. We start by finding them. Because you cannot replace a belief you can't see.",
     },
     {
-      title: "Debt Changes How You Decide",
-      text: "When debt is running the background of your life, every financial decision is made under pressure. We explore how to think about debt, obligations, and repayment with clarity instead of panic.",
+      title: "Why More Money Doesn't Fix Your Money",
+      text: "The 200k month that still ends at zero. The promotion that arrived with bigger bills, not a bigger cushion. Income without a system is a treadmill — and this is the conversation that shows you what actually turns earnings into wealth you can hold onto.",
     },
     {
-      title: "Mindset Is Infrastructure",
-      text: "Your beliefs about money were installed long before you understood money. Some of them serve you. Some of them are running your life without your consent. You can inspect them — and replace the ones that cost you.",
+      title: "Debt Is a Mindset With a Balance",
+      text: "Debt doesn't just cost you interest. It costs you sleep, focus, and options — every single month. Here's how to look at what you owe without panic, and design a way out that you can actually live with — instead of another plan you'll abandon by Friday.",
     },
     {
-      title: "Wealth Is Built Intentionally",
-      text: "Wealth is rarely an accident of a big payday. It is a sequence of deliberate decisions — about spending, saving, investing, and value creation — made consistently over time. This conversation is about designing that sequence.",
+      title: "The Shift Isn't Inspiration, It's Infrastructure",
+      text: "Motivation fades in a week. A changed money-mindset compounds for a lifetime. You won't leave this room with a good feeling — you'll leave with a working system: the belief, the habit, and the first move.",
     },
   ],
   topics: [
     {
-      icon: "chart",
-      title: "Understanding Your Relationship With Money",
-      text: "Which beliefs, habits, and decisions are quietly steering the way you earn, spend, save, invest, and manage money — and how to see them clearly.",
+      icon: "spark",
+      title: "Where Your Money Beliefs Came From",
+      text: "Family, church, friends, your first salary — the invisible classroom that installed your money rules. We trace them back to the source, so you can audit them like the contracts they are.",
     },
     {
       icon: "unlock",
-      title: "Getting Out of Debt",
-      text: "How to think intentionally about debt and financial obligations — repayment strategies, rebuilding stability, and breaking the cycle that keeps pulling you back.",
+      title: "Getting Out of Debt Without Panic",
+      text: "A calm, clear way to look at what you owe: what to attack first, how to keep your head when the numbers feel personal, and how to stop the cycle from quietly restarting.",
+    },
+    {
+      icon: "chart",
+      title: "From Income to Wealth",
+      text: "Why a good salary can still leave you broke — and the sequence of decisions (spend, save, invest, build) that turns what you earn into something that stays.",
+    },
+    {
+      icon: "shield",
+      title: "Spending Without Shame",
+      text: "The “oops” purchase. The flex you can't afford. The money you hide from the people you love. How to make money decisions from clarity — not from emotion, pressure, or appearances.",
     },
     {
       icon: "trophy",
-      title: "Building Wealth",
-      text: "Moving beyond the idea that wealth is simply a high income: wealth-building principles, financial discipline, value creation, and long-term thinking.",
-    },
-    {
-      icon: "spark",
-      title: "Money Philosophy",
-      text: "Examining the beliefs you inherited about money — where they came from, which ones still serve you, and how to build a philosophy that works in your favour.",
-    },
-    {
-      icon: "check",
-      title: "Making Better Financial Decisions",
-      text: "Choosing from clarity instead of emotion, pressure, or appearances. Practical ways to slow down, think through the real cost of a decision, and act with confidence.",
+      title: "Designing Your Next Five Years",
+      text: "Leave with a plan, not a feeling: your first concrete move out of survival mode, and the one habit that protects everything else you build.",
     },
   ],
   audience: [
-    "You want to understand money better — beyond the basics",
-    "You are currently dealing with debt and want a clearer path out",
-    "You earn well but struggle to retain what you make",
-    "You want to build wealth over time, not just chase income",
-    "You are ready to rethink your relationship with money",
-    "You want to improve your daily financial habits",
-    "You are interested in business and personal growth",
-    "You want practical perspectives on wealth-building you can actually use",
+    "You've said “I'll start next month” — and you meant it every single time",
+    "Your money runs out before your salary does, and you're tired of the juggling act",
+    "You're carrying debt that feels heavier than you can say out loud",
+    "You earn decently, but you can't seem to hold onto anything",
+    "You've tried budgets, trackers, and “no-spend” challenges — and the numbers still win",
+    "You feel quietly behind your own age, and you suspect the problem isn't your effort",
+    "You want out of survival mode but don't know the first real step — this is it",
   ],
   expectations: [
-    "A straight, no-hype conversation on debt, money mindset, and wealth-building",
-    "Practical frameworks you can apply the week after the event",
-    "The chance to ask your own money questions into the open",
-    "A free registration — your only cost is showing up with an open mind",
+    "A straight, no-hype conversation — no fake urgency, no “secret to riches,” just the psychology of money in plain language",
+    "Your own answers shape the conversation — the onboarding questions tell the team exactly where to speak to you",
+    "Practical next steps you can take before the week is out, not just a good feeling",
+    "The edition's WhatsApp space — unlocked the moment you finish registering, no sharing required",
+    "Free. Your only cost is showing up with an open mind",
   ],
   shareCopy: {
     whatsappStatus:
-      "Mindset Shift 7.0 is this Sunday, 4th October, 9PM at kr8digitals.com.\n\nThis one is different: BUILDING WEALTH — How To Get Out Of Debt And Build Wealth, with guest speaker Sagacious Tehilla (psychology-driven marketing strategist & author), hosted by Timfire.\n\nFree to register. 👉 kr8digitals.com/mindset-shift",
+      "I just claimed my seat at Mindset Shift 7.0 — a free conversation on getting out of debt and building wealth. This Sunday, 9PM.\n\nIf money has been a quiet stress in your life, you should be there too. 👉 kr8digitals.com/mindset-shift",
     facebook:
-      "Most people are not broke because they earn too little. They are stuck because of how money moves through their thinking.\n\nThat is exactly what Mindset Shift 7.0 is about.\n\n📅 4th October 2026 · 9PM\n📍 kr8digitals.com\n🎙 Guest speaker: Sagacious Tehilla — psychology-driven marketing strategist, copywriter & author of Brain Seduction and five other works\n🎙 Host: Timfire (Kenneth Timothy), Founder of KR8 Digitals\n\nTheme: BUILDING WEALTH — How To Get Out Of Debt And Build Wealth.\n\nRegistration is free.\n👉 kr8digitals.com/mindset-shift\n\nTag someone who needs this conversation.",
+      "The hardest part of being broke is never the money. It's the thinking.\n\nMindset Shift 7.0 is not another budgeting lecture. It's about the psychology of why money keeps leaving before it lands — and how to change what's running the show.\n\n📅 Sunday, 4th October · 9PM\n📍 Online — kr8digitals.com\n🎙 Sagacious Tehilla (author, six books) in conversation with Timfire (KR8 Digitals)\n\nIt's free. And honestly? I'd rather you heard it from me than from anywhere else. 👉 kr8digitals.com/mindset-shift",
     instagram:
-      "Mindset Shift 7.0 🧠💸\n\nBUILDING WEALTH: How To Get Out Of Debt And Build Wealth.\n\nGuest speaker: Sagacious Tehilla — psychology-driven marketing strategist & author. Host: Timfire, KR8 Digitals.\n\n4th October · 9PM · kr8digitals.com\nFree registration.\nLink in bio 👆\n\n#MindsetShift #BuildingWealth #DebtFree #WealthBuilding #KR8Digitals #MoneyMindset",
+      "You're not bad with money. You were never taught.\n\nMindset Shift 7.0 — the free conversation that changes that. Get out of debt. Build wealth. Understand why the numbers keep winning.\n\n📅 4th October · 9PM · online\n🎙 Sagacious Tehilla × Timfire (KR8 Digitals)\n\nSave the flyer, claim your seat — and send this to one person who's still stuck. Link in bio 👆\n\n#MindsetShift #BuildingWealth #DebtFree #MoneyMindset #KR8Digitals",
     x:
-      "Income without a system is a treadmill.\n\nMindset Shift 7.0 — BUILDING WEALTH: How To Get Out Of Debt And Build Wealth.\n\nSagacious Tehilla (marketing psychologist & author) on stage with Timfire (KR8 Digitals).\n\nSun, 4 Oct · 9PM · kr8digitals.com\nFree registration → kr8digitals.com/mindset-shift",
+      "Income without a system is a treadmill.\n\nMindset Shift 7.0 — the free conversation on why money keeps leaving before it lands, and how to change the belief running the show.\n\nSagacious Tehilla (author, 6 books) × Timfire (KR8 Digitals)\n\nSun, 4 Oct · 9PM · kr8digitals.com/mindset-shift",
     linkedin:
-      "Wealth is rarely an accident of a big payday. It is a sequence of deliberate decisions — about spending, saving, investing, and value creation — made consistently over time.\n\nJoin Mindset Shift 7.0 on 4th October at 9PM (kr8digitals.com) as Sagacious Tehilla, psychology-driven marketing strategist and author, explores BUILDING WEALTH: how to get out of debt and build wealth — hosted by Timfire, Founder of KR8 Digitals.\n\nRegistration is free: kr8digitals.com/mindset-shift",
+      "Wealth is rarely an accident of a big payday. It is a sequence of deliberate decisions — and most of those decisions are made by beliefs we inherited without checking.\n\nJoin Mindset Shift 7.0 on 4th October at 9PM (kr8digitals.com) as Sagacious Tehilla, psychology-driven strategist and author of six works, and Timfire, Founder of KR8 Digitals, examine BUILDING WEALTH: how to get out of debt and build wealth.\n\nRegistration is free: kr8digitals.com/mindset-shift",
     general:
-      "Mindset Shift 7.0 — BUILDING WEALTH: How To Get Out Of Debt And Build Wealth.\n\nGuest speaker: Sagacious Tehilla · Host: Timfire (KR8 Digitals)\n4th October 2026 · 9PM · kr8digitals.com\n\nRegistration is free: kr8digitals.com/mindset-shift",
+      "I just claimed my seat at Mindset Shift 7.0 — BUILDING WEALTH: how to get out of debt and build wealth. It's a free conversation this Sunday, 9PM, online, and it's not your usual motivational talk.\n\nIf money has been a quiet stress in your life, come. If you know someone it should reach more than you — send it to them.\n\n👉 kr8digitals.com/mindset-shift",
   },
   whatsappGroupUrl: "",
   accessEnabled: true,
   privacyNote:
-    "Your registration details and financial reflections are private. They are used only to make the event conversation more relevant — they are never published, shared publicly, or shown on your profile.",
-  seoTitle: "Mindset Shift 7.0 — Building Wealth | KR8 Digitals",
+    "What you share here stays between you and the team. Your name, contact details, and the honest answers you give are never published, never shown publicly, and never used to sell you anything — they only shape how this conversation helps you.",
+  seoTitle: "Mindset Shift 7.0 — Get Out of Debt & Build Wealth | KR8 Digitals",
   startDate: "2026-10-04T21:00:00+01:00",
   seoDescription:
-    "Mindset Shift 7.0: BUILDING WEALTH — How To Get Out Of Debt And Build Wealth. Free event with guest speaker Sagacious Tehilla, hosted by Timfire. 4th October 2026, 9PM, at kr8digitals.com. Register free.",
+    "You're not bad with money — you were never taught. Mindset Shift 7.0 is the free, online conversation on how to get out of debt and build wealth, with Sagacious Tehilla (author, six books), hosted by Timfire. 4th October 2026, 9PM. Claim your free seat at kr8digitals.com/mindset-shift.",
 };
 
 function loadMsEvent(): MsEventConfig {
@@ -258,15 +259,21 @@ export function resetMsEvent(): MsEventConfig {
 /* Registrations                                                      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Access model (v2): completing onboarding grants WhatsApp access
+ * immediately — there is no share-before-access gate. The legacy
+ * proof/verification statuses are retained for rows created before the
+ * change and for admin moderation (approve / reject) edge cases.
+ */
 export type MsRegStatus =
-  | "registered" // just registered, sharing not yet proven
-  | "share_submitted" // proof uploaded, awaiting admin review
-  | "access_granted" // verified — WhatsApp access unlocked
-  | "rejected" // proof rejected (final)
-  | "needs_resubmission"; // admin asked for a new screenshot
+  | "registered" // no access (revoked, or pre-v2 row) — re-onboard to restore
+  | "share_submitted" // legacy: proof uploaded, awaiting admin review
+  | "access_granted" // onboarding complete — WhatsApp access unlocked
+  | "rejected" // admin rejected the registration (final)
+  | "needs_resubmission"; // legacy: admin asked for a new screenshot
 
 export const MS_STATUS_LABELS: Record<MsRegStatus, string> = {
-  registered: "Registered",
+  registered: "No Access (revoked)",
   share_submitted: "Awaiting Share Verification",
   access_granted: "Access Granted",
   rejected: "Rejected",
@@ -289,6 +296,11 @@ export interface MsRegistration {
   financialSituation: string; // range/option label (never exact figures)
   hasFinancialGoal: boolean;
   areaToImprove: string;
+  // Adaptive onboarding (v2) — the wizard's branch answers, used by the
+  // speaker to pick the right approach. Optional: pre-v2 rows have none.
+  whyHere: string; // opener choice label
+  debtDuration: string; // "how long" choice (debt branch)
+  moneyStress: string; // "silent stress in the home" choice
   status: MsRegStatus;
   proofKey: string | null; // "idb:" media-vault key (local copy)
   proofData: string | null; // base64 data URL (synced to cloud)
@@ -372,6 +384,9 @@ export interface MsRegisterInput {
   financialSituation: string;
   hasFinancialGoal: boolean;
   areaToImprove: string;
+  whyHere: string;
+  debtDuration: string;
+  moneyStress: string;
 }
 
 /**
@@ -417,7 +432,12 @@ export function registerForMsEvent(
     financialSituation: input.financialSituation,
     hasFinancialGoal: input.hasFinancialGoal,
     areaToImprove: input.areaToImprove.trim(),
-    status: "registered",
+    whyHere: input.whyHere.trim(),
+    debtDuration: input.debtDuration.trim(),
+    moneyStress: input.moneyStress.trim(),
+    // v2 access model: completing onboarding unlocks the WhatsApp space
+    // immediately — no share gate, no proof, no waiting on verification.
+    status: "access_granted",
     proofKey: null,
     proofData: null,
     proofSubmittedAt: null,
@@ -508,9 +528,9 @@ export function deleteMsRegistration(id: string): MsRegistration | undefined {
 }
 
 /**
- * Admin revokes previously granted WhatsApp access. The participant moves
- * back to the share-verification step and must earn access again. The note
- * records who revoked and why (internal, admin-visible only).
+ * Admin revokes previously granted WhatsApp access. The participant loses
+ * the link immediately and can restore it by completing onboarding again.
+ * The note records who revoked and why (internal, admin-visible only).
  */
 export function revokeMsAccess(
   id: string,

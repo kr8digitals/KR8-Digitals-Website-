@@ -179,8 +179,8 @@ const MARKERS = [
     "unknown code reveals no participant data"
   );
   check(
-    (await page.locator("#ms-fullname").count()) === 1,
-    "unknown code falls back to the registration form"
+    (await page.getByPlaceholder(/Your name/).count()) === 1,
+    "unknown code falls back to a fresh onboarding"
   );
   await setRegs(SEED);
   await page.goto(`${BASE}/mindset-shift?resume=MS7-SEC102`, { waitUntil: "domcontentloaded" });
@@ -211,8 +211,8 @@ const MARKERS = [
     "next-edition cadence mentioned (verified series fact)"
   );
   check(
-    (await page.locator("#ms-fullname").count()) === 0,
-    "no form rendered while closed"
+    (await page.getByPlaceholder(/Your name/).count()) === 0,
+    "no onboarding rendered while closed"
   );
   // Existing participant unaffected
   await setRegs(SEED);
@@ -246,8 +246,8 @@ const MARKERS = [
     "capacity figure shown on the full gate"
   );
   check(
-    (await page.locator("#ms-fullname").count()) === 0,
-    "no form rendered when full"
+    (await page.getByPlaceholder(/Your name/).count()) === 0,
+    "no onboarding rendered when full"
   );
   // One more seat opens → the second person can now register
   await setEvent({ capacity: 3 });
@@ -256,8 +256,8 @@ const MARKERS = [
   await page.getByRole("button", { name: /Different person on this device/ }).click();
   await page.waitForTimeout(600);
   check(
-    (await page.locator("#ms-fullname").count()) === 1,
-    "raising capacity reopens the form for the second person"
+    (await page.getByPlaceholder(/Your name/).count()) === 1,
+    "raising capacity reopens onboarding for the second person"
   );
   // Existing participant never sees the gate
   await setEvent({ capacity: 1 });
@@ -275,25 +275,39 @@ const MARKERS = [
   await page.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(900);
   const XSS = '<img src=x onerror="window.__xss_fired=1">';
-  await page.locator("#ms-fullname").fill(XSS);
-  await page.locator("#ms-email").fill("xss@example.com");
-  await page.getByPlaceholder("Phone number").fill("8011112222");
-  await page.locator("#ms-heard").selectOption("Instagram");
-  await page.locator("#ms-hoping").fill("I want to learn about debt freedom.");
-  await page.locator("#ms-money-q").fill("How do I stop living paycheck to paycheck?");
-  await page.locator("#ms-challenge").fill("Staying consistent.");
-  await page.locator("#ms-debt").selectOption({ index: 1 });
-  await page.locator("#ms-situation").selectOption({ index: 1 });
-  await page.getByRole("button", { name: "Yes", exact: true }).click();
-  await page.locator("#ms-area").selectOption({ index: 1 });
-  await page.getByRole("button", { name: /Register Free/ }).click();
-  await page.waitForTimeout(1400);
+  // Hostile payload in the name + challenge, driven through the wizard.
+  await page.getByPlaceholder(/Your name/).fill(XSS);
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(150);
+  await page.getByRole("button", { name: "I'm just curious (I might be braver than I look)" }).click();
+  await page.waitForTimeout(150);
+  await page.getByRole("button", { name: "I'd rather not say" }).click();
+  await page.waitForTimeout(150);
+  await page.getByPlaceholder(/My money never lasts/).fill(
+    '<script>window.__xss_fired=1<\/script> Staying consistent.'
+  );
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(150);
+  await page.getByRole("button", { name: "Not yet" }).click();
+  await page.waitForTimeout(150);
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(150);
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.waitForTimeout(150);
+  await page.getByLabel("Email *").fill("xss@example.com");
+  await page.getByLabel("Phone number").fill("8011112222");
+  await page.getByLabel("How did you find this? *").selectOption("Instagram");
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(150);
+  await page.getByRole("button", { name: "Save My Seat" }).click();
+  await page.waitForTimeout(900);
   const xssRes = await page.evaluate(() => ({
     fired: !!window.__xss_fired,
     imgCount: document.querySelectorAll("#register img[src='x']").length,
-    done: document.body.innerText.includes("registered,") || document.body.innerText.includes("registered."),
+    done: document.body.innerText.includes("You're in,"),
   }));
-  check(xssRes.fired === false, "onerror payload did not execute");
+  check(xssRes.done, "onboarding completed despite hostile input");
+  check(xssRes.fired === false, "onerror/onload payloads did not execute");
   check(xssRes.imgCount === 0, "no injected <img> element in the DOM");
   // The stored value is the literal string (visible to admins, escaped everywhere)
   const stored = await page.evaluate(() => {
@@ -311,12 +325,12 @@ const MARKERS = [
   await page.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1200);
   check(
-    (await bodyText()).includes("MINDSET SHIFT 7.0"),
+    (await bodyText()).includes("BUILDING WEALTH"),
     "corrupted storage: event hero still renders (defaults)"
   );
   check(
-    (await page.locator("#ms-fullname").count()) === 1,
-    "corrupted storage: form still usable"
+    (await page.getByPlaceholder(/Your name/).count()) === 1,
+    "corrupted storage: onboarding still usable"
   );
 
   // ================= 7. Page errors =================

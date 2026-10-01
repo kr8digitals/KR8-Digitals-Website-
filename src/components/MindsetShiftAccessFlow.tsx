@@ -1,224 +1,142 @@
-import type { ReactNode } from "react";
 import { hasMsAccess, type MsEventConfig, type MsRegistration } from "../data/mindsetShift";
 import Icon from "./Icon";
-import { AssetImage } from "../lib/msMedia";
-import MindsetShiftSharePanel from "./MindsetShiftSharePanel";
-import MindsetShiftProofUpload from "./MindsetShiftProofUpload";
+import { GradientButton } from "./ui";
 
 /* ------------------------------------------------------------------ */
-/* Mindset Shift — post-registration access flow                      */
+/* Mindset Shift — post-onboarding access (v2)                        */
 /*                                                                    */
-/* The share-before-WhatsApp journey, rendered live from the          */
-/* registration's status:                                             */
-/*   registered → share_submitted → access_granted                    */
-/*                ↘ rejected / needs_resubmission                     */
+/* There is no share-before-access gate. Completing onboarding        */
+/* unlocks the admin-managed WhatsApp space immediately. The          */
+/* invitation to share (voluntary, framed as a gift) lives on the     */
+/* graduation card after this block.                                  */
 /*                                                                    */
-/* Step 1 (share) is fully usable here: the participant saves the     */
-/* official flyer and posts it. Per-platform share copy and native    */
-/* share buttons are added to this same step by the share             */
-/* experience step (step 6). Screenshot upload UI lands in step 7;    */
-/* the WhatsApp button (from the admin-managed group link) in step 9. */
+/* Edge states:                                                       */
+/*   access_granted → the link (or "finalising" note)                 */
+/*   registered     → revoked; restore by re-onboarding               */
+/*   rejected       → final; contact the team                         */
+/*   legacy rows    → old share-verification process; verification is */
+/*                    no longer required, re-onboard to unlock        */
 /* ------------------------------------------------------------------ */
-
-type StepState = "done" | "active" | "pending" | "error";
-
-function StepBadge({ state, index }: { state: StepState; index: number }) {
-  if (state === "done") {
-    return (
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-pink text-white shadow-md shadow-pink-500/25">
-        <Icon name="check" size={17} />
-      </span>
-    );
-  }
-  if (state === "error") {
-    return (
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-400/50 bg-red-500/10 text-red-300">
-        <Icon name="alert" size={17} />
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-sm font-black ${
-        state === "active"
-          ? "border-pink-400/70 bg-pink-500/15 text-[#e79bf0] shadow-md shadow-pink-500/20"
-          : "border-white/15 bg-white/[0.03] text-[#8a7ba8]"
-      }`}
-    >
-      {state === "pending" ? <Icon name="lock" size={15} /> : index}
-    </span>
-  );
-}
-
-function StepTitle({ state, children }: { state: StepState; children: ReactNode }) {
-  return (
-    <p
-      className={`font-display text-lg font-bold ${
-        state === "pending" ? "text-[#8a7ba8]" : state === "error" ? "text-red-300" : "text-white"
-      }`}
-    >
-      {children}
-    </p>
-  );
-}
 
 export default function MindsetShiftAccessFlow({
   registration,
   event,
+  onReonboard,
 }: {
   registration: MsRegistration;
   event: MsEventConfig;
+  onReonboard?: () => void;
 }) {
   const status = registration.status;
-  const shareState: StepState = status === "registered" ? "active" : "done";
-  const proofState: StepState =
-    status === "registered"
-      ? "pending"
-      : status === "share_submitted"
-        ? "active"
-        : status === "access_granted"
-          ? "done"
-          : status === "needs_resubmission"
-            ? "active"
-            : "error";
-  const accessState: StepState = status === "access_granted" ? "done" : "pending";
+  const accessLive = hasMsAccess(registration);
+  const legacy = status === "share_submitted" || status === "needs_resubmission";
 
   return (
-    <div className="mt-6">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d9a8e8]">
-        Your path to WhatsApp access
-      </p>
+    <div className="mt-7">
+      <div
+        className={`rounded-2xl border p-5 sm:p-6 ${
+          status === "access_granted"
+            ? "border-emerald-400/25 bg-emerald-500/[0.06]"
+            : status === "rejected"
+              ? "border-red-400/25 bg-red-500/[0.05]"
+              : "border-white/10 bg-black/25"
+        }`}
+      >
+        <div className="flex items-start gap-4">
+          <span
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+              status === "access_granted"
+                ? "bg-gradient-pink text-white"
+                : status === "rejected"
+                  ? "bg-red-500/15 text-red-300"
+                  : "border border-white/15 bg-white/[0.03] text-[#8a7ba8]"
+            }`}
+          >
+            <Icon name={status === "access_granted" ? "check" : status === "rejected" ? "close" : "lock"} size={22} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#d9a8e8]">
+              The {event.programName} {event.edition} space
+            </p>
 
-      <ol className="mt-4">
-        {/* ============ STEP 1 — SHARE ============ */}
-        <li className="relative flex gap-4 pb-7">
-          <div className="flex flex-col items-center">
-            <StepBadge state={shareState} index={1} />
-            <span className={`mt-2 w-px flex-1 ${shareState === "done" ? "bg-pink-400/50" : "bg-white/10"}`} />
-          </div>
-          <div className="min-w-0 flex-1 pt-1">
-            <StepTitle state={shareState}>Share the event</StepTitle>
-            {shareState === "active" ? (
-              <div className="mt-2">
-                <p className="text-sm leading-relaxed text-[#b8aecf]">
-                  Post the official flyer on your socials — WhatsApp Status, Facebook, Instagram,
-                  X, or LinkedIn. Mindset Shift grows the way a good conversation does: person to
-                  person.
-                </p>
-
-                {/* Share card (the official flyer) + save hint */}
-                <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-                  <div className="relative w-36 shrink-0 sm:w-40">
-                    <div className="absolute -inset-2 rounded-2xl bg-gradient-pink opacity-30 blur-xl" />
-                    <AssetImage
-                      src={event.flyer}
-                      alt={`${event.programName} ${event.edition} flyer — save and share this`}
-                      className="relative w-full rounded-xl border border-white/15"
-                      loading="lazy"
-                    />
-                  </div>
-                  <p className="flex items-start gap-2 text-xs leading-relaxed text-[#8a7ba8]">
-                    <Icon name="mobile" size={14} className="mt-0.5 shrink-0 text-[#e026c4]" />
-                    Long-press (mobile) or right-click (desktop) the flyer to save it to your
-                    device first — you'll need the image for your post.
-                  </p>
-                </div>
-
-                {/* Per-platform share copy + copy/native/social actions */}
-                <MindsetShiftSharePanel event={event} />
-              </div>
-            ) : (
-              <p className="mt-1.5 text-sm text-[#8a7ba8]">Done — you shared the event.</p>
-            )}
-          </div>
-        </li>
-
-        {/* ============ STEP 2 — SCREENSHOT PROOF ============ */}
-        <li className="relative flex gap-4 pb-7">
-          <div className="flex flex-col items-center">
-            <StepBadge state={proofState} index={2} />
-            <span className={`mt-2 w-px flex-1 ${proofState === "done" ? "bg-pink-400/50" : "bg-white/10"}`} />
-          </div>
-          <div className="min-w-0 flex-1 pt-1">
-            <StepTitle state={proofState}>Screenshot proof</StepTitle>
-            <div className="mt-1.5 text-sm leading-relaxed">
-              {status === "registered" && (
-                <p className="text-[#8a7ba8]">
-                  Once you've posted it, upload a screenshot of your share below. A real person on
-                  the team verifies it — no automatic checks, nothing hidden.
-                </p>
-              )}
-              {status === "share_submitted" && (
-                <p className="text-[#b8aecf]">
-                  <span className="font-semibold text-white">Your screenshot is with the team.</span>{" "}
-                  It's being verified by a real person, and once it's confirmed your WhatsApp
-                  access unlocks on this same page.
-                </p>
-              )}
-              {status === "needs_resubmission" && (
-                <p className="text-[#f0c9a8]">
-                  The team couldn't verify that screenshot, so a fresh one is needed. Upload a new
-                  screenshot of your share to continue.
-                </p>
-              )}
-              {status === "rejected" && (
-                <p className="text-red-300/90">
-                  Unfortunately this registration was rejected — the share couldn't be verified.
-                  If you believe that's a mistake, contact the team on WhatsApp and we'll sort it
-                  out.
-                </p>
-              )}
-              {status === "access_granted" && (
-                <p className="text-[#8a7ba8]">Verified — share confirmed by the team.</p>
-              )}
-            </div>
-            <MindsetShiftProofUpload registration={registration} />
-          </div>
-        </li>
-
-        {/* ============ STEP 3 — WHATSAPP ACCESS ============ */}
-        <li className="relative flex gap-4">
-          <div className="flex flex-col items-center">
-            <StepBadge state={accessState} index={3} />
-          </div>
-          <div className="min-w-0 flex-1 pt-1">
-            <StepTitle state={accessState}>WhatsApp access</StepTitle>
-            <div className="mt-1.5 text-sm leading-relaxed">
-              {status === "access_granted" ? (
-                <>
-                  <p className="text-[#b8aecf]">
-                    <span className="font-semibold text-emerald-300">You're in.</span> The private
-                    WhatsApp space for {event.programName} {event.edition} is unlocked for you.
-                  </p>
-                  {hasMsAccess(registration) ? (
+            {status === "access_granted" && (
+              <>
+                <h4 className="font-display mt-2 text-xl font-bold text-white">
+                  <span className="text-emerald-300">You're in.</span> Your seat is unlocked.
+                </h4>
+                {accessLive ? (
+                  <>
+                    <p className="mt-1.5 text-sm leading-relaxed text-[#b8aecf]">
+                      The private WhatsApp space for this edition is live for you. Join before
+                      Sunday so the team knows your name.
+                    </p>
                     <a
                       href={event.whatsappGroupUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-3 inline-flex items-center gap-2.5 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400 active:scale-[0.98]"
+                      className="mt-4 inline-flex items-center gap-2.5 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-bold text-black shadow-md shadow-emerald-500/25 transition hover:bg-emerald-400 active:scale-[0.98]"
                     >
                       <Icon name="message" size={17} />
                       Join the WhatsApp space
                     </a>
-                  ) : (
-                    <p className="mt-3 flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs leading-relaxed text-[#8a7ba8]">
-                      <Icon name="bell" size={14} className="mt-0.5 shrink-0" />
-                      Your access is confirmed — the team is finalising the group invite. The link
-                      will appear right here the moment it's live.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-[#8a7ba8]">
-                  Once your share is verified, the team unlocks the private WhatsApp space for the
-                  event. The link appears right here — it's admin-managed and never shared before
-                  verification.
+                  </>
+                ) : (
+                  <p className="mt-3 flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs leading-relaxed text-[#8a7ba8]">
+                    <Icon name="bell" size={14} className="mt-0.5 shrink-0" />
+                    Your access is confirmed — the team is finalising the group invite. The link
+                    will appear right here the moment it's live.
+                  </p>
+                )}
+              </>
+            )}
+
+            {status === "registered" && (
+              <>
+                <h4 className="font-display mt-2 text-xl font-bold text-white">Your access is paused.</h4>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#b8aecf]">
+                  The team revoked access to this edition's space. Completing the onboarding
+                  questions again will restore it — your confirmation code stays the same.
                 </p>
-              )}
-            </div>
+                {onReonboard && (
+                  <GradientButton type="button" onClick={onReonboard} className="mt-4">
+                    Complete onboarding again
+                    <Icon name="arrowRight" size={16} />
+                  </GradientButton>
+                )}
+              </>
+            )}
+
+            {status === "rejected" && (
+              <>
+                <h4 className="font-display mt-2 text-xl font-bold text-white">This registration was rejected.</h4>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#b8aecf]">
+                  If you believe that's a mistake, contact the team on WhatsApp and they'll sort
+                  it out.
+                </p>
+              </>
+            )}
+
+            {legacy && (
+              <>
+                <h4 className="font-display mt-2 text-xl font-bold text-white">
+                  Good news — no more share verification.
+                </h4>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#b8aecf]">
+                  Your registration was created under the old process, which asked you to share
+                  and upload proof. That step no longer exists. Complete the quick onboarding and
+                  your access unlocks instantly — it takes a minute.
+                </p>
+                {onReonboard && (
+                  <GradientButton type="button" onClick={onReonboard} className="mt-4">
+                    Complete onboarding
+                    <Icon name="arrowRight" size={16} />
+                  </GradientButton>
+                )}
+              </>
+            )}
           </div>
-        </li>
-      </ol>
+        </div>
+      </div>
     </div>
   );
 }

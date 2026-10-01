@@ -99,7 +99,9 @@ export function GhostButton({
     const isAnchor = href.startsWith("#");
     return <a href={href} target={isAnchor ? undefined : "_blank"} rel={isAnchor ? undefined : "noreferrer"} className={cls}>{children}</a>;
   }
-  return <button onClick={onClick} className={cls}>{children}</button>;
+  // type="button" is essential: inside a form, a bare <button> defaults to
+  // "submit" and would fire the form (e.g. a wizard "Back" button).
+  return <button type="button" onClick={onClick} className={cls}>{children}</button>;
 }
 
 export function SectionHead({

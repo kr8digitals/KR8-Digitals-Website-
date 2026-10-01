@@ -56,8 +56,8 @@ function meta(page, attr, key) {
   check(title.includes("Mindset Shift 7.0"), `title is the event SEO title (got "${title}")`);
   const desc = await meta(page, "name", "description");
   check(
-    !!desc && desc.includes("BUILDING WEALTH"),
-    "meta description is the event SEO description"
+    !!desc && desc.includes("You're not bad with money"),
+    "meta description is the event SEO description (new reframe copy)"
   );
   const canonical = await page.evaluate(
     () => document.head.querySelector('link[rel="canonical"]')?.getAttribute("href")
@@ -69,7 +69,7 @@ function meta(page, attr, key) {
     "og:title set"
   );
   check(
-    (await meta(page, "property", "og:description"))?.includes("BUILDING WEALTH"),
+    (await meta(page, "property", "og:description"))?.includes("You're not bad with money"),
     "og:description set"
   );
   const ogImage = await meta(page, "property", "og:image");

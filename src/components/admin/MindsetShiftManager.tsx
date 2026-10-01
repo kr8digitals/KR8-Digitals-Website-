@@ -135,7 +135,7 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
   const revoke = (reg: MsRegistration) => {
     const ok = window.confirm(
       `Revoke WhatsApp access for ${reg.fullName} (${reg.id})?\n\n` +
-        "They will move back to step 1 and must share the event and re-verify before they can join the group again."
+        "Their access is paused immediately. Completing the onboarding again will restore it."
     );
     if (!ok) return;
     const updated = revokeMsAccess(reg.id, adminName, note.trim());
@@ -185,6 +185,9 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
       ["financialSituation", (r) => r.financialSituation],
       ["hasFinancialGoal", (r) => (r.hasFinancialGoal ? "yes" : "no")],
       ["areaToImprove", (r) => r.areaToImprove],
+      ["whyHere", (r) => r.whyHere || ""],
+      ["debtDuration", (r) => r.debtDuration || ""],
+      ["moneyStress", (r) => r.moneyStress || ""],
       ["proofSubmittedAt", (r) => (r.proofSubmittedAt ? new Date(r.proofSubmittedAt).toISOString() : "")],
       ["verifiedBy", (r) => r.verifiedBy || ""],
       ["verifiedAt", (r) => (r.verifiedAt ? new Date(r.verifiedAt).toISOString() : "")],
@@ -211,13 +214,14 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-bold text-white">
-              Mindset Shift {ev.edition} — Registration &amp; Proof Verification
+              Mindset Shift {ev.edition} — Participants &amp; Access
             </h3>
             <p className="mt-1 max-w-2xl text-sm text-[#b8aecf]">
               {ev.speaker.name ? `${ev.speaker.name} · ` : ""}
-              {ev.theme} — {ev.subtitle}. Review each participant's share screenshot, then approve
-              (grants WhatsApp access), request a fresh screenshot, or reject. This is a
-              manual check — nothing is verified automatically.
+              {ev.theme} — {ev.subtitle}. Everyone completes a short honest onboarding and gets
+              the WhatsApp space immediately — no share gate. Your tools: read each participant's
+              answers (they're how the speaker picks their approach), revoke access where needed,
+              reject, delete, and export.
             </p>
           </div>
           {toast && (
@@ -302,8 +306,8 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
             <Icon name="calendar" className="h-8 w-8 text-[#8d81ab]" />
             <p className="text-sm font-semibold text-[#cfc4e8]">No registrations yet</p>
             <p className="max-w-sm text-xs text-[#8d81ab]">
-              Once someone registers on the public Mindset Shift page, they appear here
-              for proof review.
+              Once someone completes onboarding on the public Mindset Shift page, they appear
+              here with their answers and live access.
             </p>
           </div>
         ) : filtered.length === 0 ? (
@@ -344,10 +348,13 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
                     <div className="grid gap-4 sm:grid-cols-2">
                       <DetailRow label="Location" value={r.location} />
                       <DetailRow label="Heard about us via" value={r.heardAbout} />
+                      <DetailRow label="Why they came" value={r.whyHere} />
+                      <DetailRow label="Money stress at home" value={r.moneyStress} />
                       <DetailRow label="Hoping to learn" value={r.hopingToLearn} />
                       <DetailRow label="Money question" value={r.moneyQuestion} />
                       <DetailRow label="Biggest financial challenge" value={r.biggestChallenge} />
                       <DetailRow label="Debt experience" value={r.debtExperience} />
+                      <DetailRow label="Debt duration" value={r.debtDuration} />
                       <DetailRow label="Financial situation" value={r.financialSituation} />
                       <DetailRow
                         label="Working toward a goal"
@@ -394,8 +401,10 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
                       </div>
                     )}
 
-                    {/* Verification actions */}
-                    {r.proofData || r.status !== "registered" ? (
+                    {/* Actions — v2: verification buttons only exist for
+                        legacy rows that carry a share proof. Everyone else
+                        is moderated with Reject + the Revoke/Delete row. */}
+                    {r.proofData ? (
                       <div>
                         <label className="text-[11px] font-bold uppercase tracking-wider text-[#8d81ab]" htmlFor={`ms-note-${r.id}`}>
                           Note {r.status === "needs_resubmission" || r.status === "rejected" ? "(optional — what they should change)" : "(optional)"}
@@ -433,10 +442,35 @@ export default function MindsetShiftManager({ adminName }: { adminName: string }
                           </button>
                         </div>
                       </div>
+                    ) : r.status === "access_granted" ? (
+                      <div>
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-[#8d81ab]" htmlFor={`ms-note-${r.id}`}>
+                          Moderation note (optional — recorded in their history)
+                        </label>
+                        <textarea
+                          id={`ms-note-${r.id}`}
+                          value={note}
+                          onChange={(e) => setNote(e.target.value)}
+                          rows={2}
+                          placeholder="e.g. Duplicate account from the same phone number."
+                          className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none"
+                        />
+                        {error && <p className="mt-1.5 text-xs font-semibold text-rose-300">{error}</p>}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            onClick={() => decide(r, "rejected")}
+                            className="inline-flex items-center gap-2 rounded-xl bg-rose-500/90 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-400"
+                          >
+                            <Icon name="close" className="h-4 w-4" />
+                            Reject participant
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <p className="rounded-lg bg-white/5 px-4 py-3 text-xs text-[#8d81ab]">
-                        This participant is still on step 1 of their flow — verification
-                        becomes available once they upload a share screenshot.
+                        This participant currently has no access. Their onboarding answers above
+                        are the context the speaker works from — use Delete registration below
+                        only for duplicates or bad data.
                       </p>
                     )}
 

@@ -77,26 +77,31 @@ export default function MindsetShiftAnalytics() {
   }, []);
 
   const derived = useMemo(() => {
-    const awaiting = stats.byStatus.share_submitted + stats.byStatus.needs_resubmission;
-    const decided = stats.grantedAccess + stats.byStatus.rejected;
+    // v2 access model: no share gate — everyone who completes onboarding
+    // gets access immediately. The only loss is admin revocation/rejection.
+    const inactive =
+      stats.byStatus.registered +
+      stats.byStatus.rejected +
+      stats.byStatus.share_submitted +
+      stats.byStatus.needs_resubmission;
     const conversion = stats.total ? Math.round((stats.grantedAccess / stats.total) * 100) : 0;
     const sourceRows = Object.entries(stats.bySource)
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count);
     const funnel = [
-      { label: "Registered", count: stats.total, width: 100 },
+      { label: "Completed onboarding", count: stats.total, width: 100 },
       {
-        label: "Shared the event",
-        count: stats.total - stats.byStatus.registered,
-        width: stats.total ? ((stats.total - stats.byStatus.registered) / stats.total) * 100 : 0,
-      },
-      {
-        label: "Access granted",
+        label: "Access live",
         count: stats.grantedAccess,
         width: stats.total ? (stats.grantedAccess / stats.total) * 100 : 0,
       },
+      {
+        label: "Revoked or rejected",
+        count: inactive,
+        width: stats.total ? (inactive / stats.total) * 100 : 0,
+      },
     ];
-    return { awaiting, decided, conversion, sourceRows, funnel };
+    return { inactive, conversion, sourceRows, funnel };
   }, [stats]);
 
   const dayLabel = (iso: string) => {
@@ -116,8 +121,8 @@ export default function MindsetShiftAnalytics() {
               Mindset Shift {ev.edition} — Analytics
             </h3>
             <p className="mt-1 max-w-2xl text-sm text-[#b8aecf]">
-              Edition-level numbers: registrations, share-verification pipeline, and where
-              participants are coming from. Updated live as registrations and decisions happen.
+              Edition-level numbers: registrations, live access, and where participants are
+              coming from. Updated live as registrations and decisions happen.
             </p>
           </div>
           <div className="rounded-xl bg-white/5 px-4 py-3 text-right">
@@ -141,22 +146,22 @@ export default function MindsetShiftAnalytics() {
           tone="text-white"
         />
         <Kpi
-          label="Awaiting verification"
-          value={derived.awaiting}
-          hint="shared or needs a new screenshot"
-          tone="text-amber-300"
-        />
-        <Kpi
-          label="Access granted"
+          label="Access live"
           value={stats.grantedAccess}
-          hint="in the WhatsApp group"
+          hint="in the WhatsApp space"
           tone="text-emerald-300"
         />
         <Kpi
-          label="Decided"
-          value={derived.decided}
-          hint="granted + rejected"
-          tone="text-[#cfc4e8]"
+          label="Revoked or rejected"
+          value={derived.inactive}
+          hint="no access right now"
+          tone="text-amber-300"
+        />
+        <Kpi
+          label="Access conversion"
+          value={`${derived.conversion}%`}
+          hint={`${stats.grantedAccess} of ${stats.total} participants`}
+          tone="text-white"
         />
       </div>
 
@@ -164,7 +169,7 @@ export default function MindsetShiftAnalytics() {
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-white/10 bg-black/20 p-4">
           <p className="text-[11px] font-bold uppercase tracking-wider text-[#8d81ab]">
-            Verification pipeline
+            Access pipeline
           </p>
           <div className="mt-4 space-y-4">
             {derived.funnel.map((f) => (
@@ -183,8 +188,8 @@ export default function MindsetShiftAnalytics() {
             ))}
           </div>
           <p className="mt-4 text-[11px] leading-relaxed text-[#6f6390]">
-            Every participant must share the event and pass manual verification before the
-            WhatsApp link is shown to them. Nothing is granted automatically.
+            There is no share gate — completing onboarding unlocks the WhatsApp space
+            immediately. The only exits from "Access live" are admin revocation or rejection.
           </p>
         </div>
         <BarList title="Where participants heard about the event" rows={derived.sourceRows} />
@@ -225,9 +230,9 @@ export default function MindsetShiftAnalytics() {
       <BarList
         title="Status breakdown"
         rows={[
-          { label: "Registered (not shared yet)", count: stats.byStatus.registered },
-          { label: "Awaiting share verification", count: stats.byStatus.share_submitted },
-          { label: "Needs resubmission", count: stats.byStatus.needs_resubmission },
+          { label: "No access (revoked — re-onboard to restore)", count: stats.byStatus.registered },
+          { label: "Awaiting share verification (legacy)", count: stats.byStatus.share_submitted },
+          { label: "Needs resubmission (legacy)", count: stats.byStatus.needs_resubmission },
           { label: "Access granted", count: stats.byStatus.access_granted },
           { label: "Rejected", count: stats.byStatus.rejected },
         ]}

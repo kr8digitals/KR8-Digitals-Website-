@@ -1,21 +1,20 @@
 /**
- * MINDSET SHIFT 7.0 — STEP 9: WHATSAPP ACCESS
+ * MINDSET SHIFT 7.0 — WHATSAPP LINK SECRECY (v2)
  *
- * The group link is ADMIN-MANAGED (event.whatsappGroupUrl) and must be
- * rendered ONLY for participants whose status is access_granted while
- * accessEnabled is true. Everything else — registered, share_submitted,
- * needs_resubmission, rejected, or granted-but-link-not-live — sees no
- * link at all. The link appears/removes live (no reload) when the admin
- * changes the event config.
+ * The group link is admin-managed and only rendered for participants
+ * whose access is live (onboarding completed + link set + switch on).
+ * It must never appear in the page for unregistered visitors, revoked
+ * or rejected participants, or when the switch is off / URL empty.
  *
  * Requires the dev server on http://localhost:5173 (npm run dev).
  */
 const { chromium } = require("playwright");
 
 const BASE = "http://localhost:5173";
-const GROUP_URL = "https://chat.whatsapp.com/MS7TestGroupInvite123";
 const REGS_KEY = "kr8_mindset_shift_registrations_v1";
 const EVENT_KEY = "kr8_mindset_shift_event_v1";
+const URL_A = "https://chat.whatsapp.com/MS7-Space-A1";
+const URL_B = "https://chat.whatsapp.com/MS7-Space-B2";
 
 let pass = 0, fail = 0;
 function check(cond, label, detail) {
@@ -23,133 +22,154 @@ function check(cond, label, detail) {
   else { fail++; console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ""}`); }
 }
 
-function seedRegistration(page, over) {
-  return page.evaluate(([key, over]) => {
-    const regs = JSON.parse(localStorage.getItem(key) || "[]");
-    const base = regs[0] || {
-      id: `MS7-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      edition: "7.0", fullName: "", email: "", phone: "", whatsapp: "", location: "",
-      heardAbout: "", hopingToLearn: "", moneyQuestion: "", biggestChallenge: "",
-      debtExperience: "", financialSituation: "", hasFinancialGoal: false, areaToImprove: "",
-      status: "registered", proofKey: null, proofData: null, proofSubmittedAt: null,
-      adminNote: "", verifiedBy: null, verifiedAt: null,
-      createdAt: Date.now(), updatedAt: Date.now(), syncPending: true,
-    };
-    const now = Date.now();
-    const r = { ...base, ...over, updatedAt: now };
-    r.id = over.id || r.id;
-    const list = regs.length ? regs.map((x, i) => (i === 0 ? r : x)) : [r];
-    localStorage.setItem(key, JSON.stringify(list));
-    window.dispatchEvent(new Event("kr8:ms-regs-updated"));
-    return r.id;
-  }, [REGS_KEY, over]);
+async function seed(page, { event, regs }) {
+  await page.evaluate(
+    ({ ek, rk, ev, rs }) => {
+      if (ev !== undefined) {
+        const cur = JSON.parse(localStorage.getItem(ek) || "{}");
+        localStorage.setItem(ek, JSON.stringify({ ...cur, ...ev }));
+      }
+      if (rs !== undefined) localStorage.setItem(rk, JSON.stringify(rs));
+      window.dispatchEvent(new Event("kr8:ms-event-updated"));
+      window.dispatchEvent(new Event("kr8:ms-regs-updated"));
+    },
+    { ek: EVENT_KEY, rk: REGS_KEY, ev: event, rs: regs }
+  );
+  await page.waitForTimeout(450);
 }
 
-function setEventField(page, patch) {
-  return page.evaluate(([key, patch]) => {
-    const raw = localStorage.getItem(key);
-    const ev = raw ? JSON.parse(raw) : {};
-    Object.assign(ev, patch);
-    localStorage.setItem(key, JSON.stringify(ev));
-    window.dispatchEvent(new Event("kr8:ms-event-updated"));
-    return true;
-  }, [EVENT_KEY, patch]);
-}
-
-const joinLink = (page) => page.getByRole("link", { name: /Join the WhatsApp space/ });
+const reg = (over = {}) => ({
+  id: "MS7-SEED0001",
+  fullName: "Seed Sitter",
+  email: "seed@example.com",
+  phone: "08000000001",
+  edition: "7.0",
+  status: "access_granted",
+  whatsappGroupUrl: "",
+  source: "Friend or family",
+  biggestChallenge: "",
+  hopingToLearn: "",
+  hasFinancialGoal: false,
+  areaToImprove: "",
+  whyHere: "I'm trying to get out of debt",
+  debtExperience: "Loan app or card",
+  debtDuration: "A couple of years",
+  moneyStress: "It's heavy — and I don't talk about it",
+  moneyQuestion: "",
+  location: "",
+  createdAt: Date.now() - 86400000,
+  updatedAt: Date.now() - 3600000,
+  ...over,
+});
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
-
-  /* ============ 1. Granted participant: link secrecy before grant ============ */
-  console.log("\n[device A: Ada — before grant]");
-  const ctxA = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
-  const page = await ctxA.newPage();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e.message).slice(0, 140)));
 
+  const domLeak = async (url) => {
+    const html = await page.locator("body").innerHTML();
+    return html.includes(url);
+  };
+
+  /* ============ 1. Unregistered visitor: nothing leaks ============ */
+  console.log("\n[whatsapp: unregistered visitor]");
   await page.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(700);
-  await seedRegistration(page, { fullName: "Ada Obi", email: "ada.wa@example.com", phone: "+2348025556667", status: "share_submitted", proofData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", proofSubmittedAt: Date.now() - 600e3 });
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(900);
+  await seed(page, { event: { whatsappGroupUrl: URL_A, accessEnabled: true } });
+  check((await page.locator(`a[href='${URL_A}']`).count()) === 0, "no group link for unregistered visitors");
+  check((await domLeak(URL_A)) === false, "group URL string absent from the entire DOM");
+  check((await page.locator("a[href*='chat.whatsapp.com']").count()) === 0, "no chat.whatsapp.com anchor anywhere");
 
-  check((await page.locator(`a[href="${GROUP_URL}"]`).count()) === 0, "no link before verification (share_submitted)");
-  check((await joinLink(page).count()) === 0, "no join button before verification");
-  check(await page.locator("#register").getByText(/never shared before verification/).first().isVisible(), "step 3 pending copy shown");
+  /* ============ 2. Access-granted participant: link appears ============ */
+  console.log("\n[whatsapp: granted participant]");
+  await seed(page, { regs: [reg()] });
+  check((await page.locator(`a[href='${URL_A}']`).count()) === 1, "link rendered for the access-granted participant");
+  const join = page.getByRole("link", { name: "Join the WhatsApp space" });
+  check(await join.isVisible(), "'Join the WhatsApp space' button visible");
+  check((await join.getAttribute("target")) === "_blank", "opens in a new tab");
 
-  /* ============ 2. Granted but link not live yet ============ */
-  console.log("\n[device A: Ada — granted, link pending]");
-  {
-    await seedRegistration(page, { status: "access_granted" });
-    await page.waitForTimeout(600);
-    check((await joinLink(page).count()) === 0, "no link while group URL not set (granted)");
-    check(await page.locator("#register").getByText(/finalising the group invite/).first().isVisible(), "'finalising' note shown to granted participant");
-    check((await page.locator(`a[href="${GROUP_URL}"]`).count()) === 0, "group URL not rendered while pending");
+  /* ============ 3. Admin edits the URL: public follows live ============ */
+  console.log("\n[whatsapp: admin URL edit]");
+  await seed(page, { event: { whatsappGroupUrl: URL_B } });
+  check((await page.locator(`a[href='${URL_B}']`).count()) === 1, "link follows the new admin URL live");
+  check((await page.locator(`a[href='${URL_A}']`).count()) === 0, "old URL no longer rendered");
+
+  /* ============ 4. Switch off: link disappears even when granted ============ */
+  console.log("\n[whatsapp: switch off]");
+  await seed(page, { event: { accessEnabled: false } });
+  check((await page.locator(`a[href*='chat.whatsapp.com']`).count()) === 0, "switch off hides the link from granted participants");
+  check((await page.locator("text=finalising the group invite").count()) === 1, "switch off shows the 'finalising' note");
+
+  /* ============ 5. Empty URL: no link, no leak ============ */
+  console.log("\n[whatsapp: empty URL]");
+  await seed(page, { event: { accessEnabled: true, whatsappGroupUrl: "" } });
+  check((await page.locator("a[href*='whatsapp']").count()) === 0, "empty URL renders no anchor");
+  check((await page.locator("text=finalising the group invite").count()) === 1, "empty URL shows the 'finalising' note");
+
+  /* ============ 6. Revoked: link removed immediately ============ */
+  console.log("\n[whatsapp: revoked]");
+  await seed(page, { event: { whatsappGroupUrl: URL_A, accessEnabled: true } });
+  await seed(page, { regs: [reg({ status: "registered" })] });
+  check((await page.locator(`a[href*='chat.whatsapp.com']`).count()) === 0, "revoked participant: link gone immediately");
+  check((await page.locator("text=Your access is paused.").count()) === 1, "revoked: paused state shown");
+
+  /* ============ 7. Rejected: no link, no re-onboard loophole ============ */
+  console.log("\n[whatsapp: rejected]");
+  await seed(page, { regs: [reg({ status: "rejected" })] });
+  check((await page.locator(`a[href*='chat.whatsapp.com']`).count()) === 0, "rejected participant: no link");
+  check((await page.locator("text=This registration was rejected.").count()) === 1, "rejected: final message shown");
+
+  /* ============ 8. Legacy statuses: link only after re-onboarding ============ */
+  console.log("\n[whatsapp: legacy rows]");
+  for (const st of ["share_submitted", "needs_resubmission", "registered"]) {
+    await seed(page, { regs: [reg({ status: st })] });
+    check((await page.locator(`a[href*='chat.whatsapp.com']`).count()) === 0,
+      `legacy '${st}': no link before re-onboarding`);
   }
+  // re-onboard one legacy row through the UI: wizard completes → link back
+  await page.getByRole("button", { name: /Complete onboarding/ }).first().click();
+  await page.waitForTimeout(300);
+  await page.getByPlaceholder(/Your name/).fill("Legacy Legacy");
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(120);
+  await page.getByRole("button", { name: "I'm just curious (I might be braver than I look)" }).click();
+  await page.waitForTimeout(120);
+  await page.getByRole("button", { name: "It's heavy — and I don't talk about it" }).click();
+  await page.waitForTimeout(120);
+  await page.getByPlaceholder(/My money never lasts/).fill("Re-onboarding to get back in.");
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(120);
+  await page.getByRole("button", { name: "Not yet" }).click();
+  await page.waitForTimeout(120);
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(120);
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.waitForTimeout(120);
+  await page.getByLabel("Email *").fill("seed@example.com");
+  await page.getByLabel("Phone number").fill("08000000001");
+  await page.getByLabel("How did you find this? *").selectOption("Friend or family");
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await page.waitForTimeout(120);
+  await page.getByRole("button", { name: "Save My Seat" }).click();
+  await page.waitForTimeout(500);
+  const regsAfter = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) || "[]"), REGS_KEY);
+  check(regsAfter.length === 1 && regsAfter[0].status === "access_granted",
+    "re-onboarding restores access on the SAME record (dedupe)");
+  check((await page.locator(`a[href='${URL_A}']`).count()) === 1, "link is live again after re-onboarding");
 
-  /* ============ 3. Admin goes live -> link appears without reload ============ */
-  console.log("\n[device A: Ada — admin enables the link]");
-  {
-    await setEventField(page, { whatsappGroupUrl: GROUP_URL, accessEnabled: true });
-    await page.waitForTimeout(600);
-    const link = joinLink(page);
-    check((await link.count()) === 1, "join link appears LIVE (no reload)");
-    check((await link.first().getAttribute("href")) === GROUP_URL, "href is the admin-managed group URL");
-    check((await link.first().getAttribute("target")) === "_blank", "opens in a new tab");
-    check(((await link.first().getAttribute("rel")) || "").includes("noopener"), "rel=noopener set");
-    await page.locator("#register").screenshot({ path: "tests/shots/ms9-whatsapp-granted.png" });
+  /* ============ 9. Unregistered again after wipe ============ */
+  console.log("\n[whatsapp: clean state stays clean]");
+  await page.evaluate((k) => localStorage.removeItem(k), REGS_KEY);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(800);
+  check((await page.locator(`a[href*='chat.whatsapp.com']`).count()) === 0, "fresh visitor: still no link");
 
-    // Team disables access -> link disappears live
-    await setEventField(page, { accessEnabled: false });
-    await page.waitForTimeout(500);
-    check((await joinLink(page).count()) === 0, "link removed live when accessEnabled=false");
-    await setEventField(page, { accessEnabled: true });
-    await page.waitForTimeout(500);
-    check((await joinLink(page).count()) === 1, "link restored when re-enabled");
-  }
-
-  /* ============ 4. Mobile: link visible + tappable ============ */
-  console.log("\n[device A: Ada — mobile]");
-  {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.waitForTimeout(500);
-    const link = joinLink(page);
-    check(await link.first().isVisible(), "link visible at 390px");
-    const box = await link.first().boundingBox();
-    check(!!box && box.height >= 40, "touch target height >= 40px", box ? `${box.height}px` : "no box");
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    check(overflow <= 0, "no horizontal overflow (mobile)");
-  }
-  await ctxA.close();
-
-  /* ============ 5. Other devices: link never leaks to non-granted ============ */
-  console.log("\n[devices B/C: non-granted participants]");
-  for (const [label, status] of [
-    ["registered (no proof yet)", "registered"],
-    ["awaiting verification", "share_submitted"],
-    ["needs resubmission", "needs_resubmission"],
-    ["rejected", "rejected"],
-  ]) {
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
-    const p2 = await ctx.newPage();
-    const errs2 = [];
-    p2.on("pageerror", (e) => errs2.push(String(e.message).slice(0, 120)));
-    await p2.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
-    await p2.waitForTimeout(600);
-    await setEventField(p2, { whatsappGroupUrl: GROUP_URL, accessEnabled: true }); // link IS live
-    await seedRegistration(p2, { fullName: "Other " + label, status, proofData: status === "registered" ? null : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" });
-    await p2.waitForTimeout(600);
-    const html = await p2.content();
-    check((await p2.locator(`a[href="${GROUP_URL}"]`).count()) === 0, `no link for ${label} (link is live for granted users)`);
-    check(!html.includes(GROUP_URL), `group URL string not in rendered DOM for ${label}`);
-    check(errs2.length === 0, `no page errors for ${label}`, errs2.join(" | "));
-    await ctx.close();
-  }
-
-  check(errors.length === 0, "no page errors (device A journey)", errors.join(" | "));
-
+  check(errors.length === 0, "no page errors", errors.join(" | "));
   console.log("\n------------------------------------------------------------");
-  console.log(`MINDSET SHIFT WHATSAPP ACCESS: ${fail === 0 ? "ALL CHECKS PASSED" : fail + " CHECK(S) FAILED"}`);
+  console.log(`MINDSET SHIFT WHATSAPP SECRECY (V2): ${fail === 0 ? "ALL CHECKS PASSED" : fail + " CHECK(S) FAILED"}`);
   console.log(`  passed=${pass} failed=${fail}`);
   await browser.close();
   process.exit(fail === 0 ? 0 : 1);

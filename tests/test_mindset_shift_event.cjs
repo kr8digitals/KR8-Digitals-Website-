@@ -21,6 +21,21 @@ const FOUNDER_PW = "KR8@Adm!n2026";
 const SMALL_PNG = "/tmp/proof-small.png";
 const REGS_KEY = "kr8_mindset_shift_registrations_v1";
 
+// Self-generate a tiny valid PNG if the /tmp artifact is missing (resets
+// wipe /tmp; the flyer upload needs a real image file).
+{
+  const fsx = require("fs");
+  if (!fsx.existsSync(SMALL_PNG)) {
+    fsx.writeFileSync(
+      SMALL_PNG,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "base64"
+      )
+    );
+  }
+}
+
 let pass = 0, fail = 0;
 function check(cond, label, detail) {
   if (cond) { pass++; console.log(`  ✓ ${label}`); }
@@ -113,11 +128,12 @@ const openSection = (page, title) => page.locator("summary", { hasText: title })
     await page.getByRole("button", { name: /Save changes/ }).click();
     await page.waitForTimeout(700);
 
-    // Seed a registration so the share card (which renders the flyer) is visible
+    // Seed a registration so the share moment (which renders the flyer) is
+    // visible — v2: the share moment renders for access_granted participants.
     await page.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
     await page.evaluate(() => {
       const now = Date.now();
-      const r = { id: "MS7-FLR01", edition: "7.0", fullName: "Flyer Checker", email: "flyer@example.com", phone: "+2348055550002", whatsapp: "", location: "", heardAbout: "Admin", hopingToLearn: "", moneyQuestion: "", biggestChallenge: "", debtExperience: "", financialSituation: "", hasFinancialGoal: false, areaToImprove: "", status: "registered", proofKey: null, proofData: null, proofSubmittedAt: null, adminNote: "", verifiedBy: null, verifiedAt: null, createdAt: now, updatedAt: now, syncPending: true };
+      const r = { id: "MS7-FLR01", edition: "7.0", fullName: "Flyer Checker", email: "flyer@example.com", phone: "+2348055550002", whatsapp: "", location: "", heardAbout: "Admin", hopingToLearn: "", moneyQuestion: "", biggestChallenge: "", debtExperience: "", financialSituation: "", hasFinancialGoal: false, areaToImprove: "", status: "access_granted", proofKey: null, proofData: null, proofSubmittedAt: null, adminNote: "", verifiedBy: null, verifiedAt: null, createdAt: now, updatedAt: now, syncPending: true };
       localStorage.setItem("kr8_mindset_shift_registrations_v1", JSON.stringify([r]));
       window.dispatchEvent(new Event("kr8:ms-regs-updated"));
     });
@@ -155,10 +171,10 @@ const openSection = (page, title) => page.locator("summary", { hasText: title })
     await page.getByRole("button", { name: /Save changes/ }).click();
     await page.waitForTimeout(700);
 
-    // Participant side (same context): registered status -> share panel live
+    // Participant side (same context): access_granted -> share moment live
     await page.evaluate(() => {
       const now = Date.now();
-      const r = { id: "MS7-EVT01", edition: "7.0", fullName: "Copy Checker", email: "copy@example.com", phone: "+2348055550001", whatsapp: "", location: "", heardAbout: "Admin", hopingToLearn: "", moneyQuestion: "", biggestChallenge: "", debtExperience: "", financialSituation: "", hasFinancialGoal: false, areaToImprove: "", status: "registered", proofKey: null, proofData: null, proofSubmittedAt: null, adminNote: "", verifiedBy: null, verifiedAt: null, createdAt: now, updatedAt: now, syncPending: true };
+      const r = { id: "MS7-EVT01", edition: "7.0", fullName: "Copy Checker", email: "copy@example.com", phone: "+2348055550001", whatsapp: "", location: "", heardAbout: "Admin", hopingToLearn: "", moneyQuestion: "", biggestChallenge: "", debtExperience: "", financialSituation: "", hasFinancialGoal: false, areaToImprove: "", status: "access_granted", proofKey: null, proofData: null, proofSubmittedAt: null, adminNote: "", verifiedBy: null, verifiedAt: null, createdAt: now, updatedAt: now, syncPending: true };
       localStorage.setItem("kr8_mindset_shift_registrations_v1", JSON.stringify([r]));
     });
     await page.goto(BASE + "/mindset-shift", { waitUntil: "domcontentloaded" });
