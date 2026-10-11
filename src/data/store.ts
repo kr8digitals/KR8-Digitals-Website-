@@ -28,8 +28,8 @@ import {
   apiGraduation,
   apiLogin,
   apiMeAction,
-  apiRegister,
-  apiResetComplete,
+  apiResendConfirmation,
+  apiSiteAction,
   apiResetRequest,
   apiSocial,
   apiTransition,
@@ -557,7 +557,7 @@ function scheduleAccountsPush(previous: RemoteAccount[], next: RemoteAccount[]) 
 export async function signInWithCredentials(
   identifier: string,
   password: string
-): Promise<{ ok: boolean; account?: Account; error?: string }> {
+): Promise<{ ok: boolean; account?: Account; error?: string; code?: string }> {
   try {
     const res = await apiLogin(identifier.trim(), password);
     await applySession(res.session);
@@ -565,7 +565,8 @@ export async function signInWithCredentials(
     notifyAccountsUpdated([res.account.id]);
     return { ok: true, account: res.account as unknown as Account };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Sign in failed." };
+    const code = (err as { code?: string }).code;
+    return { ok: false, error: err instanceof Error ? err.message : "Sign in failed.", code };
   }
 }
 export const COHORT_YEAR = 2026;
@@ -886,6 +887,32 @@ export function nextSerial(skillKey: string): number {
   }, 0);
   return Math.max(maxSerial + 1, students.length + 1);
 }
+export type RegisterResult = {
+  ok: boolean;
+  error?: string;
+  /** Supabase Auth error code when relevant (e.g. "email_exists"). */
+  code?: string;
+  /** true → show /registered ("check your email to confirm"). */
+  needsConfirmation?: boolean;
+};
+
+function friendlySignUpError(message: string): string {
+  const m = String(message || "");
+  if (m.startsWith("REGISTRATION_CLOSED:")) {
+    return "Registration for this skill is closed right now. Please check back soon or join the Tribe to get notified.";
+  }
+  if (m.toLowerCase().includes("already registered")) {
+    return "An account with this email already exists. Try signing in instead.";
+  }
+  return m || "Registration could not be completed.";
+}
+
+/**
+ * Public student registration via `supabase.auth.signUp`. The KR8 ID is NOT
+ * generated here — the handle_new_user trigger creates the profile and the ID
+ * once the email is confirmed. The signup confirmation email is sent by
+ * Supabase (registration sends no custom email).
+ */
 export async function registerStudent(input: {
   name: string;
   email: string;
@@ -895,17 +922,40 @@ export async function registerStudent(input: {
   dob: string;
   password: string;
   ref?: string;
-}): Promise<{ ok: boolean; error?: string; student?: Account }> {
-  try {
-    const res = await apiRegister({ ...input, accountType: "student" });
-    await applySession(res.session);
-    upsertAccountCache(res.account as RemoteAccount);
-    notifyAccountsUpdated([res.account.id]);
-    addFeed({ kind: "registration", name: res.account.name, skill: getSkillName(res.account.skill), avatar: res.account.avatar || "" });
-    return { ok: true, student: res.account as unknown as Account };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Registration could not be completed." };
+}): Promise<RegisterResult> {
+  const sb = getSupabase();
+  if (!sb) return { ok: false, error: "Sign-up is unavailable: the app is not configured for Supabase." };
+  const siteUrl =
+    (import.meta.env.VITE_SITE_URL as string | undefined)?.trim() ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  const { data, error } = await sb.auth.signUp({
+    email: input.email.trim(),
+    password: input.password,
+    options: {
+      data: {
+        name: input.name.trim(),
+        skill: input.skill,
+        phone: input.phone,
+        country: input.country,
+        dob: input.dob,
+      },
+      emailRedirectTo: `${siteUrl}/welcome`,
+    },
+  });
+  if (error) {
+    return { ok: false, error: friendlySignUpError(error.message), code: (error as { code?: string }).code };
   }
+  // With email confirmation ON, the session is null until the link is clicked.
+  if (data.session) {
+    await applySession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_at: data.session.expires_at,
+    });
+    await bootstrapStore();
+    return { ok: true, needsConfirmation: false };
+  }
+  return { ok: true, needsConfirmation: true };
 }
 export async function adminRegisterStudent(input: {
   name: string;
@@ -946,6 +996,16 @@ export async function adminRegisterStudent(input: {
     return { ok: false, error: err instanceof Error ? err.message : "Registration could not be completed." };
   }
 }
+/** Re-send the graduation email for a certificate (admin button). */
+export async function resendCertificateEmail(certificateId: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await apiGraduation({ action: "resend", certificateId }) as { ok: boolean; message?: string };
+    return { ok: true, message: res.message || "Graduation email re-sent." };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Could not re-send the email." };
+  }
+}
+
 export async function transitionToSkill(skill: string): Promise<{ ok: boolean; error?: string; student?: Account }> {
   try {
     const res = await apiTransition(skill);
@@ -964,26 +1024,17 @@ export async function registerTribe(input: {
   phone: string;
   country: string;
   password: string;
-}): Promise<{ ok: boolean; error?: string; member?: Account }> {
-  try {
-    const res = await apiRegister({
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      country: input.country,
-      skill: "",
-      dob: "",
-      password: input.password,
-      accountType: "tribe",
-    });
-    await applySession(res.session);
-    upsertAccountCache(res.account as RemoteAccount);
-    notifyAccountsUpdated([res.account.id]);
-    addFeed({ kind: "tribe", name: res.account.name, skill: "KR8 Tribe", avatar: res.account.avatar || "" });
-    return { ok: true, member: res.account as unknown as Account };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Could not register Tribe member." };
-  }
+}): Promise<RegisterResult> {
+  // Same Supabase sign-up flow; the trigger issues the KR8 Tribe ID.
+  return registerStudent({
+    name: input.name,
+    email: input.email,
+    phone: input.phone,
+    country: input.country,
+    skill: "",
+    dob: "",
+    password: input.password,
+  });
 }
 export function findStudent(idOrQuery: string): Account | undefined {
   if (!idOrQuery) return undefined;
@@ -1195,6 +1246,16 @@ export async function changePassword(password: string): Promise<{ ok: boolean; e
   }
 }
 
+/** Resend the signup confirmation email (server resolves the address). */
+export async function resendConfirmation(identifier: string): Promise<{ ok: boolean; message: string }> {
+  try {
+    const res = await apiResendConfirmation(identifier);
+    return { ok: true, message: res.message || "Confirmation email sent." };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Could not send the confirmation email." };
+  }
+}
+
 export async function requestPasswordReset(identifier: string, optionalId?: string): Promise<{
   ok: boolean;
   message: string;
@@ -1202,24 +1263,32 @@ export async function requestPasswordReset(identifier: string, optionalId?: stri
   const target = (optionalId?.trim() || identifier || "").trim();
   if (!target) return { ok: false, message: "Please provide your registered email, phone number, or KR8 ID." };
   try {
+    // Supabase recovery EMAIL with a signed link (lands on /reset-password).
     const res = await apiResetRequest(target);
-    return { ok: true, message: res.message };
+    return {
+      ok: true,
+      message:
+        res.message ||
+        "If an account exists for that detail, a password reset link has been sent to its email address.",
+    };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Reset request failed." };
   }
 }
-export async function completePasswordReset(identifier: string, code: string, password: string): Promise<{
-  ok: boolean;
-  message: string;
-}> {
-  if (password.trim().length < 6) return { ok: false, message: "Password must be at least 6 characters." };
-  try {
-    const res = await apiResetComplete(identifier.trim(), code.trim(), password.trim());
-    return { ok: true, message: res.message };
-  } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : "Password reset failed." };
-  }
+
+/**
+ * Set a new password from the recovery link (/reset-password). The user
+ * arrives with a Supabase recovery session — no reset codes involved.
+ */
+export async function setNewPassword(password: string): Promise<{ ok: boolean; error?: string }> {
+  if (password.trim().length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+  const sb = getSupabase();
+  if (!sb) return { ok: false, error: "Password reset is unavailable." };
+  const { error } = await sb.auth.updateUser({ password: password.trim() });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
+
 export function getReferralUrl(id: string): string {
   const origin = typeof window !== "undefined" && window.location.origin
     ? window.location.origin
@@ -4150,6 +4219,18 @@ export function saveClientRequest(data: {
     };
     current.unshift(newReq);
     memoryClientRequests = current;
+
+    // Persist through the project's submit_client_request(...) database
+    // function (server-side). The in-memory/local mirror stays as a display
+    // fallback for the admin inbox.
+    void apiSiteAction({
+      action: "client-request",
+      name: newReq.name,
+      email: newReq.email,
+      phone: newReq.phone,
+      service: newReq.title,
+      message: JSON.stringify(newReq.details || {}),
+    }).catch(() => undefined);
 
     if (typeof window !== "undefined") {
       try {

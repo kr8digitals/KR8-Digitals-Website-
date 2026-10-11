@@ -6,7 +6,7 @@ import {
   signInWithCredentials,
   normalizeEmail,
   requestPasswordReset,
-  completePasswordReset,
+  resendConfirmation,
   submitSuspensionAppeal,
 } from "../data/store";
 import { Card, GradientButton, GhostButton, Pill } from "../components/ui";
@@ -47,11 +47,19 @@ export default function SignInPage() {
     }
   };
 
-  // Password reset state
+  // Password reset state (Supabase recovery link — no codes)
   const [resetTarget, setResetTarget] = useState("");
-  const [resetCode, setResetCode] = useState("");
   const [codeRequested, setCodeRequested] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
+
+  // Email-confirmation gate (email_not_confirmed)
+  const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
+  const handleResendConfirmation = async () => {
+    if (!pendingConfirm) return;
+    setLoading(true);
+    const res = await resendConfirmation(pendingConfirm);
+    setLoading(false);
+    setStatusMsg({ type: res.ok ? "success" : "error", text: res.message });
+  };
 
   const registeredBios = getRegisteredBiometrics();
 
@@ -76,6 +84,10 @@ export default function SignInPage() {
     setLoading(false);
 
     if (!result.ok || !result.account) {
+      if (result.code === "email_not_confirmed") {
+        setPendingConfirm(identifier.trim());
+        return;
+      }
       setStatusMsg({
         type: "error",
         text: result.error || "The email/ID or password is incorrect. Please check and try again.",
@@ -106,6 +118,10 @@ export default function SignInPage() {
     const result = await signInWithCredentials(emailClean, password);
     setLoading(false);
     if (!result.ok || !result.account) {
+      if (result.code === "email_not_confirmed") {
+        setPendingConfirm(emailClean);
+        return;
+      }
       setStatusMsg({ type: "error", text: result.error || "Sign in failed. Please check your details." });
       return;
     }
@@ -148,21 +164,46 @@ export default function SignInPage() {
       setStatusMsg({ type: "error", text: "Please enter your registered Email, KR8 ID, or Phone." });
       return;
     }
-    setResetCode("");
     const res = await requestPasswordReset(target);
     if (res.ok) setCodeRequested(true);
     setStatusMsg({ type: res.ok ? "success" : "error", text: res.message });
   };
 
-  const handleCompleteReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const target = resetTarget.trim() || identifier.trim();
-    const res = await completePasswordReset(target, resetCode, newPassword);
-    setStatusMsg({ type: res.ok ? "success" : "error", text: res.message });
-    if (res.ok) {
-      setTimeout(() => navigate("/signin"), 1200);
-    }
-  };
+  if (pendingConfirm) {
+    return (
+      <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">
+        <div className="mx-auto max-w-lg">
+          <Card className="p-8 text-center">
+            <Pill>Almost there 🎉</Pill>
+            <h1 className="font-display mt-4 text-3xl font-bold text-white">Confirm Your Email</h1>
+            <p className="mt-5 text-2xl font-display font-bold leading-tight text-white">
+              GO TO YOUR EMAIL AND CONFIRM YOUR REGISTRATION
+            </p>
+            <p className="mt-4 text-sm leading-relaxed text-[#b8aecf]">
+              We sent a confirmation link to your registered email address. Open it to activate your KR8 account,
+              then sign in with your KR8 ID, email, or phone.
+            </p>
+            <p className="mt-3 text-xs text-[#8a7ba8]">
+              💡 Tip: check your spam or promotions folder if you don&apos;t see it within a few minutes.
+            </p>
+            {statusMsg && (
+              <p className={`mt-4 text-xs ${statusMsg.type === "success" ? "text-emerald-300" : "text-red-400"}`}>
+                {statusMsg.text}
+              </p>
+            )}
+            <div className="mt-6 space-y-3">
+              <GradientButton onClick={handleResendConfirmation} className="w-full py-3 text-xs font-bold">
+                Resend confirmation email 📩
+              </GradientButton>
+              <GhostButton onClick={() => { setPendingConfirm(null); setStatusMsg(null); }} className="w-full py-3">
+                ← Back to sign in
+              </GhostButton>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">
@@ -469,53 +510,25 @@ export default function SignInPage() {
                   />
                 </div>
                 <GradientButton type="submit" className="w-full py-3 text-xs font-bold">
-                  Request Reset Verification Code 📩
+                  Email Me a Reset Link 📩
                 </GradientButton>
               </form>
 
               {codeRequested && (
-                <form onSubmit={handleCompleteReset} className="mt-5 space-y-3 border-t border-white/10 pt-4">
+                <div className="mt-5 space-y-3 border-t border-white/10 pt-4">
                   <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/60 p-3 text-center">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
                       Check Your Email
                     </p>
                     <p className="text-[10px] text-emerald-300">
-                      A 6-digit verification code was sent to your registered email address. Enter it below with your new password.
+                      A password reset link was sent to your registered email address. Open it to choose a new
+                      password. 💡 Check your spam folder if you don&apos;t see it.
                     </p>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                      Reset Code
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="6-digit code"
-                      className={inputCls}
-                      value={resetCode}
-                      onChange={(e) => setResetCode(e.target.value)}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                      New Password (at least 6 characters)
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      className={inputCls}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                  </div>
-
-                  <GradientButton type="submit" className="w-full py-3 text-xs font-bold">
-                    Save New Password & Sign In →
+                  <GradientButton onClick={() => navigate("/signin")} className="w-full py-3 text-xs font-bold">
+                    Back to Sign In →
                   </GradientButton>
-                </form>
+                </div>
               )}
             </div>
           )}

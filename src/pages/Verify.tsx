@@ -56,12 +56,14 @@ export default function Verify() {
     };
   }, []);
 
-  // Auto-verify when URL includes ?id=... or ?cert=...
-  // Re-runs after the cloud roster sync completes so IDs registered on other
-  // devices verify even if the local roster was stale on first paint.
+  // Auto-verify when URL includes ?id=..., ?cert=... or ?code=... (the
+  // graduation email links to /verify?code=CERT-...). Re-runs after the cloud
+  // roster sync completes so fresh registrations verify even if the local
+  // roster was stale on first paint.
   useEffect(() => {
     const queryId = searchParams.get("id")?.trim() || "";
-    const queryCert = searchParams.get("cert")?.trim() || "";
+    const queryCert =
+      searchParams.get("cert")?.trim() || searchParams.get("code")?.trim() || "";
     if (queryId || queryCert) {
       setId(queryId || queryCert);
       setCertQuery(queryCert);

@@ -166,20 +166,22 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
           .eq("id", String(row.student_id))
           .maybeSingle();
         if (prof) {
-          const extra = ((prof as SubRow).extra as Record<string, unknown>) || {};
+          // Points go through the project's apply_points(...) function; the
+          // counters live in real profile columns.
+          await applyPoints({
+            userId: String((prof as SubRow).id),
+            points: pts,
+            reason: isAssignment ? "assignment_accepted" : "attendance_accepted",
+          });
           await admin()
             .from("profiles")
             .update({
-              points: Number((prof as SubRow).points || 0) + pts,
-              extra: {
-                ...extra,
-                attendanceAccepted: isAssignment
-                  ? Number(extra.attendanceAccepted || 0)
-                  : Number(extra.attendanceAccepted || 0) + 1,
-                submissions: isAssignment
-                  ? Number(extra.submissions || 0) + 1
-                  : Number(extra.submissions || 0),
-              },
+              attendance_accepted: isAssignment
+                ? Number((prof as { attendance_accepted?: number }).attendance_accepted || 0)
+                : Number((prof as { attendance_accepted?: number }).attendance_accepted || 0) + 1,
+              submissions: isAssignment
+                ? Number((prof as { submissions?: number }).submissions || 0) + 1
+                : Number((prof as { submissions?: number }).submissions || 0),
             })
             .eq("id", String((prof as SubRow).id));
         }

@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   getSkills, getSkill, getSkillName, areAllRegistrationsClosed, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
   getStudentCertificates, getStudentNotifications, markNotificationRead, type CertificateRecord, type StudentNotification,
-  registerStudent, registerTribe, recoverId, signInWithCredentials, getStudents, getReferralUrl, updateAccount, changePassword, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
+  registerStudent, registerTribe, recoverId, signInWithCredentials, getStudents, getReferralUrl, updateAccount, changePassword, requestPasswordReset, resendConfirmation, getFounders, countryByCode,
   submitAttendance, getStudentAttendance, getAttendanceTypesSettings, type AttendanceSubmission,
   getStudentConversations,
   type Account, type Skill,
@@ -330,9 +330,10 @@ function AuthPanel({ preSkill, onStudent, onTribe, onSignIn }: {
 }
 
 function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Account) => void }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", phone: "", country: "NG", password: "", skill: preSkill, y: "", m: "", d: "" });
   const [error, setError] = useState("");
-  const [result, setResult] = useState<Account | null>(null);
+  const [result] = useState<Account | null>(null);
 
   if (result) {
     const isFounder = result.type === "founder";
@@ -397,7 +398,8 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
     const dial = countryByCode(form.country)?.dial || "+234";
     const res = await registerStudent({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
     if (!res.ok) { setError(res.error!); return; }
-    setResult(res.student!);
+    // Email confirmation flow — the KR8 ID is issued after confirmation.
+    navigate("/registered", { state: { email: form.email, name: form.name } });
   };
 
   const currentYear = new Date().getFullYear();
@@ -431,13 +433,14 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
           </div>
         </div>
         {error && <p className="rounded-lg bg-red-500/10 px-4 py-2.5 text-sm text-red-300">{error}</p>}
-        <GradientButton onClick={submit} className="w-full">Generate My KR8 ID →</GradientButton>
+        <GradientButton onClick={submit} className="w-full">Generate My ID →</GradientButton>
       </div>
     </Card>
   );
 }
 
-function TribeForm({ onDone }: { onDone: (m: Account) => void }) {
+function TribeForm({ onDone: _onDone }: { onDone: (m: Account) => void }) {
+  const navigate = useNavigate();
   const [form, setForm] = useState({ name: "", email: "", phone: "", country: "NG", password: "" });
   const [error, setError] = useState("");
   const submit = async () => {
@@ -446,7 +449,7 @@ function TribeForm({ onDone }: { onDone: (m: Account) => void }) {
     const dial = countryByCode(form.country)?.dial || "+234";
     const res = await registerTribe({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password });
     if (!res.ok) { setError(res.error!); return; }
-    onDone(res.member!);
+    navigate("/registered", { state: { email: form.email, name: form.name } });
   };
   return (
     <Card>
@@ -469,10 +472,8 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   const [value, setValue] = useState("");
   const [password, setPassword] = useState("");
   const [resetEmail, setResetEmail] = useState("");
-  const [resetId] = useState("");
-  const [resetCode, setResetCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [msg, setMsg] = useState("");
+  const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
   const [bioLoading, setBioLoading] = useState(false);
 
   const registeredBios = getRegisteredBiometrics();
@@ -506,7 +507,14 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
     if (mode === "reset") return;
     if (mode === "id") {
       const result = await signInWithCredentials(value, password);
-      if (!result.ok || !result.account) { setMsg(result.error ?? "The KR8 ID or password is incorrect."); return; }
+      if (!result.ok || !result.account) {
+        if (result.code === "email_not_confirmed") {
+          setPendingConfirm(value.trim());
+          return;
+        }
+        setMsg(result.error ?? "The KR8 ID or password is incorrect.");
+        return;
+      }
       onDone(result.account);
     } else {
       const s = recoverId(value);
@@ -516,19 +524,18 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   };
 
   const requestReset = async () => {
-    const target = (resetEmail || resetId || value).trim();
+    const target = (resetEmail || value).trim();
     if (!target) {
       setMsg("Please enter your registered email, KR8 ID, or phone number.");
       return;
     }
-    setResetCode("");
     const result = await requestPasswordReset(target);
     setMsg(result.message);
   };
 
-  const finishReset = async () => {
-    const target = (resetEmail || resetId || value).trim();
-    const result = await completePasswordReset(target, resetCode, newPassword);
+  const resendConfirm = async () => {
+    if (!pendingConfirm) return;
+    const result = await resendConfirmation(pendingConfirm);
     setMsg(result.message);
   };
 
@@ -547,7 +554,7 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
           ? "Sign in with your Email address or KR8 ID and password, or use device fingerprint."
           : mode === "recover"
           ? "Enter your email or phone to retrieve your ID."
-          : "Verify your email and KR8 ID with a reset code."}
+          : "We'll email you a secure link to set a new password."}
       </p>
 
       {/* Quick Biometric Sign In button if registered on this device */}
@@ -592,20 +599,33 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
       )}
 
       <div className="space-y-4">
-        {mode === "reset" ? <>
+        {pendingConfirm ? <>
+          <div className="rounded-2xl border border-pink-400/40 bg-pink-500/10 p-4 text-xs text-pink-100 shadow-xl">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-pink-300">
+              Almost there — confirm your email
+            </span>
+            <p className="mt-2 text-[15px] font-bold leading-relaxed text-white">
+              GO TO YOUR EMAIL AND CONFIRM YOUR REGISTRATION
+            </p>
+            <p className="mt-2 text-[10px] text-pink-200/80 leading-relaxed">
+              We sent a confirmation link to your registered email address. Open it to activate your KR8 account.
+              💡 Check your spam folder if you don&apos;t see it.
+            </p>
+          </div>
+          <GradientButton onClick={resendConfirm} className="w-full">Resend confirmation email 📩</GradientButton>
+          <button onClick={() => setPendingConfirm(null)} className="w-full text-center text-sm text-pink-400">← Back to sign in</button>
+        </> : mode === "reset" ? <>
           <input className={inputCls} placeholder="Registered email, phone, or KR8 ID" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
-          <GradientButton onClick={requestReset} className="w-full">Generate Reset Code 📩</GradientButton>
+          <GradientButton onClick={requestReset} className="w-full">Email Me a Reset Link 📩</GradientButton>
           <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
               ✓ Check Your Email
             </span>
             <p className="mt-2 text-[10px] text-emerald-300/80 leading-relaxed">
-              A 6-digit verification code has been sent to your registered email address. Enter it below with your new password.
+              If an account exists for that detail, a password reset link was sent to its email address. Open it to
+              choose a new password. 💡 Check your spam folder if you don&apos;t see it.
             </p>
           </div>
-          <input className={inputCls} placeholder="6-digit reset code" value={resetCode} onChange={(e) => setResetCode(e.target.value)} />
-          <input type="password" className={inputCls} placeholder="New password (min 6 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          <GradientButton onClick={finishReset} className="w-full">Set New Password & Sign In ✅</GradientButton>
         </> : <>
           <input className={inputCls} placeholder={mode === "id" ? "e.g. KR8 ID, email, or phone number" : "Email or phone number"} value={value} onChange={(e) => setValue(e.target.value)} />
           {mode === "id" && <input type="password" className={inputCls} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />}

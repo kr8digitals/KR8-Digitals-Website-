@@ -89,9 +89,12 @@ export type ApiNotification = {
 
 export class ApiClientError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Machine-readable code from the server (e.g. "email_not_confirmed"). */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -125,9 +128,9 @@ export async function apiFetch<T = Record<string, unknown>>(
   } catch {
     throw new ApiClientError(0, "Could not reach the KR8 server. Check your connection and try again.");
   }
-  const data = (await res.json().catch(() => ({}))) as T & { ok?: boolean; error?: string };
+  const data = (await res.json().catch(() => ({}))) as T & { ok?: boolean; error?: string; code?: string };
   if (!res.ok || data.ok === false) {
-    throw new ApiClientError(res.status, data.error || `Request failed (${res.status}).`);
+    throw new ApiClientError(res.status, data.error || `Request failed (${res.status}).`, data.code);
   }
   return data;
 }
@@ -142,31 +145,24 @@ export async function apiLogin(identifier: string, password: string) {
   }>("/api/auth/login", { method: "POST", body: { identifier, password }, auth: false });
 }
 
-export async function apiRegister(input: {
-  name: string;
-  email: string;
-  phone: string;
-  country: string;
-  skill: string;
-  dob: string;
-  password: string;
-  accountType?: "student" | "tribe";
-  ref?: string;
-}) {
-  return apiFetch<{
-    ok: boolean;
-    session: { access_token: string; refresh_token: string; expires_at?: number } | null;
-    account: ApiAccount;
-  }>("/api/auth/register", { method: "POST", body: input, auth: false });
+/** Resend the signup confirmation email (resolved server-side; the email
+ *  itself is never returned to the browser). */
+export async function apiResendConfirmation(identifier: string) {
+  return apiFetch<{ ok: boolean; message: string }>("/api/auth/login", {
+    method: "POST",
+    body: { action: "resend-confirmation", identifier },
+    auth: false,
+  });
 }
 
 export async function apiTransition(skill: string) {
-  return apiFetch<{ ok: boolean; account: ApiAccount }>("/api/auth/register", {
+  return apiFetch<{ ok: boolean; account: ApiAccount; kr8Id?: string }>("/api/auth/register", {
     method: "POST",
     body: { action: "transition", skill },
   });
 }
 
+/** Password reset via Supabase recovery email (resetPasswordForEmail). */
 export async function apiResetRequest(identifier: string) {
   return apiFetch<{ ok: boolean; message: string }>("/api/auth/reset", {
     method: "POST",
@@ -175,10 +171,34 @@ export async function apiResetRequest(identifier: string) {
   });
 }
 
-export async function apiResetComplete(identifier: string, code: string, password: string) {
-  return apiFetch<{ ok: boolean; message: string }>("/api/auth/reset", {
+/** /welcome onboarding completion — remembered in the database. */
+export async function apiOnboarding(whatsappDone: boolean) {
+  return apiFetch<{ ok: boolean }>("/api/me", {
     method: "POST",
-    body: { action: "complete", identifier, code, password },
+    body: { action: "onboarding", whatsappDone },
+  });
+}
+
+export async function apiOnboardingStatus() {
+  return apiFetch<{ ok: boolean; status: { whatsapp_done?: boolean; completed_at?: string | null } }>(
+    "/api/me",
+    { method: "POST", body: { action: "onboarding-status" } }
+  );
+}
+
+/** Public helpers: link-click tracking + client service requests. */
+export type SkillSettingItem = {
+  skillKey: string;
+  name: string;
+  regOpen: boolean;
+  available: boolean;
+  whatsappUrl?: string;
+};
+
+export async function apiSiteAction(body: Record<string, unknown>) {
+  return apiFetch<{ ok: boolean; message?: string }>("/api/site", {
+    method: "POST",
+    body,
     auth: false,
   });
 }

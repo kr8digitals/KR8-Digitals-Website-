@@ -1,23 +1,24 @@
 /**
  * /api/admin/students — role-checked student registry.
- *   GET    → full roster (private fields allowed — server checks user_roles)
- *   POST   → admin registration (server-generated KR8 ID, Supabase Auth user)
+ *   GET    → roster via admin_list_students(p_search, p_skill, p_status,
+ *            p_limit, p_offset) + admin_overview() (private fields allowed —
+ *            server checks is_admin/is_staff)
+ *   POST   → admin registration: creates the Supabase Auth user; the
+ *            handle_new_user trigger creates the profile and generates the
+ *            KR8 ID (never generated in the browser or by hand here)
  *   PATCH  → update a student (profile fields, XP, graduation flags, roles…)
- *   DELETE → revoke a registration (keeps history; never drops auth user silently)
+ *   DELETE → revoke a registration (keeps history)
  *
- * Every request is verified against `user_roles` ON THE SERVER. The browser
- * never lists or edits students through the public key.
+ * Every request is verified ON THE SERVER. The browser never lists or edits
+ * students through the public key.
  */
 import {
-  ApiError,
-  COHORT_YEAR,
   accountToRowPatch,
   admin,
-  buildKr8Id,
+  ApiError,
   findProfileByIdentifier,
   getRoles,
   handler,
-  isAdminRole,
   logActivity,
   normalizeEmail,
   normalizePhone,
@@ -25,7 +26,6 @@ import {
   readBody,
   requireAdmin,
   send,
-  skillSuffix,
   toLegacyAccount,
   type ApiRequest,
   type ApiResponse,
@@ -42,37 +42,55 @@ function avatarFor(name: string, id: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg + id)}`;
 }
 
-async function loadRoster() {
-  const [{ data: profiles }, { data: certs }, { data: notifs }, { data: roles }] = await Promise.all([
-    admin().from("profiles").select("*").order("joined", { ascending: true }),
-    admin().from("certificates").select("*"),
-    admin().from("notifications").select("*").order("created_at", { ascending: false }),
-    admin().from("user_roles").select("user_id, role, permissions"),
+async function profileById(ref: string): Promise<Record<string, unknown> | null> {
+  const raw = (ref || "").trim();
+  if (!raw) return null;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw);
+  if (isUuid) {
+    const { data } = await admin().from("profiles").select("*").eq("id", raw).maybeSingle();
+    if (data) return data as Record<string, unknown>;
+  }
+  try {
+    const { data } = await admin().rpc("get_profile_by_kr8_id", { lookup_id: raw });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row && (row as Record<string, unknown>).id) return row as Record<string, unknown>;
+  } catch {
+    /* fall through */
+  }
+  const { data } = await admin()
+    .from("profiles")
+    .select("*")
+    .ilike("kr8_id", raw.replace(/[^A-Za-z0-9]/g, "%"))
+    .limit(5);
+  const rows = (data || []) as Record<string, unknown>[];
+  return rows[0] || null;
+}
+
+async function enrich(rows: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
+  const ids = rows.map((r) => String(r.id)).filter(Boolean);
+  const [{ data: certs }, { data: notifs }, { data: roles }] = await Promise.all([
+    admin().from("certificates").select("*").in("student_id", ids),
+    admin().from("notifications").select("*").in("student_id", ids).order("created_at", { ascending: false }),
+    admin().from("user_roles").select("user_id, role, permissions, title").in("user_id", ids),
   ]);
+  const by = <T,>(list: T[] | null, key: (t: T) => string) => {
+    const m = new Map<string, T[]>();
+    for (const item of list || []) {
+      const k = key(item);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(item);
+    }
+    return m;
+  };
+  const certsBy = by(certs as Record<string, unknown>[] | null, (c) => String(c.student_id));
+  const notifsBy = by(notifs as Record<string, unknown>[] | null, (n) => String(n.student_id));
+  const rolesBy = by(roles as { user_id: string; role: string; permissions?: string[]; title?: string }[] | null, (r) => String(r.user_id));
 
-  const certsByUser = new Map<string, Record<string, unknown>[]>();
-  for (const c of (certs || []) as Record<string, unknown>[]) {
-    const key = String(c.student_id);
-    if (!certsByUser.has(key)) certsByUser.set(key, []);
-    certsByUser.get(key)!.push(c);
-  }
-  const notifsByUser = new Map<string, Record<string, unknown>[]>();
-  for (const n of (notifs || []) as Record<string, unknown>[]) {
-    const key = String(n.student_id);
-    if (!notifsByUser.has(key)) notifsByUser.set(key, []);
-    notifsByUser.get(key)!.push(n);
-  }
-  const rolesByUser = new Map<string, RoleRow[]>();
-  for (const r of (roles || []) as { user_id: string; role: string; permissions?: string[] }[]) {
-    if (!rolesByUser.has(r.user_id)) rolesByUser.set(r.user_id, []);
-    rolesByUser.get(r.user_id)!.push({ role: r.role, permissions: r.permissions });
-  }
-
-  return ((profiles || []) as Record<string, unknown>[]).map((row) =>
+  return rows.map((row) =>
     toLegacyAccount(row, {
-      certificates: certsByUser.get(String(row.id)) || [],
-      notifications: notifsByUser.get(String(row.id)) || [],
-      roles: rolesByUser.get(String(row.id)) || [],
+      certificates: certsBy.get(String(row.id)) || [],
+      notifications: notifsBy.get(String(row.id)) || [],
+      roles: ((rolesBy.get(String(row.id)) || []) as RoleRow[]) || [],
       includePrivate: true,
     })
   );
@@ -82,13 +100,61 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
   const ctx = await requireAdmin(req);
 
   if (req.method === "GET") {
-    const accounts = await loadRoster();
-    send(res, 200, { ok: true, accounts });
+    // Preferred path: the project's own admin_list_students(...) +
+    // admin_overview() functions. Falls back to a direct service-role read if
+    // the functions are unavailable so the tab never blanks out.
+    const search = queryStr(req, "search") || queryStr(req, "q") || "";
+    const skill = queryStr(req, "skill") || "";
+    const status = queryStr(req, "status") || "";
+    const limit = Math.min(Number(queryStr(req, "limit") || 500) || 500, 1000);
+    const offset = Math.max(Number(queryStr(req, "offset") || 0) || 0, 0);
+
+    let rows: Record<string, unknown>[] | null = null;
+    try {
+      const { data, error } = await admin().rpc("admin_list_students", {
+        p_search: search || null,
+        p_skill: skill || null,
+        p_status: status || null,
+        p_limit: limit,
+        p_offset: offset,
+      });
+      if (!error && data) rows = data as Record<string, unknown>[];
+    } catch {
+      /* fall back */
+    }
+
+    if (!rows) {
+      const { data } = await admin()
+        .from("profiles")
+        .select("*")
+        .order("joined", { ascending: true })
+        .range(offset, offset + limit - 1);
+      rows = (data || []) as Record<string, unknown>[];
+    }
+
+    // admin_list_students may return either profile rows or nested rows.
+    const profileRows = rows.map((r) =>
+      r && typeof r === "object" && (r.profile || r.profiles)
+        ? ((r.profile || r.profiles) as Record<string, unknown>)
+        : r
+    );
+    const accounts = await enrich(profileRows.filter((r) => r && r.id));
+
+    let overview: Record<string, unknown> | null = null;
+    try {
+      const { data } = await admin().rpc("admin_overview");
+      overview = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+    } catch {
+      /* optional */
+    }
+
+    send(res, 200, { ok: true, accounts, overview });
     return;
   }
 
   if (req.method === "POST") {
-    // Admin-initiated registration.
+    // Admin-initiated registration. The KR8 ID is generated by the
+    // handle_new_user trigger — never here and never in the browser.
     const body = await readBody(req);
     const name = String(body.name || "").trim();
     const email = normalizeEmail(String(body.email || ""));
@@ -97,72 +163,35 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     const country = String(body.country || "NG");
     const dob = String(body.dob || "");
     const password = String(body.password || "") || `KR8-${Math.random().toString(36).slice(2, 10)}`;
-    if (!name || !email || !phone || !skill) throw new ApiError(400, "Name, email, phone and skill are required.");
+    if (!name || !email || !phone) throw new ApiError(400, "Name, email and phone are required.");
     if (await findProfileByIdentifier(email)) throw new ApiError(409, "An account with this email already exists.");
-
-    const { data: skillRow } = await admin().from("skill_settings").select("*").eq("skill", skill).maybeSingle();
-    const suffix = skillSuffix(skill, (skillRow as { suffix?: string } | null)?.suffix || null);
-
-    let kr8Id = "";
-    let serial = 1;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const { data: serialRow } = await admin().rpc("next_kr8_serial", { p_skill: skill });
-      serial = Number(serialRow || 1);
-      kr8Id = buildKr8Id(name, skill, serial, suffix);
-      const { data: clash } = await admin().from("profiles").select("id").eq("kr8_id", kr8Id).maybeSingle();
-      if (!clash) break;
-      kr8Id = "";
-    }
-    if (!kr8Id) throw new ApiError(500, "Could not allocate a unique KR8 ID.");
 
     const { data: created, error: createErr } = await admin().auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { name, kr8_id: kr8Id },
+      user_metadata: { name, skill, phone, country, dob },
     });
     if (createErr || !created?.user) throw new ApiError(400, createErr?.message || "Could not create the student account.");
 
-    await admin().from("profiles").insert({
-      id: created.user.id,
-      kr8_id: kr8Id,
-      kr8_id_normalized: kr8Id.replace(/[\s-]/g, "").toUpperCase(),
-      name,
-      email,
-      phone,
-      phone_normalized: phone,
-      country,
-      dob: dob || null,
-      skill,
-      avatar: avatarFor(name, kr8Id),
-      points: 0,
-      referrals: 0,
-      graduated: false,
-      joined: Date.now(),
-      extra: {
-        type: "student",
-        year: COHORT_YEAR,
-        serial,
-        vip: false,
-        attendanceAccepted: 0,
-        submissions: 0,
-        skills: [skill],
-        graduatedSkills: [],
-        previousIds: [],
-        milestones: [`Enrolled in ${String((skillRow as { name?: string } | null)?.name || skill)}`],
-        multiSkillCount: 1,
-        portfolio: [],
-        following: [],
-        followers: [],
-        messagePrivacy: "Anyone",
-        isPlaceholder: false,
-      },
-    });
+    // handle_new_user already created the profile; read it back for the ID.
+    let profile: Record<string, unknown> | null = null;
+    for (let i = 0; i < 6 && !profile; i++) {
+      const { data } = await admin().from("profiles").select("*").eq("id", created.user.id).maybeSingle();
+      profile = (data as Record<string, unknown>) || null;
+      if (!profile) await new Promise((r) => setTimeout(r, 250));
+    }
+    const kr8Id = String(profile?.kr8_id || "");
+    if (profile && !profile.avatar) {
+      await admin().from("profiles").update({ avatar: avatarFor(name, kr8Id) }).eq("id", created.user.id);
+      profile.avatar = avatarFor(name, kr8Id);
+    }
+
     await admin()
       .from("enrollments")
       .insert({ student_id: created.user.id, kr8_id: kr8Id, skill, status: "active" })
       .catch(() => undefined);
-    await logActivity({ kind: "registration", name, skill: String((skillRow as { name?: string } | null)?.name || skill), customAction: "joined the Academy (admin registration)" });
+    await logActivity({ kind: "registration", name, skill, customAction: "joined the Academy (admin registration)" });
 
     send(res, 200, { ok: true, kr8Id, temporaryPassword: password });
     return;
@@ -174,20 +203,9 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     const kr8Id = String(body.id || "");
     if (!userId && !kr8Id) throw new ApiError(400, "Missing student reference.");
 
-    let targetId = userId;
-    if (!targetId) {
-      const { data: row } = await admin()
-        .from("profiles")
-        .select("id")
-        .eq("kr8_id_normalized", kr8Id.replace(/[\s-]/g, "").toUpperCase())
-        .maybeSingle();
-      targetId = String((row as { id?: string } | null)?.id || "");
-    }
-    if (!targetId) throw new ApiError(404, "Student not found.");
-
-    const { data: row } = await admin().from("profiles").select("*").eq("id", targetId).maybeSingle();
+    const row = (await profileById(userId || kr8Id)) || null;
     if (!row) throw new ApiError(404, "Student not found.");
-    const existingExtra = ((row as Record<string, unknown>).extra as Record<string, unknown>) || {};
+    const targetId = String(row.id);
 
     const patchInput = (body.patch && typeof body.patch === "object" ? body.patch : body) as Record<string, unknown>;
     const safe: Record<string, unknown> = { ...patchInput };
@@ -196,17 +214,20 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     delete safe.notifications;
     delete safe.password;
     delete safe.resetCode;
+    delete safe.userId;
 
-    const patch = accountToRowPatch(safe, existingExtra);
-    await admin().from("profiles").update(patch).eq("id", targetId);
+    const patch = accountToRowPatch(safe);
+    if (Object.keys(patch).length > 0) {
+      await admin().from("profiles").update(patch).eq("id", targetId);
+    }
 
     // Optional role updates (user_roles).
     if (body.grantRole || body.revokeRole) {
-      if (!isAdminRole(ctx.roles) && !ctx.isAdmin) throw new ApiError(403, "Only full admins can change roles.");
+      if (!ctx.isAdmin) throw new ApiError(403, "Only full admins can change roles.");
       if (body.grantRole) {
         await admin()
           .from("user_roles")
-          .upsert({ user_id: targetId, role: String(body.grantRole), permissions: body.permissions || [], granted_by: ctx.user.id });
+          .upsert({ user_id: targetId, role: String(body.grantRole), permissions: body.permissions || [], granted_by: ctx.user.id, title: body.title || null });
       }
       if (body.revokeRole) {
         await admin()
@@ -217,9 +238,9 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       }
     }
 
-    const accounts = await loadRoster();
-    const account = accounts.find((a) => a.id === (row as Record<string, unknown>).kr8_id);
-    send(res, 200, { ok: true, account });
+    const fresh = await profileById(targetId);
+    const accounts = fresh ? await enrich([fresh]) : [];
+    send(res, 200, { ok: true, account: accounts[0] || null });
     return;
   }
 
@@ -230,28 +251,13 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
     let userId = isUuid(targetId) ? targetId : "";
     if (!userId) {
-      // Accept either the profiles uuid or the human KR8 ID in any field.
-      const ref = (isUuid(targetId) ? targetId : kr8Id || targetId).replace(/[\s-]/g, "").toUpperCase();
-      const { data: row } = await admin()
-        .from("profiles")
-        .select("id")
-        .eq("kr8_id_normalized", ref)
-        .maybeSingle();
-      userId = String((row as { id?: string } | null)?.id || "");
+      const row = await profileById(kr8Id || targetId);
+      userId = String(row?.id || "");
     }
     if (!userId) throw new ApiError(400, "Missing student reference.");
     if (userId === ctx.user.id) throw new ApiError(400, "You cannot revoke your own registration.");
 
-    const { data: row } = await admin().from("profiles").select("*").eq("id", userId).maybeSingle();
-    if (!row) throw new ApiError(404, "Student not found.");
-    const extra = ((row as Record<string, unknown>).extra as Record<string, unknown>) || {};
-
-    // Revoke = restricted + unenrolled. Data is preserved; the person can no
-    // longer sign in (auth user is removed) and their KR8 ID is kept on record.
-    await admin()
-      .from("profiles")
-      .update({ extra: { ...extra, restricted: true, revokedAt: Date.now() } })
-      .eq("id", userId);
+    // Revoke = unenrolled + auth user removed. Their KR8 ID is kept on record.
     await admin()
       .from("enrollments")
       .update({ status: "revoked" })

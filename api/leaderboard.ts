@@ -1,6 +1,6 @@
 /**
- * GET /api/leaderboard — public leaderboard via the `get_unified_leaderboard`
- * database function (security definer; ranks profiles by points).
+ * GET /api/leaderboard — public leaderboard via the existing `get_leaderboard`
+ * database function (ranks profiles by points).
  * Returns ONLY safe fields — never phone / email / DOB / password.
  */
 import { admin, handler, queryStr, send, type ApiRequest, type ApiResponse } from "../server/lib";
@@ -11,15 +11,15 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     return;
   }
   const limit = Math.min(Number(queryStr(req, "limit") || 50) || 50, 200);
-  const { data, error } = await admin().rpc("get_unified_leaderboard", { p_limit: limit });
+  const { data, error } = await admin().rpc("get_leaderboard", { limit_n: limit });
   if (error) {
     send(res, 200, { ok: true, rows: [] });
     return;
   }
-  const rows = ((data || []) as Record<string, unknown>[]).map((r) => ({
-    id: r.kr8_id,
+  const rows = ((data || []) as Record<string, unknown>[]).map((r, i) => ({
+    id: r.kr8_id ?? r.id ?? "",
     name: r.name,
-    avatar: r.avatar,
+    avatar: r.avatar || "",
     skill: r.skill || "",
     skills: r.skills || (r.skill ? [r.skill] : []),
     points: Number(r.points || 0),
@@ -27,7 +27,7 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     certTier: r.cert_tier || (r.graduated ? "Completion" : null),
     multiSkillCount: r.multi_skill_count || undefined,
     isPlaceholder: !!r.is_placeholder,
-    rank: r.rank,
+    rank: r.rank ?? i + 1,
   }));
   send(res, 200, { ok: true, rows });
 });

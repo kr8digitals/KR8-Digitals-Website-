@@ -111,6 +111,34 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       return;
     }
 
+    if (action === "onboarding") {
+      // /welcome completion is remembered in the database (never the browser).
+      const whatsappDone = !!body.whatsappDone;
+      await admin()
+        .from("onboarding_status")
+        .upsert({
+          user_id: user.id,
+          whatsapp_done: whatsappDone,
+          completed_at: new Date().toISOString(),
+        })
+        .catch(() => undefined);
+      send(res, 200, { ok: true });
+      return;
+    }
+
+    if (action === "onboarding-status") {
+      const { data } = await admin()
+        .from("onboarding_status")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      send(res, 200, {
+        ok: true,
+        status: (data as Record<string, unknown>) || { whatsapp_done: false, completed_at: null },
+      });
+      return;
+    }
+
     throw new ApiError(400, "Unknown action.");
   }
 

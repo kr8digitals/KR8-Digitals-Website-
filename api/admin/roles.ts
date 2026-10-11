@@ -15,12 +15,22 @@ async function resolveUserId(body: Record<string, unknown>): Promise<string> {
   if (userId) return userId;
   const kr8Id = String(body.kr8Id || body.id || "");
   if (!kr8Id) throw new ApiError(400, "Missing user reference.");
-  const { data } = await admin()
-    .from("profiles")
-    .select("id")
-    .eq("kr8_id_normalized", normalizeIdentity(kr8Id))
-    .maybeSingle();
-  const id = String((data as { id?: string } | null)?.id || "");
+  let id = "";
+  try {
+    const { data } = await admin().rpc("get_profile_by_kr8_id", { lookup_id: kr8Id });
+    const row = Array.isArray(data) ? data[0] : data;
+    id = String((row as { id?: string } | null)?.id || "");
+  } catch {
+    /* fall through */
+  }
+  if (!id) {
+    const { data } = await admin()
+      .from("profiles")
+      .select("id")
+      .ilike("kr8_id", kr8Id.replace(/[^A-Za-z0-9]/g, "%"))
+      .maybeSingle();
+    id = String((data as { id?: string } | null)?.id || "");
+  }
   if (!id) throw new ApiError(404, "User not found.");
   return id;
 }

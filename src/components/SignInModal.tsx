@@ -3,13 +3,14 @@ import { useAuth } from "../context/AuthContext";
 import {
   signInWithCredentials,
   requestPasswordReset,
-  completePasswordReset,
+  resendConfirmation,
   submitSuspensionAppeal,
 } from "../data/store";
 import {
   authenticateWithBiometrics,
 } from "../utils/biometrics";
 import Icon from "./Icon";
+import { Pill } from "./ui";
 
 interface SignInModalProps {
   isOpen: boolean;
@@ -26,11 +27,12 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
   const [statusMsg, setStatusMsg] = useState<{ type: "error" | "success" | "info"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Reset Password State
+  // Reset Password State (Supabase recovery link — no codes)
   const [resetIdentifier, setResetIdentifier] = useState("");
-  const [resetCode, setResetCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [resetStep, setResetStep] = useState<"request" | "verify">("request");
+  const [resetStep, setResetStep] = useState<"request" | "sent">("request");
+
+  // Email-confirmation gate (email_not_confirmed)
+  const [pendingConfirm, setPendingConfirm] = useState<string | null>(null);
 
   // Biometrics
   const [bioLoading, setBioLoading] = useState(false);
@@ -76,6 +78,11 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
     setLoading(false);
 
     if (!result.ok || !result.account) {
+      if (result.code === "email_not_confirmed") {
+        // Friendly confirmation page — never a raw auth error.
+        setPendingConfirm(identifier.trim());
+        return;
+      }
       setStatusMsg({ type: "error", text: result.error || "Invalid ID or password." });
       return;
     }
@@ -153,39 +160,76 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
       return;
     }
 
-    setResetCode("");
-    setResetStep("verify");
+    setResetStep("sent");
     setStatusMsg({
       type: "success",
-      text: `A 6-digit verification code has been sent to your registered email address.`,
+      text: `If an account exists for that detail, a password reset link has been sent to its email address.`,
     });
   };
 
-  const handleCompleteReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStatusMsg(null);
-    if (!resetCode.trim()) {
-      setStatusMsg({ type: "error", text: "Please provide the 6-digit verification code." });
-      return;
-    }
-    if (newPassword.trim().length < 4) {
-      setStatusMsg({ type: "error", text: "Password must be at least 4 characters long." });
-      return;
-    }
-
+  const handleResendConfirmation = async () => {
+    if (!pendingConfirm) return;
     setLoading(true);
-    const res = await completePasswordReset(resetIdentifier, resetCode, newPassword);
+    const res = await resendConfirmation(pendingConfirm);
     setLoading(false);
-
-    if (!res.ok) {
-      setStatusMsg({ type: "error", text: res.message });
-      return;
-    }
-
-    addNotification(`Password updated! You can now sign in with your new password.`);
-    setMode("signin");
-    setResetStep("request");
+    setStatusMsg(
+      res.ok
+        ? { type: "success", text: res.message }
+        : { type: "error", text: res.message }
+    );
   };
+
+  if (pendingConfirm) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md overflow-y-auto"
+        onClick={onClose}
+      >
+        <div
+          className="relative w-full max-w-md rounded-3xl border border-white/15 bg-[#170a2a] p-6 sm:p-8 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between border-b border-white/10 pb-4">
+            <div>
+              <Pill>Almost there 🎉</Pill>
+              <h3 className="font-display mt-3 text-2xl font-bold text-white">Confirm Your Email</h3>
+            </div>
+            <button onClick={onClose} className="text-[#8a7ba8] hover:text-white text-xl leading-none">✕</button>
+          </div>
+          <p className="mt-5 text-3xl font-display font-bold leading-tight text-white">
+            GO TO YOUR EMAIL AND CONFIRM YOUR REGISTRATION
+          </p>
+          <p className="mt-4 text-sm leading-relaxed text-[#b8aecf]">
+            We sent a confirmation link to your registered email address. Open it to activate your KR8 account —
+            then sign in with your KR8 ID, email, or phone.
+          </p>
+          <p className="mt-3 text-xs text-[#8a7ba8]">
+            💡 Tip: check your spam or promotions folder if you don&apos;t see it within a few minutes.
+          </p>
+          {statusMsg && (
+            <div className={`mt-4 rounded-xl px-4 py-2.5 text-xs ${statusMsg.type === "success" ? "bg-emerald-500/15 text-emerald-300" : statusMsg.type === "error" ? "bg-red-500/15 text-red-300" : "bg-white/10 text-[#cabfe0]"}`}>
+              {statusMsg.text}
+            </div>
+          )}
+          <div className="mt-6 space-y-3">
+            <button
+              onClick={handleResendConfirmation}
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-pink py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading ? "Sending..." : "Resend confirmation email 📩"}
+            </button>
+            <button
+              onClick={() => { setPendingConfirm(null); setStatusMsg(null); }}
+              className="w-full rounded-xl border border-white/15 py-3 text-xs font-semibold text-[#cabfe0] hover:text-white"
+            >
+              ← Back to sign in
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -376,7 +420,7 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
             {resetStep === "request" ? (
               <form onSubmit={handleRequestResetCode} className="space-y-4">
                 <p className="text-xs text-[#b8aecf]">
-                  Enter your registered email address, KR8 ID, or phone number. We'll generate a 6-digit verification code to set your new password.
+                  Enter your registered email address, KR8 ID, or phone number. We'll email you a secure link to set a new password.
                 </p>
 
                 <div>
@@ -398,64 +442,32 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
                   disabled={loading}
                   className="w-full rounded-xl bg-gradient-pink py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                 >
-                  {loading ? "Sending..." : "Email Me a Verification Code 📩"}
+                  {loading ? "Sending..." : "Email Me a Reset Link 📩"}
                 </button>
               </form>
             ) : (
-              <form onSubmit={handleCompleteReset} className="space-y-4">
+              <div className="space-y-4">
                 <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                    ✓ Code Sent To Your Email
+                    ✓ Reset Link Sent To Your Email
                   </span>
                   <p className="mt-2 text-[10px] text-emerald-300/80 leading-relaxed">
-                    Enter the 6-digit verification code from your registered email address below, then choose a new password.
+                    Open the link in your email to choose a new password. The link can only be used once.
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                    6-Digit Verification Code *
-                  </label>
-                  <input
-                    type="text"
-                    value={resetCode}
-                    onChange={(e) => setResetCode(e.target.value)}
-                    placeholder="6-digit code from your email"
-                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs font-mono font-bold text-white focus:border-pink-500 focus:outline-none"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
-                    Create New Password *
-                  </label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 4 characters"
-                    className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs text-white focus:border-pink-500 focus:outline-none"
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-xl bg-gradient-pink py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {loading ? "Updating..." : "Save New Password & Sign In ✅"}
-                </button>
+                <p className="text-xs text-[#8a7ba8]">
+                  💡 Tip: check your spam or promotions folder if you don&apos;t see the email within a few minutes.
+                </p>
 
                 <button
                   type="button"
                   onClick={() => setResetStep("request")}
                   className="w-full text-center text-xs text-[#8a7ba8] hover:text-white"
                 >
-                  ← Request a different code
+                  ← Request a different link
                 </button>
-              </form>
+              </div>
             )}
 
             <div className="border-t border-white/10 pt-3 text-center">

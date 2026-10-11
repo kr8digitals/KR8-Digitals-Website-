@@ -201,17 +201,10 @@ export default function Tribe() {
       return;
     }
 
-    signIn(res.member!);
-    const isFounder = res.member?.type === "founder";
-    const isCoFounder = res.member?.type === "co-founder";
-
-    addNotification(
-      isFounder
-        ? "Welcome Founder & CEO! Executive identity confirmed."
-        : isCoFounder
-        ? "Welcome Co-Founder! Executive identity confirmed."
-        : "Welcome to the KR8 Tribe! Your membership is active."
-    );
+    // Email confirmation flow — /registered explains the next step.
+    navigate("/registered", {
+      state: { email: form.email, name: form.name },
+    });
   };
 
   const copyReferral = () => {

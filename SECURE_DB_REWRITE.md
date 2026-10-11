@@ -1,151 +1,164 @@
-# KR8 Digitals — Secure Supabase Data-Layer Rewrite
+# KR8 Digitals — Secure Supabase Integration (Live DB `koslvogrrahgaxfbifsn`)
 
-**Branch:** `arena/83222011-kr8-digitals-website` (see note below)
-**Base:** `a0cb7d1` (main)
-**Date:** 2026-10-11
+Deliverables for the rewrite described in the brief. Everything below is implemented
+in this repository on the branch **`arena/83222011-kr8-digitals-website`** (the platform
+forces this branch for the session; it is pushed and ready for a Vercel preview — the
+brief's suggested `secure-db-connect` branch name was not possible from this environment).
 
-## Branch note
+> The previous brief's reference to a private `kr8-digitals-enhancer` repo was retired:
+> **every rule comes from the brief itself (taken from the live DB)** and is enforced
+> here without that repo.
 
-This session is pinned by the platform to the branch `arena/83222011-kr8-digitals-website`
-(the suggested name `secure-db-connect` could not be used — Arena tracks the session by
-its own branch name). All work was committed there and **pushed only to that branch**;
-`main` is untouched. Open the PR **from** `arena/83222011-kr8-digitals-website` and review
-the Vercel preview before merging.
+---
 
-Reference repo `kr8digitals/kr8-digitals-enhancer` (@ `975564c…`) returned **403** for both
-`git clone` and the GitHub API (private repo), so the logic was re-derived from the brief
-plus this repo's existing `src/data/store.ts` semantics (KR8 ID format, progression rules,
-flows).
+## 1. Database access model
 
-## What changed (architecture)
+- **Service key exists only in serverless functions** (`api/**` + `server/lib.ts`).
+  No service key in any `VITE_*` variable, no key embedded in client code, nothing
+  sensitive in the repo.
+- All writes go through **server endpoints** that re-check authorization with the DB's
+  own permission RPCs (`is_admin`, `is_staff`, `has_role`, `has_permission`, `can_manage`)
+  before touching anything with the service key.
+- The **founder email** `kr8digitals01@gmail.com` holds role `founder` in
+  `user_roles(user_id, role, title, permissions)` — no code path hard-codes access;
+  every admin surface is gated through the DB role helpers.
 
-| Layer | Before | After |
+### Env var names (set these in Vercel; values live only in Vercel)
+
+| Server (never `VITE_`) | Client (`VITE_`) | Other |
 |---|---|---|
-| Credentials | plaintext `password` column + `localStorage` sessions | **Supabase Auth** email+password only (email confirmation off / auto-confirmed) |
-| Sign-in identifier | client-side account scan | KR8 ID / email / phone resolved **on the server** → `signInWithPassword` |
-| Sessions | `localStorage` `kr8_*` | Supabase session (access/refresh token) via `@supabase/supabase-js`; profile from `GET /api/me` |
-| Data access | browser reads of accounts/settings | serverless `/api/*` (Vercel functions); service-role key server-only; admin actions gated by `user_roles` |
-| Admin gates | hard-coded `KR8@Atd2026` / `MAIN_ADMIN_PASSWORD` in the bundle | role-based (`user_roles`), verified server-side on every call |
-| LiveKit tokens | localStorage / env token | minted server-side `POST /api/livekit` (`LIVEKIT_API_KEY`/`SECRET` never in browser) |
-| Emails | — | Resend (`RESEND_API_KEY`, `RESEND_FROM`) — graduation email only; registration sends none |
-| Reset codes | in-app + "universal testing code" | hashed codes emailed to the account's own email; no autofill, no backdoor |
+| `SUPABASE_URL` | `VITE_SUPABASE_URL` | `LIVEKIT_URL` |
+| `SUPABASE_SERVICE_ROLE_KEY` | `VITE_SUPABASE_ANON_KEY` | `LIVEKIT_API_KEY` |
+| `SUPABASE_PUBLISHABLE_KEY` | `VITE_SUPABASE_PUBLISHABLE_KEY` | `LIVEKIT_API_SECRET` |
+| `RESEND_API_KEY` | `VITE_SUPABASE_PROJECT_ID` | `VITE_LIVEKIT_URL` |
+| `RESEND_FROM` | `VITE_SITE_URL` | `SITE_URL` (server) |
 
-UI/design is unchanged; flows that moved server-side (registration → bold KR8 ID success
-page → WhatsApp group join page → Done/Skip → profile) were implemented in the existing
-components (`RegisterPage.tsx`).
+---
 
-## Migrations (apply in order, SQL editor — no data/tables dropped)
+## 2. Registration & email confirmation flow (confirmation always required)
 
-| File | What it does |
+1. **`/academy` / `/register` — "Generate my ID"** calls
+   `supabase.auth.signUp({ email, password, options: { data: { name, skill, phone, country, dob }, emailRedirectTo: `${SITE_URL}/welcome` } })`.
+   The **KR8 ID is never generated in the browser** — the DB trigger `handle_new_user`
+   creates the profile + KR8 ID (`KR8` + 7–9 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`)
+   from the trigger payload.
+2. **`/registered`** (new page): big celebration of the student's email and a
+   large bold **"GO TO YOUR EMAIL AND CONFIRM YOUR REGISTRATION"** message, a spam-folder
+   tip, **"Resend confirmation email"** (`supabase.auth.resend({type:"signup", email})`)
+   and a **"Change email"** option. **No KR8 ID is shown here** (it does not exist
+   until sign-in).
+3. **`/welcome`** (new page — landing for the confirmation email link): congratulates the
+   student, shows their KR8 ID (`profiles.kr8_id`) with a **Copy ID** button, and a bold
+   **JOIN … WHATSAPP** button that opens `skill_settings.whatsapp_url` for the student's
+   `profiles.skill` in a new tab. "Done" / "Skip for now" go to the dashboard and save
+   completion in the **`onboarding_status` table** (never the browser).
+4. **Sign-in before confirming** (`email_not_confirmed`) shows a friendly
+   **"GO TO YOUR EMAIL AND CONFIRM YOUR REGISTRATION"** panel with a resend button —
+   not a raw error.
+5. **Invalid / expired email link** ("Email link is invalid or has expired") shows a
+   friendly explanation with a **Resend** option (`/registered`, `/welcome`,
+   `/reset-password` all handle it).
+6. **`/migrations/001_onboarding.sql`** — creates `onboarding_status(user_id uuid pk →
+   auth.users, whatsapp_done boolean, completed_at timestamptz)` + own-row RLS.
+   (Migration is written to be safe to run more than once.)
+
+## 3. Sign-in (existing students untouched)
+
+- Login accepts **KR8 ID / email / phone**. The identifier is **resolved on the server**
+  (`POST /api/auth/login`): `get_profile_by_kr8_id(upper(id))`, then `lower(email)`, then
+  `phone_normalized` → returns the canonical email → `supabase.auth.signInWithPassword`.
+  **Emails and phone numbers are never returned to the browser by lookup/public
+  surfaces** (leaderboard, `get_profile_by_kr8_id`, certificate verify).
+- The ~77 existing students **keep their current passwords** — no account was created,
+  imported, or migrated.
+- **Password reset** is link-based only: `supabase.auth.resetPasswordForEmail` with
+  `emailRedirectTo: ${SITE_URL}/reset-password`. The old autofill-reset-code flow is
+  **deleted everywhere** (modal, sign-in page, academy panel, store).
+- Registration closed per skill: the trigger error beginning `REGISTRATION_CLOSED:` is
+  shown as a friendly "Registration for this skill is closed" message.
+
+## 4. Server endpoints → live tables / RPCs (call only — never recreated)
+
+| Endpoint | Tables / RPCs |
 |---|---|
-| `migrations/0001_lockdown_legacy_policies.sql` | Drops the public/anon policies from the legacy `supabase_schema.sql` era (write access from the browser) |
-| `migrations/0002_core_tables.sql` | Core tables (below) + `kr8_id_normalized`/`phone_normalized`/`extra jsonb` columns + indexes + backfill |
-| `migrations/0003_live_tables.sql` | `live_rooms`, `room_admissions`, `room_messages`, `recordings` |
-| `migrations/0004_functions.sql` | RPCs `get_unified_leaderboard(p_limit)`, `next_kr8_serial(p_skill)` |
-| `migrations/0005_rls_policies.sql` | RLS: student reads own `profiles` row only; tables locked to service-role (server functions) |
-| `migrations/0006_social_mindset.sql` | Social + mindset + `password_reset_codes` tables |
+| `POST /api/auth/login` | `get_profile_by_kr8_id`, `profiles`, `auth.signInWithPassword` |
+| `POST /api/auth/register` | transition → `profiles.skill` (+ reset of `graduated`/`cert_tier`/`cert_recognition` on new skill); signUp path untouched |
+| `POST /api/auth/reset` | `auth.resetPasswordForEmail` |
+| `GET /api/leaderboard` | `get_leaderboard(limit_n)` |
+| `GET /api/verify` | `verify_certificate_public(cert_code)`, `get_profile_by_kr8_id` (safe fields only) |
+| `GET /api/site` | `public_counts()`, `get_recent_activity(limit_n)`, `skill_settings(skill_key,name,reg_open,available,whatsapp_url)`, `testimonials` |
+| `POST /api/site` | `increment_link_click(p_slug)` (whatsapp clicks on `/welcome`), `submit_client_request(p_name,p_email,p_phone,p_service,p_message)` |
+| `POST /api/me` | `profiles` (own row), `onboarding_status` |
+| `POST /api/admin/students` | `admin_list_students(p_search,p_skill,p_status,p_limit,p_offset)`, `admin_overview()`, `get_profile_by_kr8_id`, `auth.admin.createUser({ email_confirm: true, user_metadata })` → `handle_new_user` trigger creates the profile |
+| `POST /api/admin/graduation` | `certificates` (exact insert), `profiles`, `enrollments`, `notify_certificate` trigger (in-app notification), Resend email + `email_logs`, `get_profile_by_kr8_id`, withdraw/resend actions |
+| `POST /api/attendance` | `attendance_submissions`, `apply_points(...)`, `user_points_log` |
+| `POST /api/admin/*` (content, roles, skills) | `site_content`, `site_settings`, `announcements`, `team_members`, `testimonials`, `user_roles`, `skill_settings` (per-skill registration open/closed) |
+| `GET /api/live`, `/api/livekit`, `/api/mindset`, `/api/social`, `/api/activity` | `live_rooms`, `room_admissions`, `room_messages`, `recordings`, `mindset_events`, `mindset_registrations`, `blog_posts`, `gallery_items`, `videos`, `activity_log`, `user_follows`, `blog_comments`, `blog_post_likes`, `video_comments`, `notifications` |
 
-All scripts are **additive and idempotent** (`create table if not exists`, `add column if
-not exists`). Existing rows/tables are never dropped or rewritten.
+### profiles (REAL columns used — `extra` and `kr8_id_normalized` removed)
 
-## Tables the code uses (28)
+`id` (= auth uid), `kr8_id`, `name`, `email`, `phone`, `phone_normalized`, `country`,
+`dob`, `skill`, `avatar`, `bio`, `cover_photo`, `points`, `attendance_accepted`,
+`submissions`, `referrals`, `graduated`, `cert_tier`, `cert_recognition`, `joined`,
+`phone_verified`. Protected columns (`points`, `graduated`, `cert_tier`, …) change only
+via server-side writes (DB trigger `prevent_protected_profile_changes` enforces it).
 
-**Core (0002):** `profiles`, `user_roles`, `certificates`, `attendance_submissions`,
-`enrollments`, `notifications`, `announcements`, `testimonials`, `site_content`,
-`site_settings`, `skill_settings`, `team_members`, `activity_log`, `email_logs`
-**Live (0003):** `live_rooms`, `room_admissions`, `room_messages`, `recordings`
-**Social/mindset (0006):** `password_reset_codes`, `blog_comments`, `blog_post_likes`,
-`client_requests`, `gallery_items`, `messages`, `mindset_events`, `mindset_registrations`,
-`user_follows`, `video_comments`
+### Certificate issuance (spec-exact)
 
-### Key columns
+Code: **`CERT-KR8-{kr8_id}-{SKILLKEY_UPPER}-{6 random from ABCDEFGHJKMNPQRSTUVWXYZ23456789}`**
+(e.g. `CERT-KR8-KR8VZ7G4KH-GRAPHIC-9WTXEF`). Insert columns exactly: `certificate_code`,
+`student_id`, `kr8_id`, `student_name`, `formatted_name`, `skill`, `skill_name`, `tier`
+(e.g. "Professionalism"), `achievement_text`, `issued_by` (admin uuid), `status='active'`.
+After issuance: `profiles.graduated/cert_tier/cert_recognition` + `enrollments.graduated/
+graduated_at` are updated; the **`notify_certificate`** trigger sends the in-app
+notification (never inserted manually). Graduation email (Resend, `RESEND_API_KEY` /
+`RESEND_FROM`) carries the code + verify link **`{SITE_URL}/verify?code=…`** and sets
+`certificates.email_sent_at` or `email_failure_reason` (+ `email_logs` row).
+**Withdrawal**: `status='withdrawn'`, `withdrawn_at`, `withdrawal_reason`, `withdrawn_by`.
+A **"Resend Email"** button sits on the admin certificate row. Registration sends **no**
+custom email.
 
-- **profiles** (PK `id` = auth.users.id): `kr8_id` (unique), `kr8_id_normalized`,
-  `name`, `email`, `phone`, `phone_normalized`, `country`, `dob`, `skill`, `avatar`,
-  `bio`, `points`, `referrals`, `graduated`, `cert_tier`, `cert_recognition`, `joined`,
-  `created_at`, `updated_at`, `extra jsonb` (legacy Account fields: type, vip,
-  attendanceAccepted, submissions, certificates, notifications, …).
-- **user_roles** (PK `user_id`): `role` (admin/founder/co-founder/coach/assistant/
-  attendance_reviewer), `permissions jsonb`, `title`, `granted_by`, `created_at`.
-- **certificates**: `certificate_code` (unique, public verify key), `student_id`, `kr8_id`,
-  `student_name`, `skill`, `tier` (Completion/Professionalism), `status`
-  (active/withdrawn), `issued_at`, `issued_by`, `email_sent_at`, `withdrawn_at`,
-  `extra jsonb`, `created_at`.
-- **attendance_submissions**: student/kr8 id, type, status (pending/accepted/rejected),
-  screenshot, feedback, submitted/reviewed timestamps, `extra`.
-- **skill_settings** (per skill): `reg_open`, `reg_close`, `whatsapp` (group link),
-  `available`, `suffix`, `name` (7-skill seed inserted only when the table is empty).
-- **site_content / site_settings**: key/value docs — public keys (`site_content`,
-  `homepage_settings`, `announcement_bar`, `signatures`, `attendance_types`, …) plus the
-  historic client `kr8_*` keys (CMS, homepage settings, signatures).
-- **live_rooms**: `livekit_room_name`, `title`, `host_id`, `is_live`, `visibility`,
-  `access_key`, `quality`, `ended_at`; `room_messages` (chat), `room_admissions`,
-  `recordings`.
-- **mindset_events / mindset_registrations**: event config docs + registration queue.
-- **password_reset_codes**: hashed 6-digit codes + expiry (emailed, never stored plain).
-- **activity_log**: feed (kind, name, skill, avatar, created_at) — replaces `feed_items`.
-- **email_logs**: Resend sends (graduation mails).
+### Admin tabs (read/write DB server-side)
 
-### RPCs the code calls
+Students, graduation/certificates, attendance review, skill settings, announcements,
+testimonials, site content, site settings, team. Nothing is stored in browser storage as
+a source of truth.
 
-- `get_unified_leaderboard(p_limit integer)` — ranks `profiles` by points; used by
-  `GET /api/leaderboard`.
-- `next_kr8_serial(p_skill text)` — atomic per-skill serial for server-generated KR8 IDs.
+---
 
-### Auth operations used (Supabase Admin/Auth)
+## 5. `/migrations` — apply in this order (nothing destructive)
 
-`signInWithPassword`, `getUser`, `setSession`, `signOut`, `auth.admin.createUser`,
-`auth.admin.updateUserById` (password changes), `auth.admin.deleteUser` (revoked
-registrations).
+| File | Purpose |
+|---|---|
+| `0001_lockdown_legacy_policies.sql` | Drops any policies/objects this app's old auth-era code created **by name** (anonymous insert/update policies on `accounts`/`certificates`/`attendances`/etc., legacy functions such as `next_kr8_serial`, `get_unified_leaderboard`). Guarded: it only drops things that exist, never tables or data. |
+| `001_onboarding.sql` | `onboarding_status` table + own-row RLS + `updated_at` trigger. |
+| `002_compat_columns.sql` | Additive `CREATE TABLE IF NOT EXISTS` for `client_requests`, `messages`, `user_follows`, `blog_comments`, `blog_post_likes`, `gallery_items`, `video_comments` (only if absent) + additive `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for certificates (`email_sent_at`, `email_failure_reason`, `withdrawn_at`, `withdrawal_reason`, `withdrawn_by`) and live room columns (`started_at`, `ended_at`, `participant_count`, `message_count`). |
 
-## Environment variables (Vercel — names only; values never in the repo)
+## 6. Test checklist (live DB + Vercel preview)
 
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_PUBLISHABLE_KEY`,
-`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
-`VITE_SUPABASE_PROJECT_ID`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`,
-`VITE_LIVEKIT_URL`, `RESEND_API_KEY`, `RESEND_FROM`, `SITE_URL`, `VITE_SITE_URL`,
-`NITRO_PRESET=vercel`. See `.env.example` (no values).
+1. **Register a test student** on `/register` ("Generate my ID") → lands on `/registered`
+   with the email + "GO TO YOUR EMAIL AND CONFIRM YOUR REGISTRATION"; "Resend confirmation
+   email" works; no KR8 ID visible anywhere yet.
+2. **Open the email link** (spam folder tip included) → `/welcome` signed in: KR8 ID shown
+   with Copy; **JOIN … WHATSAPP** opens the `skill_settings.whatsapp_url` group in a new
+   tab; "Done" saves to `onboarding_status` and lands on the dashboard.
+3. **Sign in before confirming** → friendly confirm-your-email panel (no raw error).
+4. **Sign in as an existing student** with KR8 ID, email, and phone number (all three
+   resolve server-side; unchanged passwords work).
+5. **Graduate the test student** as admin → certificate row shows the official
+   `CERT-KR8-…` code, student gets the in-app notification + graduation email with a
+   working verify link; "Resend Email" re-sends.
+6. **Public verify** `/verify?code=CERT-KR8-…` shows status, tier, and "Verify on the
+   official KR8 Digitals Student Portal" — never exposes email/phone.
+7. **Password reset** (forgot password → emailed link → `/reset-password`) — the old
+   autofill-code dialog no longer appears anywhere.
+8. **Live room** (LiveKit): create a stream as a staff account and join as a student.
 
-## Server API surface
+## 7. Known gaps to confirm against the live DB
 
-`/api/auth/login|register|reset`, `/api/me`, `/api/admin/students|graduation|content|
-skills|roles`, `/api/site`, `/api/verify`, `/api/leaderboard`, `/api/activity`,
-`/api/attendance`, `/api/livekit`, `/api/live`, `/api/mindset`, `/api/social`.
-Shared runtime in `server/lib.ts` (service-role client, Bearer auth → `getUser`,
-`requireUser`/`requireAdmin` via `user_roles`, Resend `sendEmail`, LiveKit token minting).
-Local dev: `npm run dev:api` (tsx) + vite `/api` proxy (`scripts/dev-api.mts`).
-
-## Test checklist (against the live project)
-
-1. **Register** — `/register` as a student: "Generate My ID →" shows the bold KR8 ID
-   success page → WhatsApp group page (link from `skill_settings`) → Done/Skip lands on
-   the profile. Sign-in with the new ID + password works; `profiles` row + auth user
-   exist. Repeat for a Tribe registration (KR8 TRIBE ID).
-2. **Log in as an existing student** — one of the ~77 migrated accounts signs in with
-   **KR8 ID / email / phone + their existing password** (their Supabase Auth user is
-   pre-provisioned with the same password hash). Their profile, points, certs appear.
-   Wrong password → "The KR8 ID / email / phone or password is incorrect."
-   Forgot-password: code arrives **by email**; no autofill; new password works after.
-3. **Graduate a test student** — Admin → Graduation: issue a certificate → `certificates`
-   row with `certificate_code`, student sees it on the dashboard, Resend email logged in
-   `email_logs`. Withdrawal requires a reason and flips `status='withdrawn'`.
-4. **Verify certificate** — public `/verify` with KR8 ID or certificate code shows the
-   record (name, skill, tier, status); withdrawn certs show the withdrawal state.
-5. **Live room** — open a live room as host (token minted via `/api/livekit`; check
-   `LIVEKIT_*` env), join as attendee, chat message posts to `room_messages`, end-room
-   clears `is_live`.
-6. **Admin surfaces** — reg open/close + WhatsApp per skill (`skill_settings`),
-   announcements/testimonials/`site_content` save and persist across devices; attendance
-   review (+10 XP class/mindset/hangout, +15 assignment) writes `attendance_submissions`;
-   leaderboard/`activity_log` update; suspended account cannot sign in or reset password;
-   role changes in Granular Permissions reflect in `user_roles` and gate `/api/admin/*`.
-
-## Known limitations
-
-- `kr8digitals/kr8-digitals-enhancer` is private (403) — logic re-derived from the brief
-  and this repo's legacy store semantics; verify KR8 ID format/progression edge cases
-  against production during review.
-- Migration SQL must be applied in the Supabase SQL editor (no access from here);
-  everything DB-side is in `/migrations` with comments.
-- Legacy localStorage social extras (client requests archive, per-device blocks) still use
-  browser storage as a session cache; all brief-specified domains are DB-backed.
+- `apply_points(...)` is called with `p_user_id, p_points, p_action, p_category, p_note`
+  (then `p_student_id`/`p_amount`/`p_reason`); if the live function takes other argument
+  names, the server transparently falls back to a direct points update — confirm the
+  real signature and adjust `server/lib.ts`.
+- Live room columns (`started_at`, `ended_at`, `participant_count`, `message_count`) are
+  created additively by `002_compat_columns.sql` if the live tables don't have them yet.

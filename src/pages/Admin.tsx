@@ -39,6 +39,7 @@ import CertificateDocumentView from "../components/CertificateDocumentView";
 import {
   issueCertificate,
   withdrawCertificate,
+  resendCertificateEmail,
   getStudentCertificates,
   type CertificateRecord,
   type CertificateTier,
@@ -1811,6 +1812,7 @@ function GraduationModal({
   const [withdrawCertId, setWithdrawCertId] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
   const [withdrawError, setWithdrawError] = useState("");
+  const [resendMsg, setResendMsg] = useState("");
 
   const existingCertificates = getStudentCertificates(student.id);
   const formattedPreviewName = formatCertificateStudentName(certStudentName);
@@ -1869,14 +1871,45 @@ function GraduationModal({
         certificateImageUrl: result.imageUrl,
       };
 
-      // 4. Save into Store / Account database
+      // 4. Save into Store / Account database — the SERVER issues the official
+      //    certificate code (CERT-KR8-{kr8_id}-{SKILL}-{6 random}).
       const saveRes = await issueCertificate(student.id, certRecord);
       if (!saveRes.ok || !saveRes.account) {
         throw new Error(saveRes.error || "Failed to issue certificate.");
       }
 
-      setIssuedCert(certRecord);
-      setGeneratedPdfBytes(result.pdfBytes);
+      // 5. The printed certificate must carry the official code — regenerate
+      //    the artwork (and verify QR) with the server-issued code.
+      const official = saveRes.certificate;
+      let finalArt = { imageUrl: result.imageUrl, pdfBytes: result.pdfBytes };
+      let finalCert = certRecord;
+      if (official?.id && official.id !== result.certId) {
+        const regen = await generateAutomaticCertificate({
+          student,
+          skillKey: selectedSkillKey,
+          tier,
+          courseName: selectedSkill?.name || getSkillName(selectedSkillKey),
+          additionalNotes: additionalNotes.trim(),
+          origin: window.location.origin,
+          customStudentName: certStudentName.trim(),
+          certId: official.id,
+        });
+        finalArt = { imageUrl: regen.imageUrl, pdfBytes: regen.pdfBytes };
+        await saveCertificateData(
+          student.id,
+          { fileType: "image", imageUrl: regen.imageUrl, pdfBytes: regen.pdfBytes },
+          official.id
+        );
+        finalCert = {
+          ...certRecord,
+          id: official.id,
+          certificateImageUrl: regen.imageUrl,
+          templateUrl: regen.templateUrl,
+        };
+      }
+
+      setIssuedCert(finalCert);
+      setGeneratedPdfBytes(finalArt.pdfBytes);
       onGraduated(saveRes.account);
     } catch (err: any) {
       console.error(err);
@@ -2158,7 +2191,10 @@ function GraduationModal({
             {/* ACTION BUTTONS */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
               <div>
-                {existingCertificates.length > 0 && (
+                {resendMsg && (
+              <p className="mt-2 text-[11px] text-emerald-300">{resendMsg}</p>
+            )}
+            {existingCertificates.length > 0 && (
                   <span className="text-xs text-[#8a7ba8]">
                     {existingCertificates.length} certificate{existingCertificates.length === 1 ? "" : "s"} already on file
                   </span>
@@ -2184,7 +2220,7 @@ function GraduationModal({
             </div>
 
             {/* EXISTING CERTIFICATES & WITHDRAWAL CONTROLS */}
-            {existingCertificates.length > 0 && (
+                        {existingCertificates.length > 0 && (
               <div className="mt-6 border-t border-white/10 pt-4">
                 <h5 className="text-xs font-bold uppercase tracking-wider text-[#b8aecf] mb-2.5">
                   Issued Certificates for this Student
@@ -2232,6 +2268,18 @@ function GraduationModal({
                           >
                             Verify Link
                           </a>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setResendMsg("Sending…");
+                              const r = await resendCertificateEmail(cert.id);
+                              setResendMsg(r.message);
+                              setTimeout(() => setResendMsg(""), 4000);
+                            }}
+                            className="rounded-lg border border-pink-400/40 px-2.5 py-1 text-[11px] font-semibold text-pink-200 hover:bg-pink-500/10"
+                          >
+                            Resend Email
+                          </button>
                           {!isWithdrawn && (
                             <button
                               type="button"

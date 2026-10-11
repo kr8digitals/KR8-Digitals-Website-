@@ -23,6 +23,9 @@ import Dashboard from "./pages/Dashboard";
 import LivePage from "./pages/LivePage";
 import Gallery from "./pages/Gallery";
 import RegisterPage from "./pages/RegisterPage";
+import RegisteredPage from "./pages/RegisteredPage";
+import WelcomePage from "./pages/WelcomePage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SignInPage from "./pages/SignInPage";
 import WaitlistPage from "./pages/WaitlistPage";
 import MessagesPage from "./pages/MessagesPage";
@@ -43,6 +46,9 @@ export default function App() {
               <Route path="/" element={<Home />} />
               <Route path="/waitlist" element={<WaitlistPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/registered" element={<RegisteredPage />} />
+              <Route path="/welcome" element={<WelcomePage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/signup" element={<RegisterPage />} />
               <Route path="/signin" element={<SignInPage />} />
               <Route path="/login" element={<SignInPage />} />

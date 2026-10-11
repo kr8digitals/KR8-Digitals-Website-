@@ -9,12 +9,46 @@
 import {
   admin,
   handler,
+  readBody,
   send,
   type ApiRequest,
   type ApiResponse,
 } from "../server/lib";
 
 export default handler(async (req: ApiRequest, res: ApiResponse) => {
+  if (req.method === "POST") {
+    // Small public helpers that call the project's own functions.
+    const body = await readBody(req);
+    const action = String(body.action || "");
+    if (action === "link-click") {
+      const slug = String(body.slug || "").trim();
+      if (!slug) {
+        send(res, 400, { ok: false, error: "slug is required." });
+        return;
+      }
+      await admin().rpc("increment_link_click", { p_slug: slug }).catch(() => undefined);
+      send(res, 200, { ok: true });
+      return;
+    }
+    if (action === "client-request") {
+      const { error } = await admin().rpc("submit_client_request", {
+        p_name: String(body.name || ""),
+        p_email: String(body.email || ""),
+        p_phone: String(body.phone || ""),
+        p_service: String(body.service || ""),
+        p_message: String(body.message || ""),
+      });
+      if (error) {
+        send(res, 500, { ok: false, error: "Could not submit your request." });
+        return;
+      }
+      send(res, 200, { ok: true });
+      return;
+    }
+    send(res, 400, { ok: false, error: "Unknown action." });
+    return;
+  }
+
   if (req.method !== "GET") {
     res.statusCode = 405;
     send(res, 405, { ok: false, error: "Method not allowed." });
@@ -30,10 +64,8 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     teamRes,
     contentRes,
     settingsRes,
+    countsRes,
     feedRes,
-    studentCountRes,
-    tribeCountRes,
-    gradCountRes,
   ] = await Promise.all([
     sb.from("skill_settings").select("*"),
     sb.from("announcements").select("*").order("created_at", { ascending: false }),
@@ -41,10 +73,8 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     sb.from("team_members").select("*").order("sort_order", { ascending: true }),
     sb.from("site_content").select("key, data"),
     sb.from("site_settings").select("key, value"),
-    sb.from("activity_log").select("*").order("created_at", { ascending: false }).limit(40),
-    sb.from("profiles").select("id", { count: "exact", head: true }).eq("extra->>type", "student"),
-    sb.from("profiles").select("id", { count: "exact", head: true }).eq("extra->>type", "tribe"),
-    sb.from("profiles").select("id", { count: "exact", head: true }).eq("graduated", true),
+    sb.rpc("public_counts"),
+    sb.rpc("get_recent_activity", { limit_n: 40 }),
   ]);
 
   const docs: Record<string, unknown> = {};
@@ -57,10 +87,11 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
   }
 
   const skills = ((skillRes.data || []) as Record<string, unknown>[]).map((r) => ({
-    key: r.skill,
-    name: r.name || r.skill,
+    key: r.skill_key ?? r.skill,
+    name: r.name || r.skill_key || r.skill,
     suffix: r.suffix || undefined,
-    whatsapp: r.whatsapp || "",
+    // Real column is whatsapp_url; kept as "whatsapp" for the legacy UI shape.
+    whatsapp: r.whatsapp_url || r.whatsapp || "",
     available: r.available !== false,
     regOpen: r.reg_open !== false,
   }));
@@ -104,14 +135,19 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
   }));
 
   const feed = ((feedRes.data || []) as Record<string, unknown>[]).map((r) => ({
-    id: r.id,
+    id: r.id ?? `${r.kind}-${r.created_at}`,
     kind: r.kind,
     name: r.name,
     skill: r.skill,
     avatar: r.avatar || "",
-    ts: r.created_at ? new Date(String(r.created_at)).getTime() : Date.now(),
+    ts: r.created_at ? new Date(String(r.created_at)).getTime() : Number(r.ts || Date.now()),
     customAction: r.custom_action || undefined,
   }));
+
+  const countsRow = (Array.isArray(countsRes.data) ? countsRes.data[0] : countsRes.data) as
+    | Record<string, unknown>
+    | null;
+  const c = countsRow || {};
 
   send(res, 200, {
     ok: true,
@@ -124,9 +160,9 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       teamMembers,
       feed,
       counts: {
-        students: studentCountRes.count ?? 0,
-        tribe: tribeCountRes.count ?? 0,
-        graduated: gradCountRes.count ?? 0,
+        students: Number(c.students ?? c.student_count ?? c.total_students ?? 0),
+        tribe: Number(c.tribe ?? c.tribe_count ?? c.total_tribe ?? 0),
+        graduated: Number(c.graduated ?? c.graduated_count ?? c.total_graduated ?? 0),
       },
     },
   });

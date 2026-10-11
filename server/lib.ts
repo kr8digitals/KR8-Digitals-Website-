@@ -30,9 +30,12 @@ export type ApiResponse = ServerResponse & {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Optional machine-readable code (e.g. "email_not_confirmed"). */
+  code?: string;
+  constructor(status: number, message: string, opts?: { code?: string }) {
     super(message);
     this.status = status;
+    this.code = opts?.code;
   }
 }
 
@@ -154,7 +157,8 @@ export function handler(
         // Server-side log only — never sent to the client.
         console.error("[api]", (err as Error)?.message || err);
       }
-      send(res, status, { ok: false, error: message });
+      const code = err instanceof ApiError ? err.code : undefined;
+      send(res, status, code ? { ok: false, error: message, code } : { ok: false, error: message });
     }
   };
 }
@@ -275,6 +279,76 @@ export function isStaffRole(roles: RoleRow[]): boolean {
   return roles.some((r) => STAFF_ROLES.has((r.role || "").toLowerCase()));
 }
 
+/**
+ * Authorization goes through the database's own functions:
+ *   is_admin(uuid), is_staff(uuid), has_role(uuid, text),
+ *   has_permission(uuid, text), can_manage(uuid, text)
+ * Each call falls back to a direct user_roles scan only if the function is
+ * missing, so a partially configured project still behaves safely (deny by
+ * default unless a matching role row exists).
+ */
+async function rpcBool(
+  fn: string,
+  userId: string,
+  extraShapes: Record<string, unknown>[] = [{}]
+): Promise<boolean | null> {
+  // PostgREST matches named parameters exactly, so try the common spellings of
+  // the user-id parameter one at a time until one signature matches.
+  const idShapes = ["p_user_id", "user_id", "p_uid", "uid", "p_id", "id"];
+  for (const extra of extraShapes) {
+    for (const idKey of idShapes) {
+      try {
+        const args: Record<string, unknown> = { ...extra, [idKey]: userId };
+        const { data, error } = await admin().rpc(fn, args);
+        if (!error) return !!data;
+      } catch {
+        /* try next shape */
+      }
+    }
+  }
+  return null;
+}
+
+export async function dbIsAdmin(userId: string): Promise<boolean> {
+  const via = await rpcBool("is_admin", userId);
+  if (via !== null) return via;
+  return isAdminRole(await getRoles(userId));
+}
+
+export async function dbIsStaff(userId: string): Promise<boolean> {
+  const via = await rpcBool("is_staff", userId);
+  if (via !== null) return via;
+  return isStaffRole(await getRoles(userId));
+}
+
+export async function dbHasRole(userId: string, role: string): Promise<boolean> {
+  const via = await rpcBool("has_role", userId, [{ p_role: role }, { role }, { p_role_name: role }]);
+  if (via !== null) return via;
+  return (await getRoles(userId)).some((r) => (r.role || "").toLowerCase() === role.toLowerCase());
+}
+
+export async function dbHasPermission(userId: string, permission: string): Promise<boolean> {
+  const via = await rpcBool("has_permission", userId, [
+    { p_permission: permission },
+    { permission },
+    { p_perm: permission },
+  ]);
+  if (via !== null) return via;
+  return (await getRoles(userId)).some((r) =>
+    (r.permissions || []).some((p) => String(p).toLowerCase() === permission.toLowerCase())
+  );
+}
+
+export async function dbCanManage(userId: string, section: string): Promise<boolean> {
+  const via = await rpcBool("can_manage", userId, [
+    { p_section: section },
+    { section },
+    { p_area: section },
+  ]);
+  if (via !== null) return via;
+  return dbIsStaff(userId);
+}
+
 export type AdminContext = {
   user: AuthUser;
   roles: RoleRow[];
@@ -287,8 +361,8 @@ export type AdminContext = {
 export async function requireAdmin(req: ApiRequest): Promise<AdminContext> {
   const user = await requireUser(req);
   const roles = await getRoles(user.id);
-  const isAdmin = isAdminRole(roles);
-  const isStaff = isStaffRole(roles);
+  const isAdmin = await dbIsAdmin(user.id);
+  const isStaff = isAdmin || (await dbIsStaff(user.id));
   if (!isStaff) throw new ApiError(403, "Administrator role required.");
   const onlyReviewer =
     !isAdmin && roles.every((r) => (r.role || "").toLowerCase() === "attendance_reviewer");
@@ -300,6 +374,41 @@ export async function requireAdmin(req: ApiRequest): Promise<AdminContext> {
     isAttendanceReviewerOnly: onlyReviewer,
     displayName: (user.user_metadata?.name as string) || user.email || "KR8 Administrator",
   };
+}
+
+/**
+ * Points are applied through the database's apply_points(...) function. Its
+ * parameter list is project-specific, so the common spellings are tried first
+ * and a direct service-role update is used only as a last resort (the
+ * prevent_protected_profile_changes trigger blocks students, not the server).
+ */
+export async function applyPoints(opts: {
+  userId: string;
+  points: number;
+  reason?: string;
+}): Promise<void> {
+  const candidateArgs: Record<string, unknown>[] = [
+    { p_user_id: opts.userId, p_points: opts.points, p_reason: opts.reason || "" },
+    { p_user_id: opts.userId, p_amount: opts.points, p_reason: opts.reason || "" },
+    { user_id: opts.userId, points: opts.points, reason: opts.reason || "" },
+    { p_student_id: opts.userId, p_points: opts.points },
+    { p_user_id: opts.userId, p_delta: opts.points },
+  ];
+  for (const args of candidateArgs) {
+    try {
+      const { error } = await admin().rpc("apply_points", args);
+      if (!error) return;
+    } catch {
+      /* try next shape */
+    }
+  }
+  // Fallback: service-role update (blocked for students by the DB trigger).
+  const { data: row } = await admin().from("profiles").select("points").eq("id", opts.userId).maybeSingle();
+  const current = Number(((row as { points?: number } | null)?.points) || 0);
+  await admin()
+    .from("profiles")
+    .update({ points: current + opts.points })
+    .eq("id", opts.userId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -320,26 +429,26 @@ export function epochMs(value: unknown): number {
 }
 
 export function toLegacyCertificate(row: Row): Record<string, unknown> {
-  const extra = (row.extra as Record<string, unknown>) || {};
+  const tier = String(row.tier || "Completion");
   return {
     id: row.certificate_code,
     studentId: row.kr8_id,
     studentName: row.student_name,
-    formattedName: extra.formattedName || String(row.student_name || "").toUpperCase(),
+    formattedName: row.formatted_name || String(row.student_name || "").toUpperCase(),
     skill: row.skill,
-    skillName: extra.skillName || row.skill,
-    tier: row.tier,
-    templateUrl: extra.templateUrl || `/certificates/reusable_${String(row.tier || "Completion").toLowerCase()}.png`,
-    achievementText: extra.achievementText || "",
-    additionalNotes: extra.additionalNotes || row.cert_recognition || undefined,
+    skillName: row.skill_name || row.skill,
+    tier,
+    templateUrl: `/certificates/reusable_${tier.toLowerCase()}.png`,
+    achievementText: row.achievement_text || "",
+    additionalNotes: undefined,
     issuedAt: epochMs(row.issued_at),
     issuedBy: row.issued_by || undefined,
     status: row.status === "withdrawn" ? "withdrawn" : "active",
-    withdrawalReason: extra.withdrawalReason || undefined,
+    withdrawalReason: row.withdrawal_reason || undefined,
     withdrawnAt: row.withdrawn_at ? epochMs(row.withdrawn_at) : undefined,
-    withdrawnBy: extra.withdrawnBy || undefined,
-    certificateImageUrl: extra.certificateImageUrl || undefined,
-    pdfUrl: extra.pdfUrl || undefined,
+    withdrawnBy: row.withdrawn_by || undefined,
+    certificateImageUrl: undefined,
+    pdfUrl: undefined,
   };
 }
 
@@ -379,52 +488,61 @@ export function toLegacyAccount(
     includePrivate?: boolean;
   } = {}
 ): Record<string, unknown> {
-  const extra = (row.extra as Record<string, unknown>) || {};
   const certs = (opts.certificates || []).map(toLegacyCertificate);
   const notifs = (opts.notifications || []).map(toLegacyNotification);
   const adminInfo = adminFromRoles(opts.roles || []);
+  const roles = (opts.roles || []).map((r) => (r.role || "").toLowerCase());
+  // Legacy UI "type": leadership comes from user_roles, everyone with a skill
+  // is a student, everyone else a tribe member. (Real schema has no type column.)
+  const type = roles.includes("founder")
+    ? "founder"
+    : roles.includes("co-founder")
+    ? "co-founder"
+    : row.skill
+    ? "student"
+    : "tribe";
 
   const account: Record<string, unknown> = {
-    type: extra.type || "student",
-    executiveRole: extra.executiveRole || undefined,
-    title: extra.title || undefined,
+    type,
+    executiveRole: type === "founder" ? "Founder" : type === "co-founder" ? "Co-Founder" : undefined,
+    title: type === "founder" ? "Founder & CEO" : type === "co-founder" ? "Co-Founder" : undefined,
     id: row.kr8_id,
     name: row.name,
     country: row.country || "NG",
     skill: row.skill || "",
-    year: extra.year || COHORT_YEAR,
-    serial: extra.serial || undefined,
-    vip: !!extra.vip,
+    year: COHORT_YEAR,
+    serial: undefined,
+    vip: type === "founder" || type === "co-founder",
     points: Number(row.points || 0),
-    attendanceAccepted: Number(extra.attendanceAccepted || 0),
-    submissions: Number(extra.submissions || 0),
+    attendanceAccepted: Number(row.attendance_accepted || 0),
+    submissions: Number(row.submissions || 0),
     referrals: Number(row.referrals || 0),
     graduated: !!row.graduated,
-    skills: extra.skills || (row.skill ? [row.skill] : []),
-    graduatedSkills: extra.graduatedSkills || [],
-    previousIds: extra.previousIds || [],
-    milestones: extra.milestones || [],
-    multiSkillCount: extra.multiSkillCount || undefined,
+    skills: row.skill ? [row.skill] : [],
+    graduatedSkills: row.graduated && row.skill ? [row.skill] : [],
+    previousIds: [],
+    milestones: [],
+    multiSkillCount: undefined,
     certTier: row.cert_tier || (row.graduated ? "Completion" : null),
     certRecognition: row.cert_recognition || undefined,
-    certificateUrl: extra.certificateUrl || undefined,
-    certificateFileType: extra.certificateFileType || undefined,
-    verifyRemark: extra.verifyRemark || undefined,
-    graduatedAt: extra.graduatedAt || undefined,
+    certificateUrl: undefined,
+    certificateFileType: undefined,
+    verifyRemark: undefined,
+    graduatedAt: undefined,
     certificates: certs,
     notifications: notifs,
     avatar: row.avatar || "",
     joined: epochMs(row.joined || row.created_at),
-    expandedVisibility: extra.expandedVisibility ?? undefined,
-    isPlaceholder: !!extra.isPlaceholder,
+    expandedVisibility: undefined,
+    isPlaceholder: false,
     bio: row.bio || undefined,
-    coverPhoto: extra.coverPhoto || undefined,
-    interests: extra.interests || undefined,
-    portfolio: extra.portfolio || [],
-    following: extra.following || [],
-    followers: extra.followers || [],
-    messagePrivacy: extra.messagePrivacy || "Anyone",
-    restricted: extra.restricted || undefined,
+    coverPhoto: row.cover_photo || undefined,
+    interests: undefined,
+    portfolio: [],
+    following: [],
+    followers: [],
+    messagePrivacy: "Anyone",
+    restricted: undefined,
     admin: adminInfo,
   };
 
@@ -440,9 +558,8 @@ export function toLegacyAccount(
 
 export function accountToRowPatch(
   patch: Record<string, unknown>,
-  existingExtra: Record<string, unknown> = {}
+  _existingExtra: Record<string, unknown> = {}
 ): Record<string, unknown> {
-  const extra: Record<string, unknown> = { ...existingExtra };
   const row: Record<string, unknown> = {};
 
   const direct: Record<string, string> = {
@@ -454,55 +571,25 @@ export function accountToRowPatch(
     dob: "dob",
     avatar: "avatar",
     bio: "bio",
+    coverPhoto: "cover_photo",
     points: "points",
     referrals: "referrals",
     graduated: "graduated",
     certTier: "cert_tier",
     certRecognition: "cert_recognition",
-    type: "type",
+    attendanceAccepted: "attendance_accepted",
+    submissions: "submissions",
   };
   for (const [from, to] of Object.entries(direct)) {
     if (patch[from] !== undefined) {
       row[to] = patch[from] === "" ? null : patch[from];
-      if (from === "type") extra.type = patch[from];
-      delete extra[from === "type" ? "type" : from];
     }
   }
   if (patch.email !== undefined) row.email = normalizeEmail(String(patch.email));
-  if (patch.phone !== undefined) row.phone_normalized = normalizePhone(String(patch.phone));
-
-  const extraKeys = [
-    "executiveRole",
-    "title",
-    "year",
-    "serial",
-    "vip",
-    "attendanceAccepted",
-    "submissions",
-    "skills",
-    "graduatedSkills",
-    "previousIds",
-    "milestones",
-    "multiSkillCount",
-    "certificateUrl",
-    "certificateFileType",
-    "verifyRemark",
-    "graduatedAt",
-    "expandedVisibility",
-    "isPlaceholder",
-    "coverPhoto",
-    "interests",
-    "portfolio",
-    "following",
-    "followers",
-    "messagePrivacy",
-    "restricted",
-    "type",
-  ];
-  for (const key of extraKeys) {
-    if (patch[key] !== undefined) extra[key] = patch[key];
+  if (patch.phone !== undefined) {
+    row.phone = String(patch.phone);
+    row.phone_normalized = normalizePhone(String(patch.phone));
   }
-  row.extra = extra;
   return row;
 }
 
@@ -699,26 +786,41 @@ export async function findProfileByIdentifier(identifier: string): Promise<Row |
   if (!q) return null;
   const email = normalizeEmail(q);
   const phone = normalizePhone(q);
+
+  // 1) KR8 ID — via the existing database function (matches upper(kr8_id)).
+  try {
+    const { data } = await admin().rpc("get_profile_by_kr8_id", { lookup_id: q });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row && (row as Row).id) return row as Row;
+  } catch {
+    /* fall through to direct lookups */
+  }
+
+  // 2) Email (stored lowercase) / phone (phone_normalized).
+  const { data: byEmail } = await admin()
+    .from("profiles")
+    .select("*")
+    .eq("email", email)
+    .maybeSingle();
+  if (byEmail) return byEmail as Row;
+
+  if (phone) {
+    const { data: byPhone } = await admin()
+      .from("profiles")
+      .select("*")
+      .eq("phone_normalized", phone)
+      .maybeSingle();
+    if (byPhone) return byPhone as Row;
+  }
+
+  // 3) Last resort: case-insensitive kr8_id scan (separators ignored).
   const idNorm = normalizeIdentity(q);
-
-  const ors = [`email.eq.${email}`];
-  if (phone) ors.push(`phone_normalized.eq.${phone}`);
-  ors.push(`kr8_id_normalized.eq.${idNorm}`);
-
-  const { data } = await admin()
+  const { data: scan } = await admin()
     .from("profiles")
     .select("*")
-    .or(ors.join(","))
-    .limit(1);
-  if (data && data.length > 0) return data[0] as Row;
-
-  // Legacy IDs may include separators — fall back to a normalized scan.
-  const { data: byPrefix } = await admin()
-    .from("profiles")
-    .select("*")
-    .ilike("kr8_id", idNorm.replace(/[^A-Z0-9]/gi, "%"))
+    .ilike("kr8_id", q.replace(/[^A-Za-z0-9]/g, "%"))
     .limit(5);
-  const rows = (byPrefix || []) as Row[];
+  const rows = (scan || []) as Row[];
   return rows.find((r) => normalizeIdentity(String(r.kr8_id || "")) === idNorm) || null;
 }
 
