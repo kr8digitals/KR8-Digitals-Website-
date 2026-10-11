@@ -13,14 +13,10 @@ import {
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 
-const ATTENDANCE_PASSWORD = "KR8@Atd2026";
 
 export default function AttendanceReview() {
   useSeo({ path: "/attendance-review", noindex: true });
   const { student: currentUser, addNotification } = useAuth();
-  const [password, setPassword] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
-  const [error, setError] = useState(false);
 
   // Submissions and Types state
   const [submissions, setSubmissions] = useState<AttendanceSubmission[]>(getAttendanceSubmissions());
@@ -33,6 +29,7 @@ export default function AttendanceReview() {
   const [rejectError, setRejectError] = useState("");
 
   // Screenshot viewer modal
+  const [unlocked, setUnlocked] = useState(true);
   const [viewScreenshotUrl, setViewScreenshotUrl] = useState<string | null>(null);
   const [viewScreenshotTitle, setViewScreenshotTitle] = useState("");
 
@@ -41,6 +38,27 @@ export default function AttendanceReview() {
     currentUser?.type === "founder" ||
     currentUser?.type === "co-founder"
   );
+
+  if (!unlocked) {
+    return (
+      <div className="section-bg flex min-h-screen items-center justify-center px-5">
+        <Card className="w-full max-w-md text-center py-10">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-pink text-white">
+            <Icon name="lock" size={28} />
+          </div>
+          <Pill>Faculty & Coach Review</Pill>
+          <h1 className="font-display mt-4 text-2xl text-white sm:text-3xl">Review Queue Locked</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
+            This review session is locked. Your staff role is verified securely — unlock to continue.
+          </p>
+          <div className="mt-6 flex flex-col gap-3">
+            <GradientButton onClick={() => setUnlocked(true)} className="w-full">Unlock Review Queue</GradientButton>
+            <GhostButton to="/academy">Back to Portal</GhostButton>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const syncData = () => {
     setSubmissions(getAttendanceSubmissions());
@@ -80,56 +98,11 @@ export default function AttendanceReview() {
     );
   }
 
-  const unlock = () => {
-    if (
-      password === ATTENDANCE_PASSWORD ||
-      currentUser?.admin?.role === "ultimate" ||
-      currentUser?.type === "founder" ||
-      currentUser?.type === "co-founder"
-    ) {
-      setError(false);
-      setUnlocked(true);
-    } else {
-      setError(true);
-    }
-  };
-
-  if (!unlocked) {
-    return (
-      <div className="section-bg flex min-h-screen items-center justify-center px-5">
-        <Card className="w-full max-w-md text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-pink text-white">
-            <Icon name="lock" size={23} />
-          </div>
-          <Pill>Faculty & Coach Review</Pill>
-          <h1 className="font-display mt-5 text-3xl text-white">Attendance Review</h1>
-          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
-            Welcome, {currentUser?.name || "Coach"}. Enter review password to manage manual submissions and attendance types.
-          </p>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && unlock()}
-            placeholder="Coach password"
-            className="mt-5 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
-          />
-          {error && <p className="mt-2 text-xs text-red-400">Incorrect attendance review password.</p>}
-          <button
-            onClick={unlock}
-            className="mt-4 w-full rounded-full bg-gradient-pink py-3 text-sm font-bold text-white hover:brightness-110 active:scale-95 transition-all"
-          >
-            Unlock Review Queue
-          </button>
-        </Card>
-      </div>
-    );
-  }
 
   // Handle Approve
   const handleApprove = (id: string, studentName: string, type: string) => {
     const reviewer = currentUser?.name || "KR8 Faculty Reviewer";
-    reviewAttendance(id, "accepted", "Approved by faculty coach.", reviewer);
+    void reviewAttendance(id, "accepted", "Approved by faculty coach.", reviewer).then(() => syncData());
     syncData();
     addNotification(`Approved ${type} submission for ${studentName}.`);
   };
@@ -141,7 +114,7 @@ export default function AttendanceReview() {
       return;
     }
     const reviewer = currentUser?.name || "KR8 Faculty Reviewer";
-    reviewAttendance(id, "rejected", rejectFeedback.trim(), reviewer);
+    void reviewAttendance(id, "rejected", rejectFeedback.trim(), reviewer).then(() => syncData());
     setRejectingId(null);
     setRejectFeedback("");
     setRejectError("");

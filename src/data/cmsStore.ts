@@ -93,6 +93,8 @@ export interface SiteContent {
   };
 }
 
+import { docGetSync, docSetSync } from "./db";
+
 export const DEFAULT_SITE_CONTENT: SiteContent = {
   global: {
     siteName: "KR8 Digitals",
@@ -206,12 +208,13 @@ export function getSiteContent(): SiteContent {
   if (typeof window === "undefined") return DEFAULT_SITE_CONTENT;
 
   try {
-    const raw = localStorage.getItem(CMS_STORAGE_KEY);
-    if (!raw) {
+    // Server-backed site content doc (hydrated at bootstrap; localStorage is
+    // only a migration fallback).
+    const parsed = docGetSync<Record<string, any>>(CMS_STORAGE_KEY);
+    if (!parsed) {
       memoryCms = DEFAULT_SITE_CONTENT;
       return memoryCms;
     }
-    const parsed = JSON.parse(raw);
     // Deep merge and sanitize with defaults to ensure all keys exist and empty fields never break layout
     memoryCms = {
       global: sanitizeSection(parsed.global, DEFAULT_SITE_CONTENT.global),
@@ -245,16 +248,16 @@ export function saveSiteContent(patch: Partial<SiteContent>): SiteContent {
 
   try {
     if (typeof window !== "undefined") {
-      localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(updated));
-      
+      // Persist to the server-backed site settings docs (debounced flush).
+      docSetSync(CMS_STORAGE_KEY, updated);
+
       // Also sync heroHeadline and projectsDone to homepageSettings for full cross-compatibility
       if (patch.home?.heroHeadline !== undefined || patch.home?.projectsDone !== undefined) {
         try {
-          const rawHp = localStorage.getItem("kr8_homepage_settings_v3");
-          const hp = rawHp ? JSON.parse(rawHp) : {};
+          const hp = docGetSync<Record<string, unknown>>("kr8_homepage_settings_v3") ?? {};
           if (patch.home.heroHeadline !== undefined) hp.heroHeadline = patch.home.heroHeadline;
           if (patch.home.projectsDone !== undefined) hp.projectsDone = patch.home.projectsDone;
-          localStorage.setItem("kr8_homepage_settings_v3", JSON.stringify(hp));
+          docSetSync("kr8_homepage_settings_v3", hp);
           window.dispatchEvent(new Event("kr8:homepage-settings-updated"));
         } catch {
           /* ignore */
@@ -275,7 +278,7 @@ export function resetSiteContent(): SiteContent {
   memoryCms = DEFAULT_SITE_CONTENT;
   try {
     if (typeof window !== "undefined") {
-      localStorage.removeItem(CMS_STORAGE_KEY);
+      docSetSync(CMS_STORAGE_KEY, DEFAULT_SITE_CONTENT);
       window.dispatchEvent(new Event("kr8:cms-updated"));
       window.dispatchEvent(new Event("storage"));
     }

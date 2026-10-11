@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import {
   getAccounts,
-  updateAccount,
+  promoteAccount,
+  demoteAccount,
   type Account,
 } from "../../data/store";
 import { Card, Pill } from "../ui";
@@ -93,7 +94,6 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [assignedRole, setAssignedRole] = useState<string>("attendance_reviewer");
   const [customPermissions, setCustomPermissions] = useState<string[]>(["Attendance Review"]);
-  const [adminPassword, setAdminPassword] = useState("KR8@Staff2026");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   useEffect(() => {
@@ -139,11 +139,9 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
     if (acc.admin) {
       setAssignedRole(acc.admin.role || "admin");
       setCustomPermissions(acc.admin.permissions || []);
-      setAdminPassword(acc.admin.adminPassword || "");
     } else {
       setAssignedRole("attendance_reviewer");
       setCustomPermissions(["Attendance Review"]);
-      setAdminPassword("KR8@Staff2026");
     }
   };
 
@@ -151,9 +149,6 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
     setAssignedRole(role);
     if (ROLE_PRESETS[role]) {
       setCustomPermissions([...ROLE_PRESETS[role].permissions]);
-      if (role === "attendance_reviewer") {
-        setAdminPassword("KR8@Atd2026");
-      }
     }
   };
 
@@ -164,7 +159,7 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
     );
   };
 
-  const handleSavePermissions = () => {
+  const handleSavePermissions = async () => {
     if (!selectedAccount) return;
     if (!isUltimate) {
       setFeedback({ type: "error", msg: "Only the Ultimate Administrator can configure staff permissions." });
@@ -178,23 +173,26 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
 
     const permsToSave = assignedRole === "attendance_reviewer" ? ["Attendance Review"] : customPermissions;
 
-    const updatedAdmin = {
-      role: assignedRole as any,
-      title: ROLE_PRESETS[assignedRole]?.label || assignedRole,
-      permissions: permsToSave,
-      adminPassword: adminPassword.trim() || undefined,
-      passwordNotice: `Role updated to ${ROLE_PRESETS[assignedRole]?.label || assignedRole}.`,
-      promotedBy: "Ultimate Administrator",
-    };
-
-    updateAccount(selectedAccount.id, { admin: updatedAdmin });
+    // Roles live in the server-side user_roles table and are enforced there —
+    // promoted staff sign in with their own Supabase password only.
+    const updated = await promoteAccount(
+      selectedAccount.id,
+      assignedRole as any,
+      permsToSave,
+      "Ultimate Administrator",
+      ROLE_PRESETS[assignedRole]?.label || assignedRole
+    );
+    if (!updated) {
+      setFeedback({ type: "error", msg: "Could not update role on the server." });
+      return;
+    }
     setFeedback({
       type: "success",
       msg: `Permissions updated successfully for ${selectedAccount.name} (${ROLE_PRESETS[assignedRole]?.label || assignedRole})!`,
     });
   };
 
-  const handleRevokeStaffAccess = (acc: Account) => {
+  const handleRevokeStaffAccess = async (acc: Account) => {
     if (!isUltimate) {
       setFeedback({ type: "error", msg: "Only the Ultimate Administrator can revoke staff permissions." });
       return;
@@ -205,7 +203,7 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
     }
 
     if (window.confirm(`Are you sure you want to revoke staff access from ${acc.name}? They will revert to a standard user account.`)) {
-      updateAccount(acc.id, { admin: undefined });
+      await demoteAccount(acc.id);
       setSelectedAccount(null);
       setFeedback({ type: "success", msg: `Staff access revoked for ${acc.name}.` });
     }
@@ -481,22 +479,14 @@ export default function GranularPermissionsManager({ isUltimate }: { isUltimate:
                 </div>
               </div>
 
-              {/* Specific Password for this Role */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[#b8aecf]">
-                  Dedicated Staff Password / Pin
+                  Staff Access
                 </label>
-                <input
-                  type="text"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="e.g. KR8@Atd2026 for Reviewer"
-                  className="w-full rounded-xl border border-white/15 bg-black/40 px-4 py-2.5 text-xs text-white font-mono placeholder-[#6b5d84] focus:border-pink-500 focus:outline-none"
-                />
                 <p className="text-[11px] text-[#8a7ba8]">
                   {assignedRole === "attendance_reviewer"
-                    ? "Attendance Reviewers log in with this dedicated password and will be restricted strictly to Attendance Review."
-                    : "The user uses this password or their account credentials to access the assigned management panels."}
+                    ? "Attendance Reviewers sign in with their own account password and are restricted strictly to Attendance Review."
+                    : "The staff member uses their own sign-in password to access the assigned management panels."}
                 </p>
               </div>
 

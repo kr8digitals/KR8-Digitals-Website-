@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import {
   getSkills, getSkill, getSkillName, areAllRegistrationsClosed, ATTENDANCE_TYPES, getTestimonials, getTribeWhatsApp, getSkillRegistration, getSkillWhatsApp, buildPhone,
   getStudentCertificates, getStudentNotifications, markNotificationRead, type CertificateRecord, type StudentNotification,
-  registerStudent, registerTribe, recoverId, authenticateAccount, getStudents, getReferralUrl, updateAccount, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
+  registerStudent, registerTribe, recoverId, signInWithCredentials, getStudents, getReferralUrl, updateAccount, changePassword, requestPasswordReset, completePasswordReset, getFounders, countryByCode,
   submitAttendance, getStudentAttendance, getAttendanceTypesSettings, type AttendanceSubmission,
   getStudentConversations,
   type Account, type Skill,
@@ -18,6 +18,7 @@ import Icon from "../components/Icon";
 import CountryPhone from "../components/CountryPhone";
 import { downloadCertificatePdf, downloadCertificateImage } from "../utils/certificate";
 import { authenticateWithBiometrics, getRegisteredBiometrics } from "../utils/biometrics";
+import { apiMe } from "../lib/api";
 import CertificateDocumentView from "../components/CertificateDocumentView";
 import GraduationShareModal from "../components/GraduationShareModal";
 import { getSiteContent, type SiteContent } from "../data/cmsStore";
@@ -372,7 +373,7 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
         {result.admin && (
           <div className="mx-auto mt-4 max-w-lg rounded-xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-left text-xs leading-relaxed text-pink-100">
             <strong className="capitalize">{result.admin.title ?? result.admin.role} access recognized.</strong>{" "}
-            {result.admin.passwordNotice} Click the Admin menu and enter this password whenever you need your assigned dashboard sections.
+            Open the Admin menu to use your assigned dashboard sections.
           </div>
         )}
 
@@ -390,11 +391,11 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
     );
   }
 
-  const submit = () => {
+  const submit = async () => {
     setError("");
     if (!form.name || !form.email || !form.phone || !form.password || !form.skill || !form.y || !form.m || !form.d) { setError("Please fill in every field, including a password."); return; }
     const dial = countryByCode(form.country)?.dial || "+234";
-    const res = registerStudent({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
+    const res = await registerStudent({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password, skill: form.skill, dob: `${form.y}-${form.m}-${form.d}` });
     if (!res.ok) { setError(res.error!); return; }
     setResult(res.student!);
   };
@@ -439,11 +440,11 @@ function StudentForm({ preSkill, onDone }: { preSkill: string; onDone: (s: Accou
 function TribeForm({ onDone }: { onDone: (m: Account) => void }) {
   const [form, setForm] = useState({ name: "", email: "", phone: "", country: "NG", password: "" });
   const [error, setError] = useState("");
-  const submit = () => {
+  const submit = async () => {
     setError("");
     if (!form.name || !form.email || !form.phone || !form.password) { setError("Please fill in every field, including a password."); return; }
     const dial = countryByCode(form.country)?.dial || "+234";
-    const res = registerTribe({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password });
+    const res = await registerTribe({ name: form.name, email: form.email, phone: buildPhone(dial, form.phone), country: form.country, password: form.password });
     if (!res.ok) { setError(res.error!); return; }
     onDone(res.member!);
   };
@@ -471,7 +472,6 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
   const [resetId] = useState("");
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [demoCode, setDemoCode] = useState("");
   const [msg, setMsg] = useState("");
   const [bioLoading, setBioLoading] = useState(false);
 
@@ -486,13 +486,14 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
         setMsg(res.error || "Biometric authentication failed or was cancelled.");
         return;
       }
-      const all = getStudents();
-      const account = all.find((a) => a.id.toLowerCase() === res.studentId!.toLowerCase());
-      if (!account) {
-        setMsg(`Account for ID ${res.studentId} could not be found.`);
+      // Biometrics may only UNLOCK an existing Supabase session — it can
+      // never grant one on its own.
+      const me = await apiMe().catch(() => null);
+      if (!me?.account) {
+        setMsg("For account security, sign in with your password first — biometrics can then unlock this device.");
         return;
       }
-      onDone(account);
+      onDone(me.account as unknown as Account);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Biometric authentication error");
     } finally {
@@ -500,11 +501,11 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     setMsg("");
     if (mode === "reset") return;
     if (mode === "id") {
-      const result = authenticateAccount(value, password);
+      const result = await signInWithCredentials(value, password);
       if (!result.ok || !result.account) { setMsg(result.error ?? "The KR8 ID or password is incorrect."); return; }
       onDone(result.account);
     } else {
@@ -514,29 +515,21 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
     }
   };
 
-  const requestReset = () => {
+  const requestReset = async () => {
     const target = (resetEmail || resetId || value).trim();
     if (!target) {
       setMsg("Please enter your registered email, KR8 ID, or phone number.");
       return;
     }
-    const result = requestPasswordReset(target);
+    setResetCode("");
+    const result = await requestPasswordReset(target);
     setMsg(result.message);
-    if (result.code) {
-      setDemoCode(result.code);
-      setResetCode(result.code);
-    }
   };
 
-  const finishReset = () => {
+  const finishReset = async () => {
     const target = (resetEmail || resetId || value).trim();
-    const result = completePasswordReset(target, resetCode, newPassword);
+    const result = await completePasswordReset(target, resetCode, newPassword);
     setMsg(result.message);
-    if (result.ok && result.account) {
-      setTimeout(() => {
-        onDone(result.account!);
-      }, 1000);
-    }
   };
 
   return (
@@ -602,26 +595,16 @@ function SignInForm({ onDone }: { onDone: (s: Account) => void }) {
         {mode === "reset" ? <>
           <input className={inputCls} placeholder="Registered email, phone, or KR8 ID" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
           <GradientButton onClick={requestReset} className="w-full">Generate Reset Code 📩</GradientButton>
-          {demoCode && (
-            <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                  ✓ Verification Code Ready
-                </span>
-                <span className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                  Auto-Applied Below
-                </span>
-              </div>
-              <div className="my-2.5 rounded-xl bg-black/60 p-2 text-center border border-emerald-500/30">
-                <p className="font-mono text-2xl font-black text-white tracking-widest">{demoCode}</p>
-              </div>
-              <p className="text-[10px] text-emerald-300/80 leading-relaxed">
-                💡 <strong>Notice:</strong> Your verification code is provided directly on this screen and has been auto-applied below so you can proceed without waiting for email delivery. (Universal testing code: <strong className="font-mono text-white">888999</strong>).
-              </p>
-            </div>
-          )}
+          <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+              ✓ Check Your Email
+            </span>
+            <p className="mt-2 text-[10px] text-emerald-300/80 leading-relaxed">
+              A 6-digit verification code has been sent to your registered email address. Enter it below with your new password.
+            </p>
+          </div>
           <input className={inputCls} placeholder="6-digit reset code" value={resetCode} onChange={(e) => setResetCode(e.target.value)} />
-          <input type="password" className={inputCls} placeholder="New password (min 4 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <input type="password" className={inputCls} placeholder="New password (min 6 characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
           <GradientButton onClick={finishReset} className="w-full">Set New Password & Sign In ✅</GradientButton>
         </> : <>
           <input className={inputCls} placeholder={mode === "id" ? "e.g. KR8 ID, email, or phone number" : "Email or phone number"} value={value} onChange={(e) => setValue(e.target.value)} />
@@ -791,7 +774,7 @@ function Profile({ student }: { student: Account }) {
                   ? "Welcome, Founder & CEO. You hold complete administrative authority over the entire platform. Open the Admin menu to manage all tracks, submissions, and settings."
                   : profile.type === "co-founder"
                   ? "Welcome, Co-Founder. You hold executive administrative authority across KR8 Digitals. Open the Admin menu to access platform tools."
-                  : `Congratulations — you have ${profile.admin.title ?? profile.admin.role} access. Open the Admin menu to use your assigned sections. ${profile.admin.role !== "ultimate" && profile.admin.passwordNotice}`}
+                  : `Congratulations — you have ${profile.admin.title ?? profile.admin.role} access. Open the Admin menu to use your assigned sections.`}
               </div>
             )}
           </div>
@@ -1113,7 +1096,15 @@ function Profile({ student }: { student: Account }) {
                 <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">{profile.name} joined KR8 Digitals in {profile.year} to train in {skill?.name}.</p>
                 <textarea value={profile.bio ?? ""} onChange={(event) => setProfile({ ...profile, bio: event.target.value })} placeholder="Add your personal bio or a little about what you are building..." rows={4} className="mt-4 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none" />
                 <button onClick={() => save({ bio: profile.bio, expandedVisibility: expanded })} className="mt-3 rounded-full bg-gradient-pink px-4 py-2 text-xs font-bold text-white">Save About section</button>
-                <div className="mt-5 border-t border-white/10 pt-4"><p className="text-xs uppercase tracking-wider text-[#8a7ba8]">Editable security setting</p><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Set a profile password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none" /><button onClick={() => save({ password })} className="mt-2 rounded-full border border-white/15 px-4 py-2 text-xs text-[#cabfe0]">Save password</button></div>
+                <div className="mt-5 border-t border-white/10 pt-4"><p className="text-xs uppercase tracking-wider text-[#8a7ba8]">Editable security setting</p><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Set a new sign-in password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none" /><button onClick={async () => {
+                  const res = await changePassword(password);
+                  if (res.ok) {
+                    setPassword("");
+                    addNotification("Sign-in password updated.");
+                  } else {
+                    addNotification(res.error || "Could not update password.");
+                  }
+                }} className="mt-2 rounded-full border border-white/15 px-4 py-2 text-xs text-[#cabfe0]">Save password</button></div>
                 <div className="mt-4 flex flex-wrap gap-2">{["Design", "Community", "Growth", skill?.name ?? ""].map((t) => <span key={t} className="rounded-full bg-white/5 px-3 py-1 text-xs text-[#cabfe0]">{t}</span>)}</div>
                 <a href={getReferralUrl(profile.id)} className="mt-5 block break-all rounded-xl bg-black/30 p-3 text-xs text-pink-300 underline underline-offset-2">Referral link: {getReferralUrl(profile.id)} · <span className="text-white no-underline">14 clicks · 6 conversions</span></a>
                 <label className="mt-4 flex items-center gap-2 text-sm text-[#cabfe0]">
@@ -1334,7 +1325,7 @@ function AttendanceWidget({ student }: { student: Account }) {
     const finalScreenshot = screenshotData || "https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=800";
     const skillName = getSkillName(student.skill);
 
-    submitAttendance({
+    void submitAttendance({
       studentId: student.id,
       studentName: student.name,
       skill: skillName,
@@ -1342,7 +1333,7 @@ function AttendanceWidget({ student }: { student: Account }) {
       topic: topic.trim(),
       speaker: speaker.trim() || undefined,
       screenshotUrl: finalScreenshot,
-    });
+    }).catch(() => undefined);
 
     setDone(true);
     addNotification(`Attendance (${at?.name}) submitted — now in coach review queue.`);
@@ -1610,9 +1601,16 @@ function RoleOfferActivationModal({
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const handleActivate = () => {
+  const handleActivate = async () => {
     if (password.length < 8) {
       setError("Please set a password of at least 8 characters.");
+      return;
+    }
+    // The password is the real Supabase Auth sign-in password, set via the
+    // server (api/me) — no separate admin password is kept in the browser.
+    const res = await changePassword(password);
+    if (!res.ok) {
+      setError(res.error || "Could not set password.");
       return;
     }
     const updated = updateAccount(studentId, {
@@ -1620,8 +1618,6 @@ function RoleOfferActivationModal({
         role: offer.role,
         title: offer.title,
         permissions: offer.permissions,
-        adminPassword: password,
-        passwordNotice: "Configured role security password.",
         promotedBy: offer.offeredBy,
       },
       pendingRoleOffer: undefined,

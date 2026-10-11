@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
-  authenticateAccount,
+  signInWithCredentials,
   requestPasswordReset,
   completePasswordReset,
-  getAccounts,
-  normalizeEmail,
   submitSuspensionAppeal,
 } from "../data/store";
 import {
@@ -20,7 +18,7 @@ interface SignInModalProps {
 }
 
 export default function SignInModal({ isOpen, onClose, initialMode = "signin" }: SignInModalProps) {
-  const { signIn, addNotification } = useAuth();
+  const { user, signIn, addNotification } = useAuth();
   const [mode, setMode] = useState<"signin" | "reset">(initialMode);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -33,8 +31,6 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
   const [resetCode, setResetCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [resetStep, setResetStep] = useState<"request" | "verify">("request");
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
 
   // Biometrics
   const [bioLoading, setBioLoading] = useState(false);
@@ -44,10 +40,10 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
   const [appealText, setAppealText] = useState("");
   const [appealResult, setAppealResult] = useState<string | null>(null);
 
-  const handleAppealSubmit = (e: React.FormEvent) => {
+  const handleAppealSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!appealText.trim()) return;
-    const res = submitSuspensionAppeal(identifier.trim(), appealText.trim());
+    const res = await submitSuspensionAppeal(identifier.trim(), appealText.trim());
     if (res.ok) {
       setAppealResult("Your appeal has been received. KR8 leadership will review your statement.");
       setAppealText("");
@@ -63,7 +59,7 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
 
   if (!isOpen) return null;
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
     if (!identifier.trim()) {
@@ -76,7 +72,7 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
     }
 
     setLoading(true);
-    const result = authenticateAccount(identifier, password);
+    const result = await signInWithCredentials(identifier, password);
     setLoading(false);
 
     if (!result.ok || !result.account) {
@@ -99,14 +95,16 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
         setStatusMsg({ type: "error", text: res.error || "Biometric verification cancelled." });
         return;
       }
-      const all = getAccounts();
-      const account = all.find((a) => a.id.toLowerCase() === res.studentId!.toLowerCase());
+      const account = user;
       if (!account) {
-        setStatusMsg({ type: "error", text: `Account with ID ${res.studentId} was not found.` });
+        setStatusMsg({
+          type: "error",
+          text: "For account security, sign in with your password once — biometrics can then unlock this device.",
+        });
         return;
       }
       signIn(account);
-      addNotification(`Biometric sign-in verified. Welcome, ${account.name}!`);
+      addNotification(`Biometric unlock verified. Welcome, ${account.name}!`);
       onClose();
     } catch (err) {
       setStatusMsg({ type: "error", text: err instanceof Error ? err.message : "Biometric authentication failed." });
@@ -119,43 +117,26 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
     setStatusMsg(null);
     const emailPrompt = prompt("Enter your Google Account email to sign in:")?.trim();
     if (!emailPrompt) return;
-    const clean = normalizeEmail(emailPrompt);
-    const all = getAccounts();
-    const existing = all.find(
-      (a) =>
-        (a.googleAuth?.enabled && normalizeEmail(a.googleAuth.linkedEmail) === clean) ||
-        normalizeEmail(a.email) === clean
-    );
-
-    if (existing) {
-      if (!existing.googleAuth?.enabled) {
-        setStatusMsg({
-          type: "error",
-          text: `Security Policy: Google Sign-In has not been enabled for this account (${existing.email}). To protect account security, please sign in with your password first, then enable Google Sign-In in your Account Settings.`,
-        });
-        return;
-      }
-
-      if (normalizeEmail(existing.googleAuth.linkedEmail) !== clean) {
-        setStatusMsg({
-          type: "error",
-          text: `Access Denied: The Google account "${clean}" is not linked to this profile.`,
-        });
-        return;
-      }
-
-      signIn(existing);
-      addNotification(`Signed in with verified Google Account as ${existing.name}!`);
-      onClose();
-    } else {
-      setStatusMsg({
-        type: "error",
-        text: `No account registered with ${clean}. Google-only instant signup is not permitted — please complete full registration first.`,
-      });
+    const passPrompt = prompt("Enter your KR8 account password:") || "";
+    if (!passPrompt) {
+      setStatusMsg({ type: "error", text: "Your account password is required to sign in securely." });
+      return;
     }
+    setLoading(true);
+    signInWithCredentials(emailPrompt.trim(), passPrompt)
+      .then((result) => {
+        if (!result.ok || !result.account) {
+          setStatusMsg({ type: "error", text: result.error || "Sign in failed. Please check your details." });
+          return;
+        }
+        signIn(result.account);
+        addNotification(`Signed in as ${result.account.name}!`);
+        onClose();
+      })
+      .finally(() => setLoading(false));
   };
 
-  const handleRequestResetCode = (e: React.FormEvent) => {
+  const handleRequestResetCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
     if (!resetIdentifier.trim()) {
@@ -164,24 +145,23 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
     }
 
     setLoading(true);
-    const res = requestPasswordReset(resetIdentifier);
+    const res = await requestPasswordReset(resetIdentifier);
     setLoading(false);
 
-    if (!res.ok || !res.code) {
+    if (!res.ok) {
       setStatusMsg({ type: "error", text: res.message });
       return;
     }
 
-    setGeneratedCode(res.code);
-    setResetCode(res.code); // Auto-fill for friction-free UX
+    setResetCode("");
     setResetStep("verify");
     setStatusMsg({
       type: "success",
-      text: `Verification code generated! Enter your new password below.`,
+      text: `A 6-digit verification code has been sent to your registered email address.`,
     });
   };
 
-  const handleCompleteReset = (e: React.FormEvent) => {
+  const handleCompleteReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
     if (!resetCode.trim()) {
@@ -194,18 +174,17 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
     }
 
     setLoading(true);
-    const res = completePasswordReset(resetIdentifier, resetCode, newPassword);
+    const res = await completePasswordReset(resetIdentifier, resetCode, newPassword);
     setLoading(false);
 
-    if (!res.ok || !res.account) {
+    if (!res.ok) {
       setStatusMsg({ type: "error", text: res.message });
       return;
     }
 
-    // Auto-sign in the user
-    signIn(res.account);
-    addNotification(`Password updated! You are now logged in as ${res.account.name}.`);
-    onClose();
+    addNotification(`Password updated! You can now sign in with your new password.`);
+    setMode("signin");
+    setResetStep("request");
   };
 
   return (
@@ -419,37 +398,19 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
                   disabled={loading}
                   className="w-full rounded-xl bg-gradient-pink py-3 text-xs font-bold text-white shadow-lg hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                 >
-                  {loading ? "Verifying..." : "Generate Verification Code 📩"}
+                  {loading ? "Sending..." : "Email Me a Verification Code 📩"}
                 </button>
               </form>
             ) : (
               <form onSubmit={handleCompleteReset} className="space-y-4">
-                {generatedCode && (
-                  <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                        ✓ Verification Code Ready
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(generatedCode);
-                          setCopiedCode(true);
-                          setTimeout(() => setCopiedCode(false), 2000);
-                        }}
-                        className="rounded-lg bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/30"
-                      >
-                        {copiedCode ? "Copied! ✓" : "Copy Code"}
-                      </button>
-                    </div>
-                    <div className="my-2.5 rounded-xl bg-black/60 p-2.5 text-center border border-emerald-500/30">
-                      <p className="font-mono text-2xl font-black text-white tracking-widest">{generatedCode}</p>
-                    </div>
-                    <p className="text-[10px] text-emerald-300/80 leading-relaxed">
-                      💡 <strong>Notice:</strong> Your verification code is provided directly on this screen and has been auto-applied below so you can proceed without waiting for email delivery. (Universal testing code: <strong className="font-mono text-white">888999</strong>).
-                    </p>
-                  </div>
-                )}
+                <div className="rounded-2xl border border-emerald-500/50 bg-emerald-950/60 p-4 text-xs text-emerald-200 shadow-xl">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                    ✓ Code Sent To Your Email
+                  </span>
+                  <p className="mt-2 text-[10px] text-emerald-300/80 leading-relaxed">
+                    Enter the 6-digit verification code from your registered email address below, then choose a new password.
+                  </p>
+                </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-[#cabfe0] mb-1">
@@ -459,7 +420,7 @@ export default function SignInModal({ isOpen, onClose, initialMode = "signin" }:
                     type="text"
                     value={resetCode}
                     onChange={(e) => setResetCode(e.target.value)}
-                    placeholder="e.g. 549210 or 888999"
+                    placeholder="6-digit code from your email"
                     className="w-full rounded-xl border border-white/15 bg-black/30 px-3.5 py-2.5 text-xs font-mono font-bold text-white focus:border-pink-500 focus:outline-none"
                     required
                   />

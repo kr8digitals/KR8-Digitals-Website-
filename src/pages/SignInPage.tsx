@@ -3,8 +3,7 @@ import { useSeo } from "../lib/useSeo";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  authenticateAccount,
-  getAccounts,
+  signInWithCredentials,
   normalizeEmail,
   requestPasswordReset,
   completePasswordReset,
@@ -36,10 +35,10 @@ export default function SignInPage() {
   const [appealText, setAppealText] = useState("");
   const [appealResult, setAppealResult] = useState<string | null>(null);
 
-  const handleAppealSubmit = (e: React.FormEvent) => {
+  const handleAppealSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!appealText.trim()) return;
-    const res = submitSuspensionAppeal(identifier.trim(), appealText.trim());
+    const res = await submitSuspensionAppeal(identifier.trim(), appealText.trim());
     if (res.ok) {
       setAppealResult("Your appeal has been received. KR8 administration will review your statement.");
       setAppealText("");
@@ -51,7 +50,7 @@ export default function SignInPage() {
   // Password reset state
   const [resetTarget, setResetTarget] = useState("");
   const [resetCode, setResetCode] = useState("");
-  const [demoCode, setDemoCode] = useState("");
+  const [codeRequested, setCodeRequested] = useState(false);
   const [newPassword, setNewPassword] = useState("");
 
   const registeredBios = getRegisteredBiometrics();
@@ -59,7 +58,7 @@ export default function SignInPage() {
   const inputCls =
     "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none";
 
-  const handleCredentialsSubmit = (e: React.FormEvent) => {
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
 
@@ -73,7 +72,7 @@ export default function SignInPage() {
     }
 
     setLoading(true);
-    const result = authenticateAccount(identifier, password);
+    const result = await signInWithCredentials(identifier, password);
     setLoading(false);
 
     if (!result.ok || !result.account) {
@@ -89,7 +88,7 @@ export default function SignInPage() {
     navigate("/dashboard");
   };
 
-  const handleGoogleSignIn = (e: React.FormEvent) => {
+  const handleGoogleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMsg(null);
 
@@ -98,41 +97,21 @@ export default function SignInPage() {
       setStatusMsg({ type: "error", text: "Please enter your Google account email." });
       return;
     }
-
-    const all = getAccounts();
-    const existing = all.find(
-      (a) =>
-        (a.googleAuth?.enabled && normalizeEmail(a.googleAuth.linkedEmail) === emailClean) ||
-        normalizeEmail(a.email) === emailClean
-    );
-
-    if (existing) {
-      // SECURITY CHECK: User must explicitly enable Google Sign-In in Account Settings
-      if (!existing.googleAuth?.enabled) {
-        setStatusMsg({
-          type: "error",
-          text: `Security Policy: Google Sign-In has not been enabled for this account (${existing.email}). To protect account security, please sign in with your email/phone and password first, then enable Google Sign-In in your Account Settings.`,
-        });
-        return;
-      }
-
-      if (normalizeEmail(existing.googleAuth.linkedEmail) !== emailClean) {
-        setStatusMsg({
-          type: "error",
-          text: `Access Denied: The Google account "${emailClean}" does not match the linked Google address on record for this account.`,
-        });
-        return;
-      }
-
-      signIn(existing);
-      addNotification(`Signed in with verified Google Account as ${existing.name}!`);
-      navigate(existing.type === "tribe" ? "/tribe" : "/academy");
-    } else {
-      setStatusMsg({
-        type: "error",
-        text: `No account registered with ${emailClean}. Google-only instant signup is not permitted — please complete the registration form first to set up your skill track.`,
-      });
+    if (!password) {
+      setStatusMsg({ type: "error", text: "Please enter your account password to continue." });
+      return;
     }
+
+    setLoading(true);
+    const result = await signInWithCredentials(emailClean, password);
+    setLoading(false);
+    if (!result.ok || !result.account) {
+      setStatusMsg({ type: "error", text: result.error || "Sign in failed. Please check your details." });
+      return;
+    }
+    signIn(result.account);
+    addNotification(`Signed in as ${result.account.name}!`);
+    navigate(result.account.type === "tribe" ? "/tribe" : "/academy");
   };
 
   const handleBiometricSignIn = async (targetId?: string) => {
@@ -144,10 +123,12 @@ export default function SignInPage() {
         setStatusMsg({ type: "error", text: res.error || "Biometric authentication cancelled or unavailable." });
         return;
       }
-      const all = getAccounts();
-      const account = all.find((a) => a.id.toLowerCase() === res.studentId!.toLowerCase());
+      const account = user;
       if (!account) {
-        setStatusMsg({ type: "error", text: `Account for ID ${res.studentId} could not be found.` });
+        setStatusMsg({
+          type: "error",
+          text: "For account security, sign in with your password once — biometrics can then unlock this device.",
+        });
         return;
       }
       signIn(account);
@@ -160,29 +141,26 @@ export default function SignInPage() {
     }
   };
 
-  const handleRequestReset = (e: React.FormEvent) => {
+  const handleRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
     const target = resetTarget.trim() || identifier.trim();
     if (!target) {
       setStatusMsg({ type: "error", text: "Please enter your registered Email, KR8 ID, or Phone." });
       return;
     }
-    const res = requestPasswordReset(target);
+    setResetCode("");
+    const res = await requestPasswordReset(target);
+    if (res.ok) setCodeRequested(true);
     setStatusMsg({ type: res.ok ? "success" : "error", text: res.message });
-    if (res.code) {
-      setDemoCode(res.code);
-      setResetCode(res.code);
-    }
   };
 
-  const handleCompleteReset = (e: React.FormEvent) => {
+  const handleCompleteReset = async (e: React.FormEvent) => {
     e.preventDefault();
     const target = resetTarget.trim() || identifier.trim();
-    const res = completePasswordReset(target, resetCode, newPassword);
+    const res = await completePasswordReset(target, resetCode, newPassword);
     setStatusMsg({ type: res.ok ? "success" : "error", text: res.message });
-    if (res.ok && res.account) {
-      signIn(res.account);
-      setTimeout(() => navigate("/dashboard"), 1200);
+    if (res.ok) {
+      setTimeout(() => navigate("/signin"), 1200);
     }
   };
 
@@ -447,6 +425,20 @@ export default function SignInPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-[#cabfe0] mb-1.5">
+                  Account Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  className={inputCls}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+
               <div className="pt-2">
                 <GradientButton type="submit" className="w-full py-3.5 shadow-xl shadow-pink-500/25 text-sm font-bold">
                   Continue with Google →
@@ -481,14 +473,15 @@ export default function SignInPage() {
                 </GradientButton>
               </form>
 
-              {demoCode && (
+              {codeRequested && (
                 <form onSubmit={handleCompleteReset} className="mt-5 space-y-3 border-t border-white/10 pt-4">
                   <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/60 p-3 text-center">
                     <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                      Verification Code Generated:
+                      Check Your Email
                     </p>
-                    <p className="font-mono text-2xl font-black text-white tracking-widest my-1">{demoCode}</p>
-                    <p className="text-[10px] text-emerald-300">Enter your new password below.</p>
+                    <p className="text-[10px] text-emerald-300">
+                      A 6-digit verification code was sent to your registered email address. Enter it below with your new password.
+                    </p>
                   </div>
 
                   <div>

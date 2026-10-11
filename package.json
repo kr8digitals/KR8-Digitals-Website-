@@ -6,6 +6,7 @@
   "scripts": {
     "predev": "test -d node_modules || npm install",
     "dev": "vite",
+    "dev:api": "tsx scripts/dev-api.mts",
     "prebuild": "test -d node_modules || npm install",
     "build": "tsc -b && vite build",
     "prepreview": "test -d node_modules || npm install",
@@ -34,6 +35,7 @@
     "jsdom": "^29.1.1",
     "playwright": "^1.63.0",
     "tailwindcss": "4.1.17",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3",
     "vite": "7.3.5",
     "vite-plugin-singlefile": "2.3.0"

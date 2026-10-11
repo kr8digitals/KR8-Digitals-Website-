@@ -109,13 +109,23 @@ class LiveKitManager {
 
     const serverUrl =
       options.serverUrl ||
-      (typeof window !== "undefined" ? localStorage.getItem("kr8_livekit_url") : null) ||
       (import.meta.env.VITE_LIVEKIT_URL as string | undefined);
 
-    const token =
-      options.token ||
-      (typeof window !== "undefined" ? localStorage.getItem("kr8_livekit_token") : null) ||
-      (import.meta.env.VITE_LIVEKIT_TOKEN as string | undefined);
+    // LiveKit tokens are minted ON THE SERVER (POST /api/livekit) — the API
+    // key/secret never reaches the browser and nothing is stored in it.
+    let token = options.token;
+    if (!token) {
+      try {
+        const { apiLiveKitToken } = await import("./api");
+        const minted = await apiLiveKitToken(
+          options.roomName,
+          options.isHost ? "host" : "attendee"
+        );
+        token = minted.token;
+      } catch {
+        token = undefined;
+      }
+    }
 
     // If livekit URL and token are configured, connect to livekit cloud room
     if (serverUrl && token) {

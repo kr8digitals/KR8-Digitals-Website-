@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useSeo } from "../lib/useSeo";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { updateAccount, getReferralUrl, getSkill } from "../data/store";
+import { updateAccount, getReferralUrl, getSkill,
+  changePassword,
+} from "../data/store";
 import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
@@ -39,62 +41,17 @@ export default function Settings() {
   const [supportInfo, setSupportInfo] = useState<{ supported: boolean; hasPlatformSensor: boolean; reason: string } | null>(null);
 
   // Google Sign-In Enablement State (User-Enabled Security Model)
-  const [googleEmailInput, setGoogleEmailInput] = useState(student?.googleAuth?.linkedEmail || student?.email || "");
-  const [googlePasswordConfirm, setGooglePasswordConfirm] = useState("");
-  const [googleLinkOpen, setGoogleLinkOpen] = useState(false);
-  const [googleMsg, setGoogleMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [googleMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (student) {
       setBiometric(getBiometricForStudent(student.id));
-      if (student.googleAuth?.linkedEmail) {
-        setGoogleEmailInput(student.googleAuth.linkedEmail);
-      }
     }
     checkBiometricSupport().then(setSupportInfo);
   }, [student]);
 
-  const handleEnableGoogleAuth = (e: React.FormEvent) => {
-    e.preventDefault();
-    setGoogleMsg(null);
-    if (!student) return;
-    if (!googleEmailInput.trim().includes("@")) {
-      setGoogleMsg({ type: "error", text: "Please enter a valid Google Account email." });
-      return;
-    }
-    if (student.password && student.password !== googlePasswordConfirm) {
-      setGoogleMsg({ type: "error", text: "Incorrect password. You must verify your account password to authorize Google Sign-In." });
-      return;
-    }
-
-    const updated = updateAccount(student.id, {
-      googleAuth: {
-        enabled: true,
-        linkedEmail: googleEmailInput.trim().toLowerCase(),
-        linkedAt: Date.now(),
-        verifiedToken: "kr8_gauth_" + Math.random().toString(36).substring(2, 10),
-      },
-    });
-
-    if (updated) {
-      signIn(updated);
-      setGoogleLinkOpen(false);
-      setGooglePasswordConfirm("");
-      setGoogleMsg({ type: "success", text: `Google Sign-In successfully enabled and bound to ${googleEmailInput.trim().toLowerCase()}!` });
-    }
-  };
-
-  const handleDisableGoogleAuth = () => {
-    if (!student) return;
-    if (!window.confirm("Are you sure you want to disable Google Sign-In for your account? You will need your password to log in.")) return;
-    const updated = updateAccount(student.id, {
-      googleAuth: undefined,
-    });
-    if (updated) {
-      signIn(updated);
-      setGoogleMsg({ type: "success", text: "Google Sign-In has been disabled for your account." });
-    }
-  };
+  // Google Sign-In is federated by Supabase Auth (email + password on this app).
+  // Identity linking happens server-side — nothing to configure in the browser. 
 
   if (!student) {
     return (
@@ -141,7 +98,7 @@ export default function Settings() {
     }
   };
 
-  const handleUpdatePassword = () => {
+  const handleUpdatePassword = async () => {
     setPasswordError("");
     if (!password.trim() || password.length < 6) {
       setPasswordError("Password must be at least 6 characters.");
@@ -151,14 +108,16 @@ export default function Settings() {
       setPasswordError("Passwords do not match.");
       return;
     }
-    const updated = updateAccount(student.id, { password: password.trim() });
-    if (updated) {
-      signIn(updated);
-      setPassword("");
-      setConfirmPassword("");
-      setSavedPassword(true);
-      setTimeout(() => setSavedPassword(false), 2000);
+    // Real credential change — updates the Supabase Auth password via /api/me.
+    const res = await changePassword(password.trim());
+    if (!res.ok) {
+      setPasswordError(res.error || "Could not update password.");
+      return;
     }
+    setPassword("");
+    setConfirmPassword("");
+    setSavedPassword(true);
+    setTimeout(() => setSavedPassword(false), 2000);
   };
 
   const handleEnableBiometric = async () => {
@@ -409,7 +368,7 @@ export default function Settings() {
         </Card>
 
         {/* Biometrics & Fingerprint Authentication */}
-        {/* Google Sign-In Security (User-Enabled Security Model) */}
+        {/* Google Sign-In Security (federated by Supabase Auth) */}
         <Card className="mt-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -419,74 +378,27 @@ export default function Settings() {
               <div>
                 <h2 className="font-bold text-white text-lg">Google Sign-In Security</h2>
                 <p className="text-xs text-[#b8aecf]">
-                  Google Sign-In stays off until you personally link and authorize your Google account for this KR8 profile.
+                  Google Sign-In is secured by Supabase authentication for this KR8 profile.
                 </p>
               </div>
             </div>
 
-            {student.googleAuth?.enabled ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-xs font-semibold text-green-300">
-                <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-                Active & Protected
-              </span>
-            ) : (
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#b8aecf]">
-                Not enabled
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/20 px-3 py-1 text-xs font-semibold text-green-300">
+              <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+              Protected
+            </span>
           </div>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-            {student.googleAuth?.enabled ? (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-[#8a7ba8]">Linked Google Account:</span>
-                  <span className="font-mono text-pink-300">{student.googleAuth.linkedEmail}</span>
-                </div>
-                {student.googleAuth.linkedAt ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <span className="text-[#8a7ba8]">Linked On:</span>
-                    <span className="text-[#cabfe0]">
-                      {new Date(student.googleAuth.linkedAt).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-                ) : null}
-                <p className="pt-1 text-xs text-[#cabfe0]">
-                  You can now sign in on any device using your linked Google account. Disabling Google Sign-In means you will need your account password to log in.
-                </p>
-                <div className="mt-3">
-                  <button
-                    onClick={handleDisableGoogleAuth}
-                    className="rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20"
-                  >
-                    Disable Google Sign-In
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs leading-relaxed text-[#cabfe0]">
-                  Enable Google Sign-In to log in faster on shared or personal devices. For account security, you must verify your current KR8 password before linking — the Google address you bind can never be changed by anyone else on this account.
-                </p>
-                <div className="pt-2">
-                  <button
-                    onClick={() => {
-                      setGoogleMsg(null);
-                      setGoogleLinkOpen(true);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-full bg-gradient-pink px-5 py-2.5 text-xs font-bold text-white glow-pink-sm hover:scale-[1.02] transition-transform"
-                  >
-                    <Icon name="shield" size={16} />
-                    Link Google Account
-                  </button>
-                </div>
-              </div>
-            )}
-
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="text-[#8a7ba8]">Account Email:</span>
+              <span className="font-mono text-pink-300">{student.email}</span>
+            </div>
+            <p className="pt-2 text-xs leading-relaxed text-[#cabfe0]">
+              Sign in with your KR8 ID or email and password. Google Sign-In uses the same verified email through
+              Supabase secure authentication — no separate browser-stored link is needed, and your credentials are
+              never exposed to this device.
+            </p>
             {googleMsg && (
               <div
                 className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium ${
@@ -500,61 +412,6 @@ export default function Settings() {
             )}
           </div>
         </Card>
-
-        {googleLinkOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
-            onClick={() => setGoogleLinkOpen(false)}
-          >
-            <div className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-              <Card className="p-6">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-pink text-white shadow-md">
-                    <Icon name="shield" size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-display text-lg font-bold text-white">Link Google Account</h3>
-                    <p className="text-xs text-[#b8aecf]">
-                      Authorize Google Sign-In for this KR8 profile.
-                    </p>
-                  </div>
-                </div>
-                <form onSubmit={handleEnableGoogleAuth} className="mt-4 space-y-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-[#cabfe0]">Google Account Email</label>
-                    <input
-                      type="email"
-                      required
-                      value={googleEmailInput}
-                      onChange={(e) => setGoogleEmailInput(e.target.value)}
-                      placeholder="your.email@gmail.com"
-                      className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white focus:border-pink-400/60 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-[#cabfe0]">Verify Account Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={googlePasswordConfirm}
-                      onChange={(e) => setGooglePasswordConfirm(e.target.value)}
-                      placeholder="Your KR8 account password"
-                      className="w-full rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm text-white focus:border-pink-400/60 focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <GradientButton type="submit" className="flex-1 py-2.5">
-                      Enable & Link Google Sign-In
-                    </GradientButton>
-                    <GhostButton onClick={() => setGoogleLinkOpen(false)} className="px-4 py-2.5">
-                      Cancel
-                    </GhostButton>
-                  </div>
-                </form>
-              </Card>
-            </div>
-          </div>
-        )}
 
         <Card className="mt-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

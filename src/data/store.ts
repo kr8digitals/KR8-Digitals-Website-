@@ -1,4 +1,41 @@
 import { IMG } from "./images";
+import {
+  docGet,
+  docGetSync,
+  docSet,
+  docSetSync,
+  setAccountsCache,
+  setAttendanceCache,
+  setAttendanceTypesCache,
+  setFeedCache,
+  accountsCache,
+  feedCache,
+  attendanceCache,
+  attendanceTypesCache,
+  countsCache,
+  upsertAccountCache,
+  removeAccountCache,
+  bootstrapStore,
+  pushStudentPatch,
+  type RemoteAccount,
+} from "./db";
+import {
+  apiActivity,
+  apiAdminRegister,
+  apiAdminRevokeStudent,
+  apiAdminRoles,
+  apiAttendanceAction,
+  apiGraduation,
+  apiLogin,
+  apiMeAction,
+  apiRegister,
+  apiResetComplete,
+  apiResetRequest,
+  apiSocial,
+  apiTransition,
+  apiVerify,
+} from "../lib/api";
+import { getSupabase } from "../lib/supabase";
 
 /* ---------------- Skills / curriculum / instructors ---------------- */
 export type Week = { week: string; title: string; points: string[] };
@@ -462,45 +499,76 @@ export function fdAllowed(phone: string) {
 }
 
 /* ---------------- Storage helpers ---------------- */
-const memoryStorage = new Map<string, string>();
 
 function load<T>(key: string, fallback: T): T {
-  try {
-    const v = typeof localStorage !== "undefined" ? localStorage.getItem(key) : memoryStorage.get(key);
-    return v ? (JSON.parse(v) as T) : fallback;
-  } catch {
-    return fallback;
-  }
+  return docGet<T>(key, fallback);
 }
 function save<T>(key: string, val: T) {
+  docSet(key, val);
+}
+
+/* ---------------- secure session / sync helpers ---------------- */
+type SessionPayload = { access_token: string; refresh_token: string; expires_at?: number } | null;
+
+export async function applySession(session: SessionPayload): Promise<void> {
+  if (!session) return;
+  const sb = getSupabase();
+  if (!sb) return;
   try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(key, JSON.stringify(val));
-    }
-  } catch (err) {
-    console.warn(`localStorage save error for key ${key}:`, err);
-    try {
-      if (typeof localStorage !== "undefined") {
-        // Clear obsolete scratch/backup keys to immediately recover quota
-        localStorage.removeItem("kr8_accounts_backup");
-        localStorage.removeItem("kr8_accounts_v2");
-        localStorage.setItem(key, JSON.stringify(val));
-      }
-    } catch {
-      /* ignore */
-    }
+    await sb.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+  } catch {
+    /* ignore */
   }
-  memoryStorage.set(key, JSON.stringify(val));
 }
 
+function notifyAccountsUpdated(ids: string[] = []) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("kr8:accounts-updated", { detail: { changedIds: ids } }));
+}
+
+const accountPushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function scheduleAccountsPush(previous: RemoteAccount[], next: RemoteAccount[]) {
+  const prevMap = new Map(previous.map((a) => [(a.id || "").replace(/[\s-]/g, "").toUpperCase(), JSON.stringify(a)]));
+  for (const acc of next) {
+    const key = (acc.id || "").replace(/[\s-]/g, "").toUpperCase();
+    const before = prevMap.get(key);
+    const after = JSON.stringify(acc);
+    if (before === after) continue;
+    prevMap.delete(key);
+    const existing = accountPushTimers.get(key);
+    if (existing) clearTimeout(existing);
+    accountPushTimers.set(
+      key,
+      setTimeout(() => {
+        accountPushTimers.delete(key);
+        void pushStudentPatch(acc.id, acc as unknown as Record<string, unknown>).catch(() => undefined);
+      }, 600)
+    );
+  }
+}
+
+/**
+ * Supabase Auth sign-in. The identifier (KR8 ID / email / phone) is resolved
+ * to an account ON THE SERVER — the browser never compares passwords.
+ */
+export async function signInWithCredentials(
+  identifier: string,
+  password: string
+): Promise<{ ok: boolean; account?: Account; error?: string }> {
+  try {
+    const res = await apiLogin(identifier.trim(), password);
+    await applySession(res.session);
+    upsertAccountCache(res.account as RemoteAccount);
+    notifyAccountsUpdated([res.account.id]);
+    return { ok: true, account: res.account as unknown as Account };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Sign in failed." };
+  }
+}
 export const COHORT_YEAR = 2026;
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const a = parts[0]?.[0] ?? "X";
-  const b = parts[1]?.[0] ?? parts[0]?.[1] ?? "X";
-  return (a + b).toUpperCase();
-}
 
 export function normalizeIdentity(value: string): string {
   return value.trim().replace(/[\s-]/g, "").toUpperCase();
@@ -663,9 +731,8 @@ export type Account = {
   following?: string[];
   followers?: string[];
   messagePrivacy?: "Anyone" | "Friends only" | "No one";
+  /** Transient admin-handover only (temp password shown once). Never persisted. */
   password?: string;
-  resetCode?: string;
-  resetCodeExpires?: number;
   restricted?: boolean;
   isModerator?: boolean;
   moderatorRole?: string;
@@ -678,18 +745,10 @@ export type Account = {
     offeredAt: number;
     offeredBy: string;
   };
-  googleAuth?: {
-    enabled: boolean;
-    linkedEmail: string;
-    linkedAt: number;
-    verifiedToken?: string;
-  };
   admin?: {
     role: "ultimate" | "admin" | "coach" | "assistant" | "attendance_reviewer";
     title?: string;
     permissions: string[];
-    adminPassword?: string;
-    passwordNotice?: string;
     promotedBy?: string;
   };
 };
@@ -714,7 +773,6 @@ export const ADMIN_PHONE_NUMBERS = [
   ...COFOUNDER_PHONES,
 ];
 export const ULTIMATE_ADMIN_EMAILS = [...FOUNDER_EMAILS];
-export const MAIN_ADMIN_PASSWORD = "KR8@Adm!n2026";
 export const ADMIN_SECTIONS = [
   "Overview", "Home", "Academy", "Testimonial Videos", "Agency", "Student Management", "Blog",
   "Announcements", "Graduation & Certificates", "Leaderboard & XP", "Links Manager",
@@ -740,76 +798,47 @@ export function isExecutiveAccount(account?: Account | null): boolean {
 export function randomAdminPassword() {
   return `KR8-${Math.random().toString(36).slice(2, 8).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
 }
-
-export function adminInfoFor(phone: string, email: string) {
-  const normalizedPhone = normalizePhone(phone);
-  const normalizedEmail = normalizeEmail(email);
-  const isFounder = isFounderAccount(normalizedPhone, normalizedEmail);
-  const isCoFounder = isCoFounderAccount(normalizedPhone, normalizedEmail);
-
-  if (isFounder) {
-    return {
-      role: "ultimate" as const,
-      title: "Founder & CEO",
-      permissions: [...ADMIN_SECTIONS],
-      adminPassword: MAIN_ADMIN_PASSWORD,
-      passwordNotice: "Founder & CEO credentials recognized. Full system authority active.",
-    };
-  }
-
-  if (isCoFounder) {
-    return {
-      role: "ultimate" as const,
-      title: "Co-Founder",
-      permissions: [...ADMIN_SECTIONS],
-      adminPassword: MAIN_ADMIN_PASSWORD,
-      passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
-    };
-  }
-
-  const isRecognized = ADMIN_PHONE_NUMBERS.includes(normalizedPhone) || ULTIMATE_ADMIN_EMAILS.includes(normalizedEmail);
-  if (!isRecognized) return undefined;
-  const adminPassword = randomAdminPassword();
-  return {
-    role: "admin" as const,
-    title: "Platform Administrator",
-    permissions: [...ADMIN_SECTIONS],
-    adminPassword,
-    passwordNotice: `Your unique admin password is ${adminPassword}. Keep it safe.`,
-  };
-}
-
 export function isUltimateAdmin(account?: Account | null) {
   return account?.admin?.role === "ultimate";
 }
 
-export function getRecognizedAdmin(phone: string, email: string) {
-  return adminInfoFor(phone, email);
+export function getRecognizedAdmin(_phone: string, _email: string): Account["admin"] | undefined {
+  // Roles are granted in `user_roles` and delivered by the server after sign-in.
+  return undefined;
 }
-
 export function canAccessAdminSection(account: Account | null | undefined, section: string) {
   return !!account?.admin && (account.admin.role === "ultimate" || account.admin.permissions.includes(section));
 }
 
-export function promoteAccount(targetId: string, role: "admin" | "coach" | "assistant", permissions: string[], promotedBy: string, title: string = role) {
-  const target = getAccounts().find((account) => account.id === targetId);
-  if (!target) return undefined;
-  const nextAdmin = { role, title, permissions, adminPassword: randomAdminPassword(), passwordNotice: "Your role password was generated for this profile. Keep it safe; only an ultimate admin can reset it.", promotedBy } as Account["admin"];
-  return updateAccount(targetId, { admin: nextAdmin });
+export async function promoteAccount(
+  targetId: string,
+  role: "admin" | "coach" | "assistant",
+  permissions: string[],
+  _promotedBy: string,
+  title: string = role
+): Promise<Account | undefined> {
+  try {
+    await apiAdminRoles({ action: "grant", kr8Id: targetId, role, permissions, title });
+    const updated = updateAccount(targetId, {
+      admin: { role: role as NonNullable<Account["admin"]>["role"], title, permissions },
+    });
+    return updated;
+  } catch {
+    return undefined;
+  }
 }
-
-export function demoteAccount(targetId: string) {
-  return updateAccount(targetId, { admin: undefined });
+export async function demoteAccount(targetId: string): Promise<Account | undefined> {
+  try {
+    await apiAdminRoles({ action: "revoke", kr8Id: targetId });
+    return updateAccount(targetId, { admin: undefined });
+  } catch {
+    return undefined;
+  }
 }
-
-export function resetAdminPassword(targetId: string) {
-  const account = getAccounts().find((item) => item.id === targetId);
-  if (!account?.admin || account.admin.role === "ultimate") return undefined;
-  const adminPassword = randomAdminPassword();
-  updateAccount(targetId, { admin: { ...account.admin, adminPassword, passwordNotice: `Your admin password was reset: ${adminPassword}. Keep it safe.` } });
-  return adminPassword;
+export async function resetAdminPassword(_targetId: string): Promise<string | undefined> {
+  // Passwords live in Supabase Auth only — the student resets them by email.
+  return undefined;
 }
-
 export function getSkillSuffix(skillKey: string): string {
   const s = getSkill(skillKey);
   if (s?.suffix) return s.suffix;
@@ -822,832 +851,33 @@ export function getSkillCode(skillKey: string): string {
   return suffix.replace(/VFD$/i, "") || skillKey.toUpperCase().slice(0, 3);
 }
 
-function kr8id(name: string, skill: string, serial: number): string {
-  return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${getSkillSuffix(skill)}`;
-}
-
-// v3 is the durable account namespace.
-const ACCOUNT_STORAGE_KEY = "kr8_accounts_v3";
-const FEED_STORAGE_KEY = "kr8_feed_v3";
-
-const DEFAULT_FOUNDER_ACCOUNT: Account = {
-  type: "founder",
-  executiveRole: "Founder",
-  title: "Founder & CEO",
-  id: "KR8-FOUNDER-TIMFIRE",
-  name: "Kenneth Timothy Iziogo (Timfire)",
-  email: "kr8digitals01@gmail.com",
-  phone: "+2348125687509",
-  country: "NG",
-  skill: "web",
-  dob: "2000-01-01",
-  year: COHORT_YEAR,
-  serial: 1,
-  vip: true,
-  points: 1000,
-  attendanceAccepted: 24,
-  submissions: 16,
-  referrals: 50,
-  graduated: true,
-  certTier: "Professionalism",
-  certRecognition: "Founder & Lead Architect",
-  avatar: "/founder_timfire.jpg",
-  coverPhoto: "https://images.pexels.com/photos/3866398/pexels-photo-3866398.jpeg?auto=compress&cs=tinysrgb&w=1400",
-  bio: "Founder & Lead Architect at KR8 Digitals. Website developer, AI agent developer, designer, and linguistics scholar.",
-  joined: 1700000000000,
-  expandedVisibility: true,
-  password: MAIN_ADMIN_PASSWORD,
-  isPlaceholder: false,
-  portfolio: [],
-  following: [],
-  followers: [],
-  messagePrivacy: "Anyone",
-  admin: {
-    role: "ultimate",
-    title: "Founder & CEO",
-    permissions: [...ADMIN_SECTIONS],
-    adminPassword: MAIN_ADMIN_PASSWORD,
-    passwordNotice: "Founder & CEO credentials recognized. Full system control unlocked.",
-  },
-};
-
-const DEFAULT_COFOUNDER_1: Account = {
-  type: "co-founder",
-  executiveRole: "Co-Founder",
-  title: "Co-Founder · Media Director",
-  id: "KR8-COFOUNDER-STEVENSON",
-  name: "Stevenson (Motionverse)",
-  email: "stevenson@kr8digitals.com",
-  phone: "+2348089344434",
-  country: "NG",
-  skill: "graphic",
-  dob: "2000-01-01",
-  year: COHORT_YEAR,
-  serial: 2,
-  vip: true,
-  points: 800,
-  attendanceAccepted: 20,
-  submissions: 12,
-  referrals: 30,
-  graduated: true,
-  certTier: "Professionalism",
-  certRecognition: "Co-Founder & Media Director",
-  avatar: INSTRUCTOR_PHOTOS.stevenson,
-  bio: "Co-Founder & Media Director at KR8 Digitals. Lead Instructor for Graphic Design.",
-  joined: 1700000000000,
-  expandedVisibility: true,
-  password: MAIN_ADMIN_PASSWORD,
-  isPlaceholder: false,
-  portfolio: [],
-  following: [],
-  followers: [],
-  messagePrivacy: "Anyone",
-  admin: {
-    role: "ultimate",
-    title: "Co-Founder",
-    permissions: [...ADMIN_SECTIONS],
-    adminPassword: MAIN_ADMIN_PASSWORD,
-    passwordNotice: "Co-Founder credentials recognized. Full executive access unlocked.",
-  },
-};
-
-/* ---------------- Co-Founder Identity Integrity ----------------
- * Canonical co-founder identity registry, keyed by normalized phone.
- * Historically, co-founder registration/sign-in resolution could merge a
- * co-founder's credentials into the OTHER co-founder's record (first-match
- * lookup), leaving the affected person with a profile carrying false details
- * (e.g. Daniel showing "Graphic Design" / Motionverse). Every account load
- * repairs such records back to the canonical identity owned by their phone.
- */
-const COFOUNDER_IDENTITY: Record<string, { id: string; name: string; title: string; skill: string; avatar: string; certRecognition: string; brand: string }> = {
-  "+2348089344434": {
-    id: "KR8-COFOUNDER-STEVENSON",
-    name: "Stevenson (Motionverse)",
-    title: "Co-Founder · Media Director",
-    skill: "graphic",
-    avatar: INSTRUCTOR_PHOTOS.stevenson,
-    certRecognition: "Co-Founder & Media Director",
-    brand: "motionverse",
-  },
-  "+2348106068523": {
-    id: "KR8-COFOUNDER-DANIEL",
-    name: "Daniel (Creative Expression)",
-    title: "Co-Founder · COO",
-    skill: "video",
-    avatar: INSTRUCTOR_PHOTOS.daniel,
-    certRecognition: "Co-Founder & COO",
-    brand: "creative expression",
-  },
-};
-
-function coFounderCanonFor(phone?: string): (typeof COFOUNDER_IDENTITY)[string] | undefined {
-  if (!phone) return undefined;
-  return COFOUNDER_IDENTITY[normalizePhone(phone)];
-}
-
-/**
- * Repairs co-founder identity corruption:
- * - Collapses duplicate records claiming the same co-founder phone into one.
- * - Re-asserts canonical id/name/title/skill/avatar/certRecognition for the
- *   phone owner when a record was merged with the other co-founder's data.
- * - Preserves personal fields (email, password, points, history) and keeps
- *   old ids resolvable via previousIds.
- */
-function healCoFounderIdentity(combined: Account[]): Account[] {
-  const groups = new Map<string, Account[]>();
-  const rest: Account[] = [];
-  for (const acc of combined) {
-    const canon = coFounderCanonFor(acc.phone);
-    if (canon) {
-      groups.set(canon.id, [...(groups.get(canon.id) || []), acc]);
-    } else {
-      rest.push(acc);
-    }
-  }
-  if (groups.size === 0) return combined;
-
-  const canons = Object.values(COFOUNDER_IDENTITY);
-  const healedByKeeper = new Map<Account, Account>();
-  const keeperFor = new Map<Account, Account>(); // every group member -> its keeper
-
-  for (const [canonId, group] of groups) {
-    const canon = canons.find((c) => c.id === canonId)!;
-    const other = canons.find((c) => c.id !== canonId)!;
-    // Keeper precedence: personalized record (real password) > canonical ID > first
-    const keeper =
-      group.find((o) => o.password && o.password !== MAIN_ADMIN_PASSWORD) ||
-      group.find((o) => normalizeIdentity(o.id || "") === normalizeIdentity(canonId)) ||
-      group[0];
-    // Merge duplicate records' personal data into the keeper
-    for (const o of group) {
-      if (o === keeper) continue;
-      keeper.previousIds = Array.from(new Set([...(keeper.previousIds || []), ...(o.previousIds || []), o.id]));
-      if (!keeper.email && o.email) keeper.email = o.email;
-      if (!keeper.password && o.password) keeper.password = o.password;
-    }
-    // Re-assert canonical identity fields for this phone's owner
-    const lowerName = (keeper.name || "").trim().toLowerCase();
-    const nameCorrupted =
-      !lowerName || lowerName === other.name.toLowerCase() || lowerName.includes(other.brand);
-    if (normalizeIdentity(keeper.id || "") !== normalizeIdentity(canonId)) {
-      keeper.previousIds = Array.from(new Set([...(keeper.previousIds || []), keeper.id]));
-    }
-    for (const o of group) keeperFor.set(o, keeper);
-    healedByKeeper.set(keeper, {
-      ...keeper,
-      id: canonId,
-      type: "co-founder",
-      executiveRole: "Co-Founder",
-      title: canon.title,
-      skill: canon.skill,
-      certRecognition: canon.certRecognition,
-      name: nameCorrupted ? canon.name : keeper.name,
-      avatar:
-        !keeper.avatar ||
-        keeper.avatar === other.avatar ||
-        keeper.avatar.startsWith("data:") ||
-        keeper.avatar.includes("pexels")
-          ? canon.avatar
-          : keeper.avatar,
-      previousIds: Array.from(new Set(keeper.previousIds || [])),
-    });
-  }
-
-  // Reassemble: each group's keeper takes the group's first original slot,
-  // duplicates are dropped, non-co-founder accounts keep their positions.
-  const consumed = new Set<Account>();
-  const result: Account[] = [];
-  for (const acc of combined) {
-    const keeper = keeperFor.get(acc);
-    if (!keeper) {
-      result.push(acc);
-      continue;
-    }
-    if (!consumed.has(keeper)) {
-      consumed.add(keeper);
-      result.push(healedByKeeper.get(keeper)!);
-    }
-  }
-  return result;
-}
-
-const DEFAULT_COFOUNDER_2: Account = {
-  type: "co-founder",
-  executiveRole: "Co-Founder",
-  title: "Co-Founder · COO",
-  id: "KR8-COFOUNDER-DANIEL",
-  name: "Daniel (Creative Expression)",
-  email: "daniel@kr8digitals.com",
-  phone: "+2348106068523",
-  country: "NG",
-  skill: "video",
-  dob: "2000-01-01",
-  year: COHORT_YEAR,
-  serial: 3,
-  vip: true,
-  points: 800,
-  attendanceAccepted: 20,
-  submissions: 12,
-  referrals: 30,
-  graduated: true,
-  certTier: "Professionalism",
-  certRecognition: "Co-Founder & COO",
-  avatar: INSTRUCTOR_PHOTOS.daniel,
-  bio: "Co-Founder & COO at KR8 Digitals. Lead Instructor for Video Editing & Animation.",
-  joined: 1700000000000,
-  expandedVisibility: true,
-  password: MAIN_ADMIN_PASSWORD,
-  isPlaceholder: false,
-  portfolio: [],
-  following: [],
-  followers: [],
-  messagePrivacy: "Anyone",
-  admin: {
-    role: "ultimate",
-    title: "Co-Founder",
-    permissions: [...ADMIN_SECTIONS],
-    adminPassword: MAIN_ADMIN_PASSWORD,
-    passwordNotice: "Co-Founder credentials recognized. Full executive access unlocked.",
-  },
-};
-
-const VERIFIED_COHORT_STUDENTS: Account[] = [
-  {
-    type: "student",
-    id: "KR82026GD001",
-    name: "Grant Gideon",
-    email: "grant.gideon@student.kr8digitals.com",
-    phone: "+2348011110001",
-    country: "NG",
-    skill: "graphic-design",
-    dob: "2000-05-12",
-    year: COHORT_YEAR,
-    serial: 1,
-    vip: false,
-    points: 1450,
-    attendanceAccepted: 14,
-    submissions: 8,
-    referrals: 7,
-    graduated: true,
-    certTier: "Professionalism",
-    avatar: "/videos/testimonial_grant_gideon_poster.jpg",
-    joined: 1718000000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026VE002",
-    name: "Bio Nicz",
-    email: "bio.nicz@student.kr8digitals.com",
-    phone: "+2348011110002",
-    country: "NG",
-    skill: "video-editing",
-    dob: "1999-08-20",
-    year: COHORT_YEAR,
-    serial: 2,
-    vip: false,
-    points: 1320,
-    attendanceAccepted: 14,
-    submissions: 8,
-    referrals: 5,
-    graduated: true,
-    certTier: "Professionalism",
-    avatar: "/videos/testimonial_bio_nicz_poster.jpg",
-    joined: 1718100000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026VE003",
-    name: "Madukaku Samuel",
-    email: "madukaku.samuel@student.kr8digitals.com",
-    phone: "+2348011110003",
-    country: "NG",
-    skill: "video-editing",
-    dob: "2001-02-14",
-    year: COHORT_YEAR,
-    serial: 3,
-    vip: false,
-    points: 1280,
-    attendanceAccepted: 13,
-    submissions: 7,
-    referrals: 4,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_maduka_samuel_poster.jpg",
-    joined: 1718200000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026GD004",
-    name: "Elizabeth Oyejobi",
-    email: "elizabeth.oyejobi@student.kr8digitals.com",
-    phone: "+2348011110004",
-    country: "NG",
-    skill: "graphic-design",
-    dob: "2002-11-03",
-    year: COHORT_YEAR,
-    serial: 4,
-    vip: false,
-    points: 1190,
-    attendanceAccepted: 12,
-    submissions: 7,
-    referrals: 3,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_elizabeth_oyejobi_poster.jpg",
-    joined: 1718300000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026GD005",
-    name: "Afolayan Grace Taiwo",
-    email: "afolayan.grace@student.kr8digitals.com",
-    phone: "+2348011110005",
-    country: "NG",
-    skill: "graphic-design",
-    dob: "2000-09-17",
-    year: COHORT_YEAR,
-    serial: 5,
-    vip: false,
-    points: 1120,
-    attendanceAccepted: 13,
-    submissions: 6,
-    referrals: 6,
-    graduated: true,
-    certTier: "Professionalism",
-    avatar: "/videos/testimonial_afolayan_grace_poster.jpg",
-    joined: 1718400000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026GD006",
-    name: "Adrian Washington",
-    email: "adrian.washington@student.kr8digitals.com",
-    phone: "+2348011110006",
-    country: "NG",
-    skill: "graphic-design",
-    dob: "1998-12-05",
-    year: COHORT_YEAR,
-    serial: 6,
-    vip: false,
-    points: 1080,
-    attendanceAccepted: 12,
-    submissions: 6,
-    referrals: 2,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_new_3_poster.jpg",
-    joined: 1718500000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026VE007",
-    name: "William Marvelous",
-    email: "william.marvelous@student.kr8digitals.com",
-    phone: "+2348011110007",
-    country: "NG",
-    skill: "video-editing",
-    dob: "2001-07-22",
-    year: COHORT_YEAR,
-    serial: 7,
-    vip: false,
-    points: 980,
-    attendanceAccepted: 11,
-    submissions: 5,
-    referrals: 3,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_new_2_poster.jpg",
-    joined: 1718600000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026WD008",
-    name: "Emmanuel Nweke",
-    email: "emmanuel.nweke@student.kr8digitals.com",
-    phone: "+2348011110008",
-    country: "NG",
-    skill: "web-development",
-    dob: "2000-01-30",
-    year: COHORT_YEAR,
-    serial: 8,
-    vip: false,
-    points: 940,
-    attendanceAccepted: 11,
-    submissions: 5,
-    referrals: 4,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_new_7_poster.jpg",
-    joined: 1718700000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026GD009",
-    name: "Ibeh Chinenye Helen",
-    email: "ibeh.chinenye@student.kr8digitals.com",
-    phone: "+2348011110009",
-    country: "NG",
-    skill: "graphic-design",
-    dob: "2003-04-18",
-    year: COHORT_YEAR,
-    serial: 9,
-    vip: false,
-    points: 910,
-    attendanceAccepted: 10,
-    submissions: 5,
-    referrals: 2,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_ibeh_chinenye_poster.jpg",
-    joined: 1718800000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-  {
-    type: "student",
-    id: "KR82026VE010",
-    name: "Obo Peter",
-    email: "obo.peter@student.kr8digitals.com",
-    phone: "+2348011110010",
-    country: "NG",
-    skill: "video-editing",
-    dob: "2002-06-11",
-    year: COHORT_YEAR,
-    serial: 10,
-    vip: false,
-    points: 870,
-    attendanceAccepted: 10,
-    submissions: 5,
-    referrals: 1,
-    graduated: true,
-    certTier: "Completion",
-    avatar: "/videos/testimonial_obo_peter_poster.jpg",
-    joined: 1718900000000,
-    expandedVisibility: true,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-  },
-];
-
-export const REGISTRATION_VAULT_KEY = "kr8_registered_students_vault";
-
-const seed: Account[] = [
-  DEFAULT_FOUNDER_ACCOUNT,
-  DEFAULT_COFOUNDER_1,
-  DEFAULT_COFOUNDER_2,
-  ...VERIFIED_COHORT_STUDENTS,
-];
-
-function migrateAccountsSafely() {
-  if (typeof window === "undefined") return;
-  try {
-    const v3Raw = localStorage.getItem(ACCOUNT_STORAGE_KEY);
-    const backupRaw = localStorage.getItem("kr8_accounts_backup");
-    const v2Raw = localStorage.getItem("kr8_accounts_v2");
-    const vaultRaw = localStorage.getItem(REGISTRATION_VAULT_KEY);
-
-    const v3List: Account[] = v3Raw ? JSON.parse(v3Raw) : [];
-    const backupList: Account[] = backupRaw ? JSON.parse(backupRaw) : [];
-    const v2List: Account[] = v2Raw ? JSON.parse(v2Raw) : [];
-    const vaultList: Account[] = vaultRaw ? JSON.parse(vaultRaw) : [];
-
-    // Combine all accounts, ensuring no registered student is ever lost
-    const merged = new Map<string, Account>();
-    [...v2List, ...backupList, ...vaultList, ...v3List].forEach((acc) => {
-      if (acc && acc.id) {
-        const normKey = normalizeIdentity(acc.id);
-        const existing = merged.get(normKey);
-        merged.set(normKey, existing ? { ...existing, ...acc } : acc);
-      }
-    });
-
-    if (merged.size > v3List.length) {
-      localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(Array.from(merged.values())));
-    }
-  } catch {
-    // Storage access restricted in private mode
-  }
-}
-
 export function getAccounts(): Account[] {
-  migrateAccountsSafely();
-  const stored = load<Account[]>(ACCOUNT_STORAGE_KEY, seed);
-  const vault = load<Account[]>(REGISTRATION_VAULT_KEY, []);
-  const backup = load<Account[]>("kr8_accounts_backup", []);
-  let changed = false;
-
-  // Build merged accounts map keyed by normalized identity
-  const map = new Map<string, Account>();
-
-  // 1. Default seed accounts
-  seed.forEach((acc) => map.set(normalizeIdentity(acc.id), acc));
-
-  // 2. Backup & Vault accounts
-  backup.forEach((acc) => {
-    if (acc?.id) {
-      const k = normalizeIdentity(acc.id);
-      map.set(k, { ...map.get(k), ...acc });
-    }
-  });
-
-  vault.forEach((acc) => {
-    if (acc?.id) {
-      const k = normalizeIdentity(acc.id);
-      map.set(k, { ...map.get(k), ...acc });
-    }
-  });
-
-  // 3. Current stored accounts
-  stored.forEach((acc) => {
-    if (acc?.id) {
-      const k = normalizeIdentity(acc.id);
-      map.set(k, { ...map.get(k), ...acc });
-    }
-  });
-
-  // 4. Also check active logged-in user in localStorage
-  if (typeof localStorage !== "undefined") {
-    try {
-      const cur = localStorage.getItem("kr8_current");
-      if (cur) {
-        const parsed = JSON.parse(cur) as Account;
-        if (parsed?.id) {
-          const k = normalizeIdentity(parsed.id);
-          map.set(k, { ...map.get(k), ...parsed });
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const combined = Array.from(map.values());
-
-  // Ensure default executive leadership accounts are always present in the database
-  const hasFounder = combined.some((a) => isFounderAccount(a.phone, a.email) || a.type === "founder");
-  const hasCofounder1 = combined.some((a) => a.phone === "+2348089344434");
-  const hasCofounder2 = combined.some((a) => a.phone === "+2348106068523");
-  if (!hasFounder) { combined.unshift(DEFAULT_FOUNDER_ACCOUNT); changed = true; }
-  if (!hasCofounder1) { combined.push(DEFAULT_COFOUNDER_1); changed = true; }
-  if (!hasCofounder2) { combined.push(DEFAULT_COFOUNDER_2); changed = true; }
-
-  // Ensure verified cohort students are seeded if stored has no students
-  const hasStudents = combined.some((a) => a.type === "student");
-  if (!hasStudents) {
-    combined.push(...VERIFIED_COHORT_STUDENTS);
-    changed = true;
-  }
-
-  // Self-heal co-founder identity corruption (cheap pre-check before full heal)
-  const needsCoFounderHeal = combined.some((acc) => {
-    const canon = coFounderCanonFor(acc.phone);
-    if (!canon) return false;
-    const otherBrand = canon.id === "KR8-COFOUNDER-STEVENSON" ? "creative expression" : "motionverse";
-    return (
-      normalizeIdentity(acc.id || "") !== normalizeIdentity(canon.id) ||
-      (acc.skill !== undefined && acc.skill !== canon.skill) ||
-      !acc.name ||
-      acc.name.trim().toLowerCase().includes(otherBrand) ||
-      (acc.title !== undefined && acc.title !== canon.title)
-    );
-  });
-  if (needsCoFounderHeal) {
-    const healed = healCoFounderIdentity(combined);
-    if (JSON.stringify(healed) !== JSON.stringify(combined)) {
-      combined.length = 0;
-      combined.push(...healed);
-      changed = true;
-    }
-  }
-
-  const accounts = combined.map((account) => {
-    const isFounder = isFounderAccount(account.phone, account.email);
-    const isCoFounder = isCoFounderAccount(account.phone, account.email);
-    const resolvedType: Account["type"] = isFounder ? "founder" : isCoFounder ? "co-founder" : account.type;
-    const resolvedRole = isFounder ? "Founder" : isCoFounder ? "Co-Founder" : account.executiveRole;
-    const recognizedAdmin = isFounder
-      ? {
-          role: "ultimate" as const,
-          title: "Founder & CEO",
-          permissions: [...ADMIN_SECTIONS],
-          adminPassword: MAIN_ADMIN_PASSWORD,
-          passwordNotice: "Founder & CEO credentials recognized. Full system authority active.",
-        }
-      : isCoFounder
-      ? {
-          role: "ultimate" as const,
-          title: "Co-Founder",
-          permissions: [...ADMIN_SECTIONS],
-          adminPassword: MAIN_ADMIN_PASSWORD,
-          passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
-        }
-      : account.admin ?? getRecognizedAdmin(account.phone, account.email);
-
-    if (account.type !== resolvedType || account.executiveRole !== resolvedRole || !account.admin) {
-      changed = true;
-    }
-
-    return {
-      ...account,
-      type: resolvedType,
-      executiveRole: resolvedRole,
-      vip: (isFounder || isCoFounder) ? true : account.vip,
-      avatar: (isFounder && (!account.avatar || account.avatar.includes("pexels")))
-        ? "/founder_timfire.jpg"
-        : (!isFounder && (!account.avatar || account.avatar.includes("founder_timfire.jpg")))
-        ? generateDefaultAvatar(account.name, account.id)
-        : account.avatar || generateDefaultAvatar(account.name, account.id),
-      id: account.type === "student" ? account.id.replace(/-/g, "") : account.id,
-      isPlaceholder: account.isPlaceholder ?? false,
-      portfolio: account.portfolio ?? [],
-      following: account.following ?? [],
-      followers: account.followers ?? [],
-      messagePrivacy: account.messagePrivacy ?? "Anyone",
-      admin: recognizedAdmin,
-    };
-  });
-  if (changed) save(ACCOUNT_STORAGE_KEY, accounts);
-  return accounts;
+  return accountsCache as unknown as Account[];
 }
-
-function sanitizeAccountsForStorage(accounts: Account[]): Account[] {
-  return accounts.map((acc) => {
-    // If certificateUrl is a massive data URL (> 15KB), do not keep it in localStorage
-    let cleanCertUrl = acc.certificateUrl;
-    if (cleanCertUrl && cleanCertUrl.startsWith("data:image/") && cleanCertUrl.length > 15000) {
-      cleanCertUrl = `cert-stored:${acc.id}`;
-    }
-
-    const cleanCerts = (acc.certificates || []).map((c) => {
-      let img = c.certificateImageUrl;
-      if (img && img.startsWith("data:image/") && img.length > 15000) {
-        img = `cert-stored:${c.id}`;
-      }
-      return {
-        ...c,
-        certificateImageUrl: img,
-      };
-    });
-
-    return {
-      ...acc,
-      certificateUrl: cleanCertUrl,
-      certificates: cleanCerts,
-    };
-  });
-}
-
-// True for "no value" encodings. Used by saveAccounts' change detection so
-// that re-encoding an empty field (undefined -> null -> "" -> [] -> {}) is
-// never reported as a change.
-function isEmptyValue(v: unknown): boolean {
-  if (v === undefined || v === null) return true;
-  if (typeof v === "string") return v.length === 0;
-  if (Array.isArray(v)) return v.length === 0;
-  if (typeof v === "object") return Object.keys(v as object).length === 0;
-  return false;
-}
-
-export function saveAccounts(a: Account[]) {
-  const sanitized = sanitizeAccountsForStorage(a);
-  const prev = load<Account[]>(ACCOUNT_STORAGE_KEY, []);
-  const prevMap = new Map(prev.map((p) => [normalizeIdentity(p.id || ""), p as Account]));
-  const addedIds: string[] = [];
-  const updatedIds: string[] = [];
-  const removedIds: string[] = [];
-  const seen = new Set<string>();
-  for (const acc of sanitized) {
-    const key = normalizeIdentity(acc.id || "");
-    seen.add(key);
-    const beforeRaw = prevMap.get(key);
-    if (beforeRaw === undefined) {
-      addedIds.push(acc.id);
-    } else {
-      // Field-by-field comparison (key-order independent): a full JSON
-      // stringify compare is fragile because the same account can be
-      // constructed with different key orders (e.g. a cloud merge spread vs
-      // the previously stored object) and would be flagged as "updated" even
-      // when every value is identical — re-broadcasting the whole roster and
-      // re-triggering the cloud push loop.
-      const before = beforeRaw as Account;
-      let differs = false;
-      const keys = new Set<string>([...Object.keys(before), ...Object.keys(acc)]);
-      for (const k of keys) {
-        const bv = (before as any)[k];
-        const av = (acc as any)[k];
-        // Transitions between "empty" encodings (undefined / null / "" / [] /
-        // {}) are NOT a meaningful change. Without this, the raw form
-        // (certificates: undefined) written by getAccounts()'s plain save vs
-        // the sanitized form (certificates: []) written by saveAccounts() is
-        // flagged as an update on every account, re-broadcasting and
-        // re-pushing the entire roster and re-opening the sync feedback loop.
-        if (isEmptyValue(bv) && isEmptyValue(av)) continue;
-        if (JSON.stringify(bv) !== JSON.stringify(av)) {
-          differs = true;
-          break;
-        }
-      }
-      if (differs) updatedIds.push(acc.id);
-    }
-  }
-  for (const p of prev) {
-    const key = normalizeIdentity(p.id || "");
-    if (!seen.has(key)) removedIds.push(p.id);
-  }
-  save(ACCOUNT_STORAGE_KEY, sanitized);
-  try {
-    // Keep secondary backup in case another key is modified
-    localStorage.setItem("kr8_accounts_backup", JSON.stringify(sanitized));
-    // Persist all verified/real accounts into immutable registration vault
-    const vaultAccounts = sanitized.filter((acc) => !acc.isPlaceholder);
-    localStorage.setItem(REGISTRATION_VAULT_KEY, JSON.stringify(vaultAccounts));
-  } catch {
-    /* ignore */
-  }
+export function saveAccounts(a: Account[]): void {
+  const previous = accountsCache;
+  setAccountsCache(a as unknown as RemoteAccount[]);
+  scheduleAccountsPush(previous, accountsCache);
   if (typeof window !== "undefined") {
-    // Detail carries the exact change set so the cloud sync layer can push only
-    // what changed (prevents the full-roster re-push feedback storm).
     window.dispatchEvent(
       new CustomEvent("kr8:accounts-updated", {
-        detail: { changedIds: [...addedIds, ...updatedIds], addedIds, updatedIds, removedIds },
+        detail: { changedIds: a.map((x) => x.id) },
       })
     );
-    try {
-      window.dispatchEvent(new StorageEvent("storage", { key: ACCOUNT_STORAGE_KEY }));
-    } catch {
-      /* ignore */
-    }
   }
 }
-
 export function updateAccount(id: string, patch: Partial<Account>): Account | undefined {
   const accounts = getAccounts();
   const index = accounts.findIndex((account) => normalizeIdentity(account.id) === normalizeIdentity(id));
   if (index < 0) return undefined;
-  accounts[index] = { ...accounts[index], ...patch };
-  saveAccounts(accounts);
-  return accounts[index];
+  const next = { ...accounts[index], ...patch } as Account;
+  accountsCache[index] = next as unknown as RemoteAccount;
+  saveAccounts(accounts as Account[]);
+  return next;
 }
-
 export function getStudents(): Account[] {
   return getAccounts().filter((a) => a.type === "student");
 }
-
 export function nextSerial(skillKey: string): number {
   const students = getStudents().filter((s) => s.skill === skillKey);
   const maxSerial = students.reduce((max, s) => {
@@ -1656,322 +886,28 @@ export function nextSerial(skillKey: string): number {
   }, 0);
   return Math.max(maxSerial + 1, students.length + 1);
 }
-
-export function registerStudent(input: { name: string; email: string; phone: string; country: string; skill: string; dob: string; password: string }):
-  { ok: boolean; error?: string; student?: Account } {
-  const accts = getAccounts();
-  const email = normalizeEmail(input.email);
-  const phone = normalizePhone(input.phone);
-  const isFounder = isFounderAccount(phone, email);
-  const isCoFounder = isCoFounderAccount(phone, email);
-
-  if (input.password.trim().length < 6)
-    return { ok: false, error: "Password must be at least 6 characters." };
-
-  // If Founder creates an account, recognise him as the Founder & CEO!
-  if (isFounder) {
-    let founder = accts.find((a) => a.type === "founder" || isFounderAccount(a.phone, a.email));
-    if (founder) {
-      founder = {
-        ...founder,
-        type: "founder",
-        executiveRole: "Founder",
-        name: input.name.trim() || founder.name || "Kenneth Timothy Iziogo (Timfire)",
-        email: email || founder.email,
-        phone: phone || founder.phone,
-        password: input.password,
-        vip: true,
-        avatar: founder.avatar || "/founder_timfire.jpg",
-        admin: {
-          role: "ultimate",
-          title: "Founder & CEO",
-          permissions: [...ADMIN_SECTIONS],
-          adminPassword: MAIN_ADMIN_PASSWORD,
-          passwordNotice: "Founder & CEO credentials recognized. Full system control unlocked.",
-        },
-      };
-      updateAccount(founder.id, founder);
-      return { ok: true, student: founder };
-    }
-    const newFounder: Account = {
-      type: "founder",
-      executiveRole: "Founder",
-      title: "Founder & CEO",
-      id: "KR8-FOUNDER-TIMFIRE",
-      name: input.name.trim() || "Kenneth Timothy Iziogo (Timfire)",
-      email: email || "kr8digitals01@gmail.com",
-      phone: phone || "+2348125687509",
-      country: input.country || "NG",
-      skill: input.skill || "web",
-      dob: input.dob,
-      year: COHORT_YEAR,
-      serial: 1,
-      vip: true,
-      points: 1000,
-      attendanceAccepted: 24,
-      submissions: 16,
-      referrals: 50,
-      graduated: true,
-      certTier: "Professionalism",
-      certRecognition: "Founder & Lead Architect",
-      avatar: "/founder_timfire.jpg",
-      coverPhoto: "https://images.pexels.com/photos/3866398/pexels-photo-3866398.jpeg?auto=compress&cs=tinysrgb&w=1400",
-      joined: Date.now(),
-      expandedVisibility: true,
-      password: input.password,
-      admin: {
-        role: "ultimate",
-        title: "Founder & CEO",
-        permissions: [...ADMIN_SECTIONS],
-        adminPassword: MAIN_ADMIN_PASSWORD,
-        passwordNotice: "Founder & CEO credentials recognized. Full system control unlocked.",
-      },
-      isPlaceholder: false,
-      portfolio: [],
-      following: [],
-      followers: [],
-      messagePrivacy: "Anyone",
-    };
-    accts.unshift(newFounder);
-    saveAccounts(accts);
-    addFeed({ kind: "registration", name: newFounder.name, skill: "Founder & CEO", avatar: newFounder.avatar });
-    return { ok: true, student: newFounder };
+export async function registerStudent(input: {
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  skill: string;
+  dob: string;
+  password: string;
+  ref?: string;
+}): Promise<{ ok: boolean; error?: string; student?: Account }> {
+  try {
+    const res = await apiRegister({ ...input, accountType: "student" });
+    await applySession(res.session);
+    upsertAccountCache(res.account as RemoteAccount);
+    notifyAccountsUpdated([res.account.id]);
+    addFeed({ kind: "registration", name: res.account.name, skill: getSkillName(res.account.skill), avatar: res.account.avatar || "" });
+    return { ok: true, student: res.account as unknown as Account };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Registration could not be completed." };
   }
-
-  // If Co-Founder creates an account, recognise him as Co-Founder!
-  if (isCoFounder) {
-    const isStevenson = phone === "+2348089344434";
-    const defaultName = isStevenson ? "Stevenson (Motionverse)" : "Daniel (Creative Expression)";
-    const defaultAvatar = isStevenson ? INSTRUCTOR_PHOTOS.stevenson : INSTRUCTOR_PHOTOS.daniel;
-    const defaultRole = isStevenson ? "Co-Founder · Media Director" : "Co-Founder · COO";
-    const defaultSkill = isStevenson ? "graphic" : "video";
-    const coId = isStevenson ? "KR8-COFOUNDER-STEVENSON" : "KR8-COFOUNDER-DANIEL";
-
-    // Resolve the registering co-founder by THEIR identity (own phone / canonical ID),
-    // never by first co-founder in the list (that merged credentials into the
-    // wrong co-founder's record).
-    const otherCoFounderPhone = isStevenson ? "+2348106068523" : "+2348089344434";
-    let cofounder =
-      accts.find((a) => a.phone && normalizePhone(a.phone) === phone) ||
-      accts.find((a) => normalizeIdentity(a.id || "") === normalizeIdentity(coId)) ||
-      accts.find((a) => a.type === "co-founder" && (!a.phone || normalizePhone(a.phone) !== otherCoFounderPhone));
-    if (cofounder) {
-      cofounder = {
-        ...cofounder,
-        type: "co-founder",
-        executiveRole: "Co-Founder",
-        name: input.name.trim() || cofounder.name || defaultName,
-        email: email || cofounder.email,
-        phone: phone || cofounder.phone,
-        password: input.password,
-        vip: true,
-        avatar: cofounder.avatar || defaultAvatar,
-        admin: {
-          role: "ultimate",
-          title: "Co-Founder",
-          permissions: [...ADMIN_SECTIONS],
-          adminPassword: MAIN_ADMIN_PASSWORD,
-          passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
-        },
-      };
-      updateAccount(cofounder.id, cofounder);
-      return { ok: true, student: cofounder };
-    }
-    const newCoFounder: Account = {
-      type: "co-founder",
-      executiveRole: "Co-Founder",
-      title: defaultRole,
-      id: coId,
-      name: input.name.trim() || defaultName,
-      email,
-      phone,
-      country: input.country || "NG",
-      skill: input.skill || defaultSkill,
-      dob: input.dob,
-      year: COHORT_YEAR,
-      serial: isStevenson ? 2 : 3,
-      vip: true,
-      points: 800,
-      attendanceAccepted: 20,
-      submissions: 12,
-      referrals: 30,
-      graduated: true,
-      certTier: "Professionalism",
-      certRecognition: defaultRole,
-      avatar: defaultAvatar,
-      joined: Date.now(),
-      expandedVisibility: true,
-      password: input.password,
-      admin: {
-        role: "ultimate",
-        title: "Co-Founder",
-        permissions: [...ADMIN_SECTIONS],
-        adminPassword: MAIN_ADMIN_PASSWORD,
-        passwordNotice: "Co-Founder credentials recognized. Full executive access active.",
-      },
-      isPlaceholder: false,
-      portfolio: [],
-      following: [],
-      followers: [],
-      messagePrivacy: "Anyone",
-    };
-    accts.push(newCoFounder);
-    saveAccounts(accts);
-    addFeed({ kind: "registration", name: newCoFounder.name, skill: "Co-Founder", avatar: newCoFounder.avatar });
-    return { ok: true, student: newCoFounder };
-  }
-
-  // Check if credentials are suspended
-  const emailSusp = isCredentialSuspended(email);
-  if (emailSusp.suspended) {
-    return {
-      ok: false,
-      error: `This email address is suspended from registering on KR8 Digitals. Reason: "${emailSusp.account?.reason || "Administrative suspension"}".`,
-    };
-  }
-  const phoneSusp = isCredentialSuspended(phone);
-  if (phoneSusp.suspended) {
-    return {
-      ok: false,
-      error: `This phone number is suspended from registering on KR8 Digitals. Reason: "${phoneSusp.account?.reason || "Administrative suspension"}".`,
-    };
-  }
-
-  // Progression Rule:
-  // NO STUDENT IS PERMITTED TO REGISTER FOR ANOTHER SKILL UNLESS THEY ARE GRADUATED FROM THEIR CURRENT SKILL.
-  const existing = accts.find(
-    (s) => normalizeEmail(s.email) === email || normalizePhone(s.phone) === phone
-  );
-
-  if (existing) {
-    // If existing account is a Tribe member, transition cleanly from Tribe Member to Student!
-    if (existing.type === "tribe") {
-      const newSkill = getSkill(input.skill);
-      if (!newSkill) return { ok: false, error: "Please select a valid skill." };
-      if (!newSkill.available) return { ok: false, error: `${newSkill.name} is currently not available.` };
-      if (!getSkillRegistration(input.skill)) return { ok: false, error: `Registration for ${newSkill.name} is currently closed.` };
-
-      const oldId = existing.id;
-      const serial = nextSerial(input.skill);
-      const studentId = kr8id(existing.name, input.skill, serial);
-
-      existing.type = "student";
-      existing.id = studentId;
-      existing.previousIds = Array.from(new Set([...(existing.previousIds || []), oldId]));
-      existing.skill = input.skill;
-      existing.skills = [input.skill];
-      existing.serial = serial;
-      existing.year = COHORT_YEAR;
-      existing.dob = input.dob || existing.dob;
-      existing.points = (existing.points || 0) + 100; // Registration bonus
-      existing.milestones = Array.from(
-        new Set([
-          ...(existing.milestones || []),
-          `Milestone: Transitioned from Tribe Member (${oldId}) to Academy Scholar in ${newSkill.name}`,
-        ])
-      );
-
-      updateAccount(oldId, existing);
-      addFeed({
-        kind: "registration",
-        name: existing.name,
-        skill: newSkill.name,
-        avatar: existing.avatar,
-      });
-
-      return { ok: true, student: existing };
-    }
-
-    const targetSkillKey = input.skill;
-    const currentSkillName = getSkillName(existing.skill);
-    const targetSkillName = getSkillName(targetSkillKey);
-
-    // If enrolling in same skill
-    if (existing.skill === targetSkillKey || (existing.skills && existing.skills.includes(targetSkillKey))) {
-      return {
-        ok: false,
-        error: `You are already registered for ${targetSkillName}. Please sign in to your dashboard to access your classes and coursework.`,
-      };
-    }
-
-    // Must be graduated from current skill (proven by certificate)
-    const isGraduated = !!existing.graduated || !!existing.certificateUrl || (existing.graduatedSkills && existing.graduatedSkills.includes(existing.skill || ""));
-    if (!isGraduated) {
-      return {
-        ok: false,
-        error: `Academic Progression Notice: You are currently enrolled in ${currentSkillName}. In accordance with KR8 Academy standards, no student is permitted to register for another skill unless they have graduated from their current skill (proven by certificate). Please complete your coursework and graduate first before enrolling in ${targetSkillName}.`,
-      };
-    }
-
-    // If graduated, allow new registration & append skill code to their existing ID!
-    const newSkill = getSkill(targetSkillKey);
-    if (!newSkill) return { ok: false, error: "Please select a valid skill." };
-    if (!newSkill.available) return { ok: false, error: `${newSkill.name} is currently not available.` };
-    if (!getSkillRegistration(targetSkillKey)) return { ok: false, error: `Registration for ${newSkill.name} is currently closed.` };
-
-    const oldId = existing.id;
-    const newCode = getSkillCode(targetSkillKey);
-    const updatedId = `${oldId}-${newCode}`;
-
-    existing.id = updatedId;
-    existing.previousIds = Array.from(new Set([...(existing.previousIds || []), oldId]));
-    existing.skills = Array.from(new Set([...(existing.skills || [existing.skill || ""]), targetSkillKey]));
-    existing.graduatedSkills = Array.from(new Set([...(existing.graduatedSkills || [existing.skill || ""])]));
-    existing.skill = targetSkillKey; // Active skill track
-    existing.graduated = false; // In training for the new skill track
-    existing.certTier = null;
-    existing.certificateUrl = undefined;
-    existing.points = (existing.points || 0) + 500; // Milestone achievement bonus
-    existing.multiSkillCount = (existing.multiSkillCount || 1) + 1;
-    existing.milestones = Array.from(
-      new Set([
-        ...(existing.milestones || []),
-        `Milestone: Graduated ${currentSkillName} (Certificate Verified) · Enrolled in ${targetSkillName}`,
-      ])
-    );
-
-    updateAccount(oldId, existing);
-    addFeed({
-      kind: "registration",
-      name: existing.name,
-      skill: `${targetSkillName} (Milestone ID: ${updatedId})`,
-      avatar: existing.avatar,
-    });
-    return { ok: true, student: existing };
-  }
-
-  const skill = getSkill(input.skill);
-  if (!skill) return { ok: false, error: "Please select a valid skill." };
-  if (!skill.available)
-    return { ok: false, error: `${skill.name} is currently not available.` };
-  if (!getSkillRegistration(input.skill))
-    return { ok: false, error: `Registration for ${skill.name} is currently closed.` };
-
-  const serial = nextSerial(input.skill);
-  const studentId = kr8id(input.name, input.skill, serial);
-  const defaultAvatar = generateDefaultAvatar(input.name, studentId);
-  const student: Account = {
-    type: "student",
-    id: studentId,
-    name: input.name.trim(), email, phone, country: input.country || "NG", skill: input.skill,
-    skills: [input.skill],
-    graduatedSkills: [],
-    previousIds: [],
-    milestones: [`Enrolled in ${skill.name}`],
-    multiSkillCount: 1,
-    dob: input.dob, year: COHORT_YEAR, serial,
-    vip: isVip(phone), points: 0, attendanceAccepted: 0, submissions: 0, referrals: 0,
-    graduated: false, certTier: null, avatar: defaultAvatar, joined: Date.now(), expandedVisibility: false, password: input.password,
-    admin: getRecognizedAdmin(phone, email),
-    isPlaceholder: false, portfolio: [], following: [], followers: [], messagePrivacy: "Anyone",
-  };
-  accts.push(student);
-  saveAccounts(accts);
-  addFeed({ kind: "registration", name: student.name, skill: skill.name, avatar: student.avatar });
-  return { ok: true, student };
 }
-
-export function adminRegisterStudent(input: {
+export async function adminRegisterStudent(input: {
   name: string;
   email: string;
   phone: string;
@@ -1979,136 +915,76 @@ export function adminRegisterStudent(input: {
   skill: string;
   dob?: string;
   password?: string;
-}): { ok: boolean; error?: string; student?: Account } {
-  const name = input.name.trim();
-  if (!name) return { ok: false, error: "Full name is required." };
-  const skill = getSkill(input.skill);
-  if (!skill) return { ok: false, error: "Please select a valid skill." };
-  const accounts = getAccounts();
-  const email = normalizeEmail(input.email);
-  const phone = normalizePhone(input.phone);
-
-  const isFounder = isFounderAccount(phone, email);
-  const isCoFounder = isCoFounderAccount(phone, email);
-
-  const password = input.password?.trim() || "TempChangeMe2026";
-  if (password.length < 6) {
-    return { ok: false, error: "Password must be at least 6 characters." };
+}): Promise<{ ok: boolean; error?: string; student?: Account; kr8Id?: string; temporaryPassword?: string }> {
+  try {
+    const res = await apiAdminRegister(input);
+    await bootstrapStore();
+    notifyAccountsUpdated([res.kr8Id]);
+    const student = {
+      type: "student",
+      id: res.kr8Id,
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      country: input.country || "NG",
+      skill: input.skill,
+      dob: input.dob,
+      vip: false,
+      points: 0,
+      attendanceAccepted: 0,
+      submissions: 0,
+      referrals: 0,
+      graduated: false,
+      avatar: generateDefaultAvatar(input.name, res.kr8Id),
+      joined: Date.now(),
+      // Transient handover only — shown once so the admin can pass the
+      // temporary Supabase Auth password to the student. Never persisted.
+      password: res.temporaryPassword,
+    } as Account;
+    return { ok: true, student, kr8Id: res.kr8Id, temporaryPassword: res.temporaryPassword };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Registration could not be completed." };
   }
-
-  // If existing student, delegate to registerStudent so progression & milestone ID rules apply
-  if (accounts.some((a) => normalizeEmail(a.email) === email || normalizePhone(a.phone) === phone)) {
-    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
+}
+export async function transitionToSkill(skill: string): Promise<{ ok: boolean; error?: string; student?: Account }> {
+  try {
+    const res = await apiTransition(skill);
+    upsertAccountCache(res.account as RemoteAccount);
+    notifyAccountsUpdated([res.account.id]);
+    addFeed({ kind: "registration", name: res.account.name, skill: getSkillName(skill), avatar: res.account.avatar || "" });
+    return { ok: true, student: res.account as unknown as Account };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not complete registration." };
   }
-
-  if (isFounder) {
-    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
-  }
-
-  if (isCoFounder) {
-    return registerStudent({ name, email, phone, country: input.country || "NG", skill: input.skill, dob: input.dob || "", password });
-  }
-
-  const serial = nextSerial(input.skill);
-  const studentId = kr8id(name, input.skill, serial);
-  const defaultAvatar = generateDefaultAvatar(name, studentId);
-  const student: Account = {
-    type: "student",
-    id: studentId,
-    name,
-    email,
-    phone,
-    country: input.country || "NG",
-    skill: input.skill,
-    dob: input.dob || "",
-    year: COHORT_YEAR,
-    serial,
-    vip: isVip(phone),
-    points: 0,
-    attendanceAccepted: 0,
-    submissions: 0,
-    referrals: 0,
-    graduated: false,
-    certTier: null,
-    avatar: defaultAvatar,
-    joined: Date.now(),
-    expandedVisibility: false,
-    password,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-    admin: getRecognizedAdmin(phone, email),
-  };
-  accounts.push(student);
-  saveAccounts(accounts);
-  addFeed({ kind: "registration", name: student.name, skill: skill.name, avatar: student.avatar });
-  return { ok: true, student };
 }
 
-export function registerTribe(input: {
+export async function registerTribe(input: {
   name: string;
   email: string;
   phone: string;
   country: string;
   password: string;
-  interests?: string[];
-  reason?: string;
-}): { ok: boolean; error?: string; member?: Account } {
-  const accts = getAccounts();
-  const email = normalizeEmail(input.email);
-  const phone = normalizePhone(input.phone);
-  const isFounder = isFounderAccount(phone, email);
-  const isCoFounder = isCoFounderAccount(phone, email);
-
-  if (input.password.trim().length < 6)
-    return { ok: false, error: "Password must be at least 6 characters." };
-
-  if (isFounder || isCoFounder) {
-    const regRes = registerStudent({ name: input.name, email, phone, country: input.country, skill: isFounder ? "web" : "graphic", dob: "", password: input.password });
-    return { ok: regRes.ok, error: regRes.error, member: regRes.student };
+}): Promise<{ ok: boolean; error?: string; member?: Account }> {
+  try {
+    const res = await apiRegister({
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      country: input.country,
+      skill: "",
+      dob: "",
+      password: input.password,
+      accountType: "tribe",
+    });
+    await applySession(res.session);
+    upsertAccountCache(res.account as RemoteAccount);
+    notifyAccountsUpdated([res.account.id]);
+    addFeed({ kind: "tribe", name: res.account.name, skill: "KR8 Tribe", avatar: res.account.avatar || "" });
+    return { ok: true, member: res.account as unknown as Account };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not register Tribe member." };
   }
-
-  if (accts.some((s) => normalizeEmail(s.email) === email))
-    return { ok: false, error: "This email is already registered." };
-  if (accts.some((s) => normalizePhone(s.phone) === phone))
-    return { ok: false, error: "This phone number is already registered." };
-
-  const n = accts.filter((a) => a.type === "tribe").length + 1;
-  const tribeId = `TRIBE-${String(n).padStart(4, "0")}`;
-  const defaultAvatar = generateDefaultAvatar(input.name, tribeId);
-  const member: Account = {
-    type: "tribe",
-    id: tribeId,
-    name: input.name.trim(),
-    email,
-    phone,
-    country: input.country,
-    interests: input.interests && input.interests.length > 0 ? input.interests : ["General Creative Track"],
-    tribeGoal: input.reason || "Learning & Collaborating in Tribe",
-    vip: false,
-    points: 25, // bonus 25 welcome community XP
-    attendanceAccepted: 0,
-    submissions: 0,
-    referrals: 0,
-    graduated: false,
-    avatar: defaultAvatar,
-    joined: Date.now(),
-    password: input.password,
-    isPlaceholder: false,
-    portfolio: [],
-    following: [],
-    followers: [],
-    messagePrivacy: "Anyone",
-    admin: getRecognizedAdmin(phone, email),
-  };
-  accts.push(member);
-  saveAccounts(accts);
-  addFeed({ kind: "tribe", name: member.name, skill: "Tribe Member", avatar: member.avatar });
-  return { ok: true, member };
 }
-
 export function findStudent(idOrQuery: string): Account | undefined {
   if (!idOrQuery) return undefined;
   const raw = idOrQuery.trim();
@@ -2146,26 +1022,6 @@ export function findStudent(idOrQuery: string): Account | undefined {
   });
   if (prefixMatch) return prefixMatch;
 
-  // 6. Check active logged-in user in localStorage
-  if (typeof localStorage !== "undefined") {
-    try {
-      const cur = localStorage.getItem("kr8_current");
-      if (cur) {
-        const parsed = JSON.parse(cur) as Account;
-        if (
-          parsed.id === raw ||
-          normalizeIdentity(parsed.id) === normalized ||
-          (parsed.email && normalizeEmail(parsed.email) === emailQuery) ||
-          (parsed.name && parsed.name.trim().toLowerCase() === raw.toLowerCase())
-        ) {
-          return parsed;
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
   // 7. Leadership Aliases
   if (normalized.includes("FOUNDER") || normalized.includes("TIMFIRE")) {
     return accounts.find((s) => s.type === "founder");
@@ -2193,13 +1049,11 @@ export function recoverId(query: string): Account | undefined {
     );
   }
   if (isCoFounderAccount(phone, email)) {
-    // Match the specific co-founder that owns this phone (never first-match)
-    const canon = coFounderCanonFor(phone);
-    const otherPhone = Object.keys(COFOUNDER_IDENTITY).find((p) => p !== phone);
+    // Match the co-founder that owns this phone (never first-match).
     return (
       accounts.find((s) => s.phone && phone && normalizePhone(s.phone) === phone) ||
-      (canon ? accounts.find((s) => normalizeIdentity(s.id || "") === normalizeIdentity(canon.id)) : undefined) ||
-      accounts.find((s) => s.type === "co-founder" && (!s.phone || !otherPhone || normalizePhone(s.phone) !== otherPhone))
+      accounts.find((s) => s.email && email && normalizeEmail(s.email) === email) ||
+      accounts.find((s) => s.type === "co-founder")
     );
   }
   return undefined;
@@ -2249,18 +1103,17 @@ export function isCredentialSuspended(val: string): { suspended: boolean; accoun
 }
 
 // Distinct Action 1: Revoke Registration (clean reset, can register again)
-export function revokeStudentRegistration(studentId: string): boolean {
-  const accounts = getAccounts();
-  const target = accounts.find((a) => a.id.toLowerCase() === studentId.trim().toLowerCase());
-  if (!target || target.type === "founder" || target.type === "co-founder") return false;
-
-  const filtered = accounts.filter((a) => a.id.toLowerCase() !== studentId.trim().toLowerCase());
-  saveAccounts(filtered);
-  return true;
+export async function revokeStudentRegistration(studentId: string): Promise<boolean> {
+  try {
+    await apiAdminRevokeStudent(studentId);
+    removeAccountCache(studentId);
+    notifyAccountsUpdated([studentId]);
+    return true;
+  } catch {
+    return false;
+  }
 }
-
-// Distinct Action 2: Delete / Suspend Account (requires reason, blocks credentials, 30-day appeal)
-export function suspendStudentAccount(studentId: string, reason: string): boolean {
+export async function suspendStudentAccount(studentId: string, reason: string): Promise<boolean> {
   const accounts = getAccounts();
   const target = accounts.find((a) => a.id.toLowerCase() === studentId.trim().toLowerCase());
   if (!target || target.type === "founder" || target.type === "co-founder") return false;
@@ -2272,22 +1125,18 @@ export function suspendStudentAccount(studentId: string, reason: string): boolea
     name: target.name,
     reason: reason.trim(),
     suspendedAt: Date.now(),
-    appealDeadline: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+    appealDeadline: Date.now() + 30 * 24 * 60 * 60 * 1000,
     appealStatus: "none",
     originalAccountData: target,
   };
-
   const suspendedList = getSuspendedAccounts();
   saveSuspendedAccounts([suspendedItem, ...suspendedList]);
-
-  // Remove from active accounts
-  const filtered = accounts.filter((a) => a.id.toLowerCase() !== studentId.trim().toLowerCase());
-  saveAccounts(filtered);
+  removeAccountCache(target.id);
+  void pushStudentPatch(target.id, { restricted: true }).catch(() => undefined);
+  notifyAccountsUpdated([target.id]);
   return true;
 }
-
-// Submit appeal within 30-day window
-export function submitSuspensionAppeal(identifier: string, appealText: string): { ok: boolean; message: string } {
+export async function submitSuspensionAppeal(identifier: string, appealText: string): Promise<{ ok: boolean; message: string }> {
   const list = getSuspendedAccounts();
   const target = list.find(
     (s) =>
@@ -2295,45 +1144,37 @@ export function submitSuspensionAppeal(identifier: string, appealText: string): 
       s.email.toLowerCase() === identifier.trim().toLowerCase() ||
       s.phone.replace(/\D/g, "") === identifier.trim().replace(/\D/g, "")
   );
-
-  if (!target) {
-    return { ok: false, message: "No suspended account found matching this credential." };
-  }
-
-  // Check 30-day window
+  if (!target) return { ok: false, message: "No suspended account found matching this credential." };
   if (Date.now() > target.appealDeadline) {
     target.appealStatus = "upheld";
     saveSuspendedAccounts(list);
     return { ok: false, message: "The 30-day appeal window has expired. This account deletion is permanent." };
   }
-
   target.appealStatus = "pending";
   target.appealText = appealText.trim();
   target.appealSubmittedAt = Date.now();
   saveSuspendedAccounts(list);
+  try {
+    await apiSocial("appeal", { identifier, text: appealText });
+  } catch {
+    /* the appeal is still recorded in the moderation queue doc */
+  }
   return { ok: true, message: "Your appeal statement has been successfully submitted for administrative review." };
 }
-
-// Admin restores account (reversing deletion)
 export function restoreSuspendedAccount(suspendedId: string): boolean {
   const list = getSuspendedAccounts();
   const targetIndex = list.findIndex((s) => s.id.toLowerCase() === suspendedId.trim().toLowerCase());
   if (targetIndex < 0) return false;
-
   const target = list[targetIndex];
   target.appealStatus = "restored";
   saveSuspendedAccounts(list);
-
-  // Restore into active accounts
-  const accounts = getAccounts();
-  if (!accounts.some((a) => a.id.toLowerCase() === target.originalAccountData.id.toLowerCase())) {
-    accounts.push(target.originalAccountData);
-    saveAccounts(accounts);
+  if (!getAccounts().some((a) => a.id.toLowerCase() === target.originalAccountData.id.toLowerCase())) {
+    upsertAccountCache(target.originalAccountData as unknown as RemoteAccount);
+    void pushStudentPatch(target.originalAccountData.id, { restricted: false }).catch(() => undefined);
+    notifyAccountsUpdated([target.originalAccountData.id]);
   }
   return true;
 }
-
-// Admin upholds suspension (keeping it permanent)
 export function upholdSuspendedAccount(suspendedId: string): boolean {
   const list = getSuspendedAccounts();
   const target = list.find((s) => s.id.toLowerCase() === suspendedId.trim().toLowerCase());
@@ -2344,136 +1185,41 @@ export function upholdSuspendedAccount(suspendedId: string): boolean {
   return true;
 }
 
-export function authenticateAccount(idOrEmailOrPhone: string, password: string): { ok: boolean; account?: Account; error?: string } {
-  const query = idOrEmailOrPhone.trim();
-  if (!query) return { ok: false, error: "Please enter your KR8 ID, email, or phone." };
-
-  // Check if credential is suspended
-  const suspCheck = isCredentialSuspended(query);
-  if (suspCheck.suspended && suspCheck.account) {
-    const acc = suspCheck.account;
-    const deadlineStr = new Date(acc.appealDeadline).toLocaleDateString();
-    return {
-      ok: false,
-      error: `Your account was suspended by administration. Reason: "${acc.reason}". You have until ${deadlineStr} (30-day window) to submit an appeal.`,
-    };
+export async function changePassword(password: string): Promise<{ ok: boolean; error?: string }> {
+  if (password.trim().length < 6) return { ok: false, error: "Password must be at least 6 characters." };
+  try {
+    await apiMeAction({ action: "change-password", newPassword: password.trim() });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not update password." };
   }
-  
-  let account = findStudent(query) || recoverId(query);
-  if (!account) {
-    const all = getAccounts();
-    const qLower = query.toLowerCase();
-    const qEmail = normalizeEmail(query);
-    const qPhone = normalizePhone(query);
-    account = all.find((a) =>
-      a.id.toLowerCase() === qLower ||
-      (qEmail && normalizeEmail(a.email) === qEmail) ||
-      (qPhone && normalizePhone(a.phone) === qPhone) ||
-      a.name.toLowerCase().includes(qLower)
-    );
-  }
-
-  if (!account) return { ok: false, error: "No account matches that KR8 ID, email, or phone." };
-
-  const isExec = account.type === "founder" || account.type === "co-founder" || !!account.admin;
-  const passMatch =
-    (account.password && account.password === password) ||
-    (isExec && password === MAIN_ADMIN_PASSWORD) ||
-    password === MAIN_ADMIN_PASSWORD ||
-    (!account.password && password.length >= 4);
-
-  if (!passMatch) return { ok: false, error: "The password entered is incorrect." };
-
-  // If password was missing or unset, store it
-  if (!account.password) {
-    updateAccount(account.id, { password });
-  }
-
-  return { ok: true, account };
 }
 
-export function requestPasswordReset(identifier: string, optionalId?: string): {
+export async function requestPasswordReset(identifier: string, optionalId?: string): Promise<{
   ok: boolean;
   message: string;
-  code?: string;
-  account?: Account;
-} {
-  const query = (optionalId?.trim() || identifier || "").trim();
-  if (!query) return { ok: false, message: "Please provide your registered email, phone number, or KR8 ID." };
-
-  const qEmail = normalizeEmail(query);
-  const qPhone = normalizePhone(query);
-  const qId = normalizeIdentity(query);
-  const accounts = getAccounts();
-
-  const account = accounts.find((item) => {
-    if (qEmail && normalizeEmail(item.email) === qEmail) return true;
-    if (qPhone && normalizePhone(item.phone) === qPhone) return true;
-    if (normalizeIdentity(item.id) === qId) return true;
-    if (item.name.toLowerCase().includes(query.toLowerCase())) return true;
-    return false;
-  }) || findStudent(query) || recoverId(query);
-
-  if (!account) return { ok: false, message: "No account found matching that email or KR8 ID." };
-
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  updateAccount(account.id, { resetCode: code, resetCodeExpires: Date.now() + 15 * 60 * 1000 });
-
-  return {
-    ok: true,
-    message: `Verification code generated for ${account.name} (${account.id}). Enter it below to set your new password.`,
-    code,
-    account,
-  };
+}> {
+  const target = (optionalId?.trim() || identifier || "").trim();
+  if (!target) return { ok: false, message: "Please provide your registered email, phone number, or KR8 ID." };
+  try {
+    const res = await apiResetRequest(target);
+    return { ok: true, message: res.message };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Reset request failed." };
+  }
 }
-
-export function completePasswordReset(identifier: string, code: string, password: string): {
+export async function completePasswordReset(identifier: string, code: string, password: string): Promise<{
   ok: boolean;
   message: string;
-  account?: Account;
-} {
-  if (password.trim().length < 4) return { ok: false, message: "Password must be at least 4 characters." };
-  
-  const query = identifier.trim();
-  const qEmail = normalizeEmail(query);
-  const qPhone = normalizePhone(query);
-  const qId = normalizeIdentity(query);
-
-  const account = getAccounts().find((item) => {
-    if (qEmail && normalizeEmail(item.email) === qEmail) return true;
-    if (qPhone && normalizePhone(item.phone) === qPhone) return true;
-    if (normalizeIdentity(item.id) === qId) return true;
-    return false;
-  }) || findStudent(query) || recoverId(query);
-
-  if (!account) return { ok: false, message: "Account could not be found." };
-
-  const trimmedCode = code.trim();
-  const isMasterCode = trimmedCode === "888999" || trimmedCode === "123456";
-  const isValidCode =
-    account.resetCode &&
-    account.resetCode === trimmedCode &&
-    account.resetCodeExpires &&
-    account.resetCodeExpires > Date.now();
-
-  if (!isValidCode && !isMasterCode) {
-    return { ok: false, message: "That verification code is invalid or has expired." };
+}> {
+  if (password.trim().length < 6) return { ok: false, message: "Password must be at least 6 characters." };
+  try {
+    const res = await apiResetComplete(identifier.trim(), code.trim(), password.trim());
+    return { ok: true, message: res.message };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Password reset failed." };
   }
-
-  updateAccount(account.id, {
-    password: password.trim(),
-    resetCode: undefined,
-    resetCodeExpires: undefined,
-  });
-
-  const updatedAccount = findStudent(account.id) || account;
-  return {
-    ok: true,
-    message: `Password updated successfully for ${account.name}! You can now sign in.`,
-    account: updatedAccount,
-  };
 }
-
 export function getReferralUrl(id: string): string {
   const origin = typeof window !== "undefined" && window.location.origin
     ? window.location.origin
@@ -2487,21 +1233,20 @@ export function getReferralUrl(id: string): string {
 export function getStudentCertificates(studentId: string): CertificateRecord[] {
   const acc = findStudent(studentId);
   if (!acc) return [];
-  if (acc.certificates && acc.certificates.length > 0) {
-    return acc.certificates;
-  }
-  // Synthesize certificate if account is graduated
+  const certs = (acc.certificates || []) as CertificateRecord[];
+  if (certs.length > 0) return certs;
+  // Synthesize a certificate record for legacy graduates (server row may predate
+  // the certificates table).
   if (acc.graduated) {
     const tier = (acc.certTier as CertificateTier) || "Completion";
     const skillKey = acc.skill || "graphic";
-    const skillName = getSkillName(skillKey);
-    const synthesizedCert: CertificateRecord = {
+    return [{
       id: `CERT-KR8-${acc.id}-${skillKey.toUpperCase()}`,
       studentId: acc.id,
       studentName: acc.name,
       formattedName: acc.name.toUpperCase(),
       skill: skillKey,
-      skillName,
+      skillName: getSkillName(skillKey),
       tier,
       templateUrl: `/certificates/reusable_${tier.toLowerCase()}.png`,
       achievementText:
@@ -2512,237 +1257,80 @@ export function getStudentCertificates(studentId: string): CertificateRecord[] {
       issuedAt: acc.graduatedAt || acc.joined || Date.now(),
       status: "active",
       certificateImageUrl: acc.certificateUrl && !acc.certificateUrl.startsWith("cert-stored:") ? acc.certificateUrl : undefined,
-    };
-    return [synthesizedCert];
-  }
-  // Synthesize legacy certificate if available
-  if (acc.certificateUrl) {
-    const legacyCert: CertificateRecord = {
-      id: `CERT-LEGACY-${acc.id}`,
-      studentId: acc.id,
-      studentName: acc.name,
-      formattedName: acc.name.toUpperCase(),
-      skill: acc.skill || "graphic",
-      skillName: getSkillName(acc.skill),
-      tier: (acc.certTier as CertificateTier) || "Completion",
-      templateUrl: acc.certificateUrl,
-      achievementText:
-        acc.certTier === "Professionalism"
-          ? "demonstrating excellence and proficiency in turning client requests into client satisfaction."
-          : "gaining hands-on experience in turning client requests into finished designs.",
-      additionalNotes: acc.certRecognition || acc.verifyRemark,
-      issuedAt: acc.graduatedAt || acc.joined || Date.now(),
-      status: "active",
-      certificateImageUrl: acc.certificateUrl && !acc.certificateUrl.startsWith("cert-stored:") ? acc.certificateUrl : undefined,
-    };
-    return [legacyCert];
+    }];
   }
   return [];
 }
-
 export function getCertificateById(certId: string): { certificate?: CertificateRecord; account?: Account } {
   if (!certId) return {};
-  const accounts = getAccounts();
-  for (const acc of accounts) {
-    const certs = getStudentCertificates(acc.id);
-    const found = certs.find((c) => c.id.toLowerCase() === certId.toLowerCase());
-    if (found) {
-      return { certificate: found, account: acc };
-    }
+  for (const acc of getAccounts()) {
+    const found = getStudentCertificates(acc.id).find((c) => c.id.toLowerCase() === certId.toLowerCase());
+    if (found) return { certificate: found, account: acc };
   }
   return {};
 }
-
-export function issueCertificate(
+export async function issueCertificate(
   studentId: string,
   cert: CertificateRecord
-): { ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string } {
-  const accounts = getAccounts();
-  const accIndex = accounts.findIndex(
-    (s) => normalizeIdentity(s.id) === normalizeIdentity(studentId)
-  );
-  if (accIndex === -1) {
-    return { ok: false, error: `Student with ID ${studentId} not found.` };
-  }
-
-  const acc = accounts[accIndex];
-  const existingCerts = getStudentCertificates(acc.id);
-
-  // If active certificate for this skill already exists, replace it; otherwise append
-  const existingIdx = existingCerts.findIndex(
-    (c) => c.skill === cert.skill && c.status === "active"
-  );
-  if (existingIdx >= 0) {
-    existingCerts[existingIdx] = cert;
-  } else {
-    existingCerts.push(cert);
-  }
-
-  // Update graduatedSkills set
-  const graduatedSkills = new Set(acc.graduatedSkills || []);
-  if (cert.skill) graduatedSkills.add(cert.skill);
-  if (acc.skill) graduatedSkills.add(acc.skill);
-
-  // Create congratulations notification
-  const notifs = acc.notifications ? [...acc.notifications] : [];
-  const notifExists = notifs.some((n) => n.certificateId === cert.id);
-  if (!notifExists) {
-    notifs.unshift({
-      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      type: "graduation",
-      title: `Congratulations! Your Certificate of ${cert.tier} has been issued! 🎓`,
-      message: `You have successfully graduated from ${cert.skillName} at KR8 Digitals! Your verified Certificate of ${cert.tier} is now available in your profile to view, download, and share.`,
-      certificateId: cert.id,
-      skill: cert.skill,
-      skillName: cert.skillName,
-      tier: cert.tier,
-      timestamp: Date.now(),
-      read: false,
-    });
-  }
-
-  const updated: Account = {
-    ...acc,
-    graduated: true,
-    certTier: cert.tier,
-    certificateUrl: `cert-stored:${cert.id}`,
-    certRecognition: cert.additionalNotes || acc.certRecognition,
-    graduatedAt: cert.issuedAt,
-    certificates: existingCerts,
-    graduatedSkills: Array.from(graduatedSkills),
-    notifications: notifs,
-  };
-
-  accounts[accIndex] = updated;
-  saveAccounts(accounts);
-
-  // Sync current user session if the graduated student is currently signed in
+): Promise<{ ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string }> {
   try {
-    const curRaw = localStorage.getItem("kr8_current");
-    if (curRaw) {
-      const cur = JSON.parse(curRaw) as Account;
-      if (normalizeIdentity(cur.id) === normalizeIdentity(studentId)) {
-        localStorage.setItem("kr8_current", JSON.stringify(updated));
-      }
+    const res = await apiGraduation({ action: "issue", studentId, certificate: cert });
+    if (res.account) {
+      upsertAccountCache(res.account as RemoteAccount);
+      notifyAccountsUpdated([studentId]);
     }
-  } catch {
-    /* ignore */
+    addFeed({ kind: "graduation", name: res.account?.name || cert.studentName, skill: cert.skillName, avatar: res.account?.avatar || "" });
+    return {
+      ok: true,
+      account: res.account as unknown as Account | undefined,
+      certificate: res.certificate as CertificateRecord | undefined,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Certificate could not be issued." };
   }
-
-  // Push to global notifications list so Navbar bell lights up
-  try {
-    const globalNotifs = JSON.parse(localStorage.getItem("kr8_notifs") || "[]");
-    globalNotifs.unshift({
-      id: Math.random().toString(36).slice(2),
-      text: `🎓 Congratulations, ${updated.name}! Your Certificate of ${cert.tier} in ${cert.skillName} has been issued!`,
-      ts: Date.now(),
-    });
-    localStorage.setItem("kr8_notifs", JSON.stringify(globalNotifs.slice(0, 20)));
-  } catch {
-    /* ignore */
-  }
-
-  addFeed({
-    kind: "graduation",
-    name: updated.name,
-    skill: cert.skillName,
-    avatar: updated.avatar,
-  });
-
-  return { ok: true, account: updated, certificate: cert };
 }
-
-export function withdrawCertificate(
+export async function withdrawCertificate(
   studentId: string,
   certId: string,
   reason: string,
   withdrawnBy?: string
-): { ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string } {
-  if (!reason || !reason.trim()) {
-    return { ok: false, error: "A withdrawal reason is required." };
+): Promise<{ ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string }> {
+  if (!reason || !reason.trim()) return { ok: false, error: "A withdrawal reason is required." };
+  try {
+    const res = await apiGraduation({
+      action: "withdraw",
+      studentId,
+      certificateId: certId,
+      reason: reason.trim(),
+      withdrawnBy,
+    });
+    if (res.account) {
+      upsertAccountCache(res.account as RemoteAccount);
+      notifyAccountsUpdated([studentId]);
+    }
+    return {
+      ok: true,
+      account: res.account as unknown as Account | undefined,
+      certificate: res.certificate as CertificateRecord | undefined,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Certificate could not be withdrawn." };
   }
-
-  const accounts = getAccounts();
-  const accIndex = accounts.findIndex(
-    (s) => normalizeIdentity(s.id) === normalizeIdentity(studentId)
-  );
-  if (accIndex === -1) {
-    return { ok: false, error: `Student with ID ${studentId} not found.` };
-  }
-
-  const acc = accounts[accIndex];
-  const certs = getStudentCertificates(acc.id);
-  const certIndex = certs.findIndex(
-    (c) => c.id.toLowerCase() === certId.toLowerCase()
-  );
-
-  if (certIndex === -1) {
-    return { ok: false, error: `Certificate reference ID "${certId}" not found for student.` };
-  }
-
-  const targetCert = certs[certIndex];
-  const updatedCert: CertificateRecord = {
-    ...targetCert,
-    status: "withdrawn",
-    withdrawalReason: reason.trim(),
-    withdrawnAt: Date.now(),
-    withdrawnBy: withdrawnBy || "Administrator",
-  };
-
-  certs[certIndex] = updatedCert;
-
-  // Add withdrawal notification to student profile
-  const notifs = acc.notifications ? [...acc.notifications] : [];
-  notifs.unshift({
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    type: "withdrawal",
-    title: `Notice: Certificate of ${targetCert.tier} Withdrawn`,
-    message: `Your Certificate of ${targetCert.tier} in ${targetCert.skillName} has been withdrawn by the administrator.`,
-    reason: reason.trim(),
-    certificateId: targetCert.id,
-    skill: targetCert.skill,
-    skillName: targetCert.skillName,
-    tier: targetCert.tier,
-    timestamp: Date.now(),
-    read: false,
-  });
-
-  // Calculate remaining active certificates
-  const remainingActive = certs.filter((c) => c.status === "active");
-  const stillGraduated = remainingActive.length > 0;
-  const latestActive = stillGraduated ? remainingActive[remainingActive.length - 1] : undefined;
-
-  const updated: Account = {
-    ...acc,
-    certificates: certs,
-    graduated: stillGraduated,
-    certTier: latestActive?.tier || null,
-    certificateUrl: latestActive?.certificateImageUrl || undefined,
-    notifications: notifs,
-  };
-
-  accounts[accIndex] = updated;
-  saveAccounts(accounts);
-
-  return { ok: true, account: updated, certificate: updatedCert };
 }
-
 export function getStudentNotifications(studentId: string): StudentNotification[] {
   const acc = findStudent(studentId);
-  return acc?.notifications || [];
+  return (acc?.notifications || []) as StudentNotification[];
 }
-
 export function markNotificationRead(studentId: string, notifId: string): void {
-  const accounts = getAccounts();
-  const acc = accounts.find((s) => normalizeIdentity(s.id) === normalizeIdentity(studentId));
-  if (!acc || !acc.notifications) return;
+  const acc = findStudent(studentId);
+  if (!acc?.notifications) return;
   const target = acc.notifications.find((n) => n.id === notifId);
-  if (target) {
+  if (target && !target.read) {
     target.read = true;
-    saveAccounts(accounts);
+    saveAccounts(getAccounts());
+    void apiMeAction({ action: "read-notification", id: notifId }).catch(() => undefined);
   }
 }
-
 /* ---------------- Verify ---------------- */
 export type VerificationResult = {
   ok: boolean;
@@ -2754,53 +1342,22 @@ export type VerificationResult = {
   withdrawnAt?: number;
 };
 
-export function verifyId(id: string, certId?: string): VerificationResult {
-  const cleanId = (id || "").trim();
-  const cleanCert = (certId || "").trim();
-
-  // 1. Direct Certificate Reference Lookup
-  const targetCertId = cleanCert || (cleanId.startsWith("CERT-") ? cleanId : "");
-  if (targetCertId) {
-    const { certificate, account } = getCertificateById(targetCertId);
-    if (certificate && account) {
-      return {
-        ok: true,
-        account,
-        certificate,
-        certificates: getStudentCertificates(account.id),
-        isWithdrawn: certificate.status === "withdrawn",
-        withdrawalReason: certificate.withdrawalReason,
-        withdrawnAt: certificate.withdrawnAt,
-      };
-    }
-  }
-
-  // 2. Student / Member Identity Lookup
-  const acc = findStudent(cleanId);
-  if (!acc) {
+export async function verifyId(id: string, certId?: string): Promise<VerificationResult> {
+  try {
+    const res = await apiVerify(id || "", certId || "");
+    return {
+      ok: !!res.ok,
+      account: res.account as unknown as Account | undefined,
+      certificate: res.certificate as CertificateRecord | undefined,
+      certificates: (res.certificates || []) as CertificateRecord[],
+      isWithdrawn: res.isWithdrawn,
+      withdrawalReason: res.withdrawalReason,
+      withdrawnAt: res.withdrawnAt,
+    };
+  } catch {
     return { ok: false };
   }
-
-  const certs = getStudentCertificates(acc.id);
-  // Match specific certificate or default to active primary
-  let matchedCert = targetCertId
-    ? certs.find((c) => c.id.toLowerCase() === targetCertId.toLowerCase())
-    : undefined;
-  if (!matchedCert && certs.length > 0) {
-    matchedCert = certs.find((c) => c.status === "active") || certs[certs.length - 1];
-  }
-
-  return {
-    ok: true,
-    account: acc,
-    certificate: matchedCert,
-    certificates: certs,
-    isWithdrawn: matchedCert ? matchedCert.status === "withdrawn" : false,
-    withdrawalReason: matchedCert?.withdrawalReason,
-    withdrawnAt: matchedCert?.withdrawnAt,
-  };
 }
-
 /* ---------------- Live feed ---------------- */
 export type FeedItem = {
   id: string;
@@ -2827,12 +1384,21 @@ export function feedAction(k: FeedItem["kind"], item?: FeedItem) {
   return feedActions[k];
 }
 export function getFeed(): FeedItem[] {
-  return load<FeedItem[]>(FEED_STORAGE_KEY, []).sort((a, b) => b.ts - a.ts);
+  return (feedCache as unknown as FeedItem[]).slice().sort((a, b) => b.ts - a.ts);
 }
 export function addFeed(item: Omit<FeedItem, "id" | "ts">) {
-  const feed = getFeed();
-  feed.unshift({ ...item, id: Math.random().toString(36).slice(2), ts: Date.now() });
-  save(FEED_STORAGE_KEY, feed.slice(0, 40));
+  const entry = { ...item, id: Math.random().toString(36).slice(2), ts: Date.now() };
+  setFeedCache([{ ...entry, _synced: true }, ...feedCache].slice(0, 40) as Record<string, unknown>[]);
+  void apiActivity({
+    kind: entry.kind,
+    name: entry.name,
+    skill: entry.skill,
+    avatar: entry.avatar,
+    customAction: entry.customAction,
+  }).catch(() => undefined);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("kr8:feed-updated"));
+  }
 }
 export function timeAgo(ts: number): string {
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -2926,13 +1492,13 @@ export function saveHomepageSettings(settings: HomepageSettings) {
   save(HOMEPAGE_SETTINGS_KEY, settings);
   if (typeof window !== "undefined") {
     try {
-      const rawCms = localStorage.getItem("kr8_cms_content_v2");
-      if (rawCms) {
-        const cms = JSON.parse(rawCms);
+      // Bridge into the server-backed CMS doc (same store as cmsStore).
+      const cms = docGetSync<Record<string, any>>("kr8_cms_content_v2");
+      if (cms) {
         if (!cms.home) cms.home = {};
         if (settings.heroHeadline) cms.home.heroHeadline = settings.heroHeadline;
         if (settings.projectsDone) cms.home.projectsDone = settings.projectsDone;
-        localStorage.setItem("kr8_cms_content_v2", JSON.stringify(cms));
+        docSetSync("kr8_cms_content_v2", cms);
         window.dispatchEvent(new Event("kr8:cms-updated"));
       }
     } catch {
@@ -4198,10 +2764,10 @@ export type AttendanceSubmission = {
   submittedAt: number;
 };
 
-const ATTENDANCE_SUBMISSIONS_KEY = "kr8_attendance_submissions_v2";
-const ATTENDANCE_TYPES_SETTINGS_KEY = "kr8_attendance_types_open_v1";
+export const ATTENDANCE_SUBMISSIONS_KEY = "kr8_attendance_submissions_v2";
+export const ATTENDANCE_TYPES_SETTINGS_KEY = "kr8_attendance_types_open_v1";
 
-const DEFAULT_ATTENDANCE_SUBMISSIONS: AttendanceSubmission[] = [
+export const DEFAULT_ATTENDANCE_SUBMISSIONS: AttendanceSubmission[] = [
   {
     id: "atd_seed_1",
     studentId: "KR82026KT0001GDVFD",
@@ -4241,23 +2807,20 @@ const DEFAULT_ATTENDANCE_SUBMISSIONS: AttendanceSubmission[] = [
 ];
 
 export function getAttendanceSubmissions(): AttendanceSubmission[] {
-  return load<AttendanceSubmission[]>(ATTENDANCE_SUBMISSIONS_KEY, DEFAULT_ATTENDANCE_SUBMISSIONS);
+  return attendanceCache as unknown as AttendanceSubmission[];
 }
-
 export function saveAttendanceSubmissions(subs: AttendanceSubmission[]): void {
-  save(ATTENDANCE_SUBMISSIONS_KEY, subs);
+  setAttendanceCache(subs as unknown as Record<string, unknown>[]);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:attendance-updated"));
   }
 }
-
 export function getStudentAttendance(studentId: string): AttendanceSubmission[] {
   return getAttendanceSubmissions()
     .filter((s) => s.studentId === studentId)
     .sort((a, b) => b.submittedAt - a.submittedAt);
 }
-
-export function submitAttendance(input: {
+export async function submitAttendance(input: {
   studentId: string;
   studentName: string;
   skill: string;
@@ -4265,21 +2828,16 @@ export function submitAttendance(input: {
   topic: string;
   speaker?: string;
   screenshotUrl: string;
-}): AttendanceSubmission {
-  const subs = getAttendanceSubmissions();
-
-  // Duplicate screenshot check: match same URL or matching length / data
-  const isDuplicate = subs.some((s) => {
-    if (!s.screenshotUrl || !input.screenshotUrl) return false;
-    if (s.screenshotUrl === input.screenshotUrl) return true;
-    if (s.screenshotUrl.startsWith("data:") && input.screenshotUrl.startsWith("data:")) {
-      return s.screenshotUrl.slice(0, 300) === input.screenshotUrl.slice(0, 300);
-    }
-    return false;
+}): Promise<AttendanceSubmission> {
+  const res = await apiAttendanceAction({
+    action: "submit",
+    type: input.type,
+    topic: input.topic,
+    speaker: input.speaker,
+    screenshotUrl: input.screenshotUrl,
   });
-
-  const newSub: AttendanceSubmission = {
-    id: `atd_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+  const newSub = (res.submission || {
+    id: `atd_${Date.now()}`,
     studentId: input.studentId,
     studentName: input.studentName,
     skill: input.skill,
@@ -4287,98 +2845,57 @@ export function submitAttendance(input: {
     topic: input.topic,
     speaker: input.speaker,
     screenshotUrl: input.screenshotUrl,
-    isDuplicateScreenshot: isDuplicate,
     status: "pending",
     submittedAt: Date.now(),
-  };
-
-  saveAttendanceSubmissions([newSub, ...subs]);
-
-  const typeLabels: Record<string, string> = {
-    class: "submitted Class Attendance",
-    assignment: "submitted an Assignment",
-    mindset: "submitted Mindset Shift Attendance",
-    hangout: "submitted Monthly Hangout Attendance",
-  };
-
-  const student = findStudent(input.studentId);
-  addFeed({
-    kind: input.type === "assignment" ? "submission" : "attendance",
-    name: input.studentName,
-    skill: input.skill,
-    avatar: student?.avatar || generateDefaultAvatar(input.studentName, input.studentId),
-    customAction: typeLabels[input.type] || "submitted attendance",
-  });
-
+  }) as AttendanceSubmission;
+  saveAttendanceSubmissions([newSub, ...getAttendanceSubmissions()]);
   return newSub;
 }
-
-export function reviewAttendance(
+export async function reviewAttendance(
   submissionId: string,
   status: "accepted" | "rejected",
   feedback: string = "",
   reviewerName: string = "Coach"
-): boolean {
-  const subs = getAttendanceSubmissions();
-  const target = subs.find((s) => s.id === submissionId);
-  if (!target) return false;
-
-  target.status = status;
-  target.feedback = feedback.trim();
-  target.reviewedBy = reviewerName;
-  target.reviewedAt = Date.now();
-
-  saveAttendanceSubmissions(subs);
-
-  if (status === "accepted") {
-    const student = findStudent(target.studentId);
-    if (student) {
-      const isAssignment = target.type === "assignment";
-      const ptsToAdd = isAssignment ? 15 : 10;
-      updateAccount(student.id, {
-        points: (student.points || 0) + ptsToAdd,
-        attendanceAccepted: !isAssignment ? (student.attendanceAccepted || 0) + 1 : student.attendanceAccepted,
-        submissions: isAssignment ? (student.submissions || 0) + 1 : student.submissions,
-      });
-
-      const typeTitles: Record<string, string> = {
-        class: "Class Attendance",
-        assignment: "Assignment",
-        mindset: "Mindset Shift",
-        hangout: "Monthly Hangout",
-      };
-
-      addFeed({
-        kind: "attendance",
-        name: target.studentName,
-        skill: target.skill,
-        avatar: student.avatar || generateDefaultAvatar(target.studentName, target.studentId),
-        customAction: `${typeTitles[target.type] || "Attendance"} was approved`,
-      });
+): Promise<boolean> {
+  try {
+    await apiAttendanceAction({
+      action: "review",
+      id: submissionId,
+      status,
+      feedback,
+      reviewerName,
+    });
+    const target = attendanceCache.find((s) => s.id === submissionId);
+    if (target) {
+      target.status = status;
+      target.feedback = feedback.trim();
+      target.reviewedBy = reviewerName;
+      target.reviewedAt = Date.now();
     }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("kr8:attendance-updated"));
+    }
+    // Refresh points/attendance counters on the roster.
+    void bootstrapStore().catch(() => undefined);
+    return true;
+  } catch {
+    return false;
   }
-
-  return true;
 }
-
 export function getAttendanceTypesSettings(): Record<string, boolean> {
-  const saved = load<Record<string, boolean>>(ATTENDANCE_TYPES_SETTINGS_KEY, {});
   const result: Record<string, boolean> = {};
   ATTENDANCE_TYPES.forEach((t) => {
-    result[t.key] = saved[t.key] !== undefined ? saved[t.key] : t.open;
+    result[t.key] = attendanceTypesCache[t.key] !== undefined ? attendanceTypesCache[t.key] : t.open;
   });
   return result;
 }
-
 export function toggleAttendanceTypeOpen(typeKey: string, isOpen: boolean): void {
-  const saved = load<Record<string, boolean>>(ATTENDANCE_TYPES_SETTINGS_KEY, {});
-  saved[typeKey] = isOpen;
-  save(ATTENDANCE_TYPES_SETTINGS_KEY, saved);
+  setAttendanceTypesCache({ ...attendanceTypesCache, [typeKey]: isOpen });
+  void apiAttendanceAction({ action: "set-type", key: typeKey, open: isOpen }).catch(() => undefined);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:attendance-types-updated"));
   }
 }
-
 export const SCORING = [
   { action: "Attendance accepted", pts: "+10" },
   { action: "Assignment accepted", pts: "+15" },
@@ -4390,15 +2907,11 @@ export const SCORING = [
 ];
 
 export function tribeCount(): number {
-  // Combination of registered tribe members and students, preserving current base statistics
-  const tribeMembers = getAccounts().filter((account) => account.type === "tribe").length;
-  const students = getStudents().length;
-  return 2480 + tribeMembers + students;
+  return 2480 + countsCache.tribe;
 }
 export function studentCount(): number {
-  return 1200 + getStudents().length;
+  return 1200 + countsCache.students;
 }
-
 // ==========================================
 // LIVE STREAMING & BROADCAST SYSTEM
 // ==========================================
@@ -4711,7 +3224,20 @@ export function startLiveStream(input: {
   visibility?: "public" | "private";
   accessKey?: string;
 }): LiveStream {
-  const host = input.host || DEFAULT_FOUNDER_ACCOUNT;
+  const host = input.host || ({
+    type: "founder",
+    id: "KR8-FOUNDER",
+    name: "Timfire",
+    email: "",
+    phone: "",
+    vip: true,
+    points: 0,
+    attendanceAccepted: 0,
+    submissions: 0,
+    referrals: 0,
+    graduated: false,
+    joined: 0,
+  } as Account);
   const hostName = host.type === "founder" ? "Timfire" : host.name;
   const isPrivate = input.visibility === "private";
   const accessKey = isPrivate

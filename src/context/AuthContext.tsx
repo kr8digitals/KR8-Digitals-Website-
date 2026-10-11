@@ -1,218 +1,142 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { findStudent, type Account } from "../data/store";
+import type { Session } from "@supabase/supabase-js";
+import { getSupabase } from "../lib/supabase";
+import { apiMe } from "../lib/api";
+import { upsertAccountCache, bootstrapStore, setAccountsCache, accountsCache, type RemoteAccount } from "../data/db";
+import type { Account } from "../data/store";
 
+/**
+ * KR8 Digitals — authentication context (Supabase Auth only).
+ *
+ * The previous implementation compared plaintext passwords in the browser and
+ * kept a custom `kr8_current` session in localStorage. Both are gone: the
+ * session is a real Supabase Auth JWT (managed by supabase-js), and the
+ * account data shown here is loaded from the server (`/api/me`) into memory.
+ */
 type AuthCtx = {
-  student: Account | null; // active account (student or tribe)
-  user: Account | null; // universal alias for active user
+  student: Account | null;
+  user: Account | null;
   deviceSessionToken: string | null;
+  authReady: boolean;
   signIn: (s: Account) => void;
   signOut: () => void;
+  refreshProfile: () => Promise<void>;
   notifications: { id: string; text: string; ts: number }[];
   addNotification: (text: string) => void;
   clearNotifications: () => void;
 };
 
 const Ctx = createContext<AuthCtx>(null as unknown as AuthCtx);
-const SESSION_KEY = "kr8_last_active";
-const DEVICE_TOKEN_KEY = "kr8_device_session_token_v1";
-const DEVICE_SESSION_DATA = "kr8_device_session_data_v1";
-// 5 full days (120 hours) persistent device session
-const INACTIVITY_LIMIT = 5 * 24 * 60 * 60 * 1000;
-
-function getOrCreateDeviceToken(): string {
-  try {
-    let token = localStorage.getItem(DEVICE_TOKEN_KEY);
-    if (!token) {
-      token = "dev_" + Math.random().toString(36).substring(2) + "_" + Date.now().toString(36);
-      localStorage.setItem(DEVICE_TOKEN_KEY, token);
-    }
-    return token;
-  } catch {
-    return "dev_fallback";
-  }
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [student, setStudent] = useState<Account | null>(null);
-  const [deviceToken, setDeviceToken] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [notifications, setNotifications] = useState<AuthCtx["notifications"]>([]);
 
-  useEffect(() => {
-    try {
-      const token = getOrCreateDeviceToken();
-      setDeviceToken(token);
-
-      const s = localStorage.getItem("kr8_current");
-      const lastActive = Number(localStorage.getItem(SESSION_KEY) || 0);
-      const isExpired = lastActive > 0 && Date.now() - lastActive > INACTIVITY_LIMIT;
-
-      if (isExpired) {
-        // Expired after 5 days of device inactivity
-        localStorage.removeItem("kr8_current");
-        localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(DEVICE_SESSION_DATA);
-        setStudent(null);
-      } else if (s) {
-        const stored = JSON.parse(s) as Account;
-        const current = findStudent(stored.id);
-        if (current) {
-          setStudent(current);
-          localStorage.setItem("kr8_current", JSON.stringify(current));
-          // Refresh touch timestamp
-          localStorage.setItem(SESSION_KEY, String(Date.now()));
-        } else {
-          localStorage.removeItem("kr8_current");
-        }
-      }
-
-      const n = localStorage.getItem("kr8_notifs");
-      if (n) setNotifications(JSON.parse(n));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  // Real-time synchronization when accounts are updated or logged out
-  useEffect(() => {
-    const handleSync = () => {
-      try {
-        const s = localStorage.getItem("kr8_current");
-        if (s) {
-          const stored = JSON.parse(s) as Account;
-          const fresh = findStudent(stored.id);
-          if (fresh) {
-            setStudent(fresh);
-            localStorage.setItem("kr8_current", JSON.stringify(fresh));
-          } else {
-            setStudent(null);
-            localStorage.removeItem("kr8_current");
-          }
-        } else {
-          setStudent(null);
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    const handleLogout = () => {
+  const loadProfile = async (session: Session | null) => {
+    if (!session) {
       setStudent(null);
-    };
+      return;
+    }
+    try {
+      const { account } = await apiMe();
+      upsertAccountCache(account as RemoteAccount);
+      setStudent(account as unknown as Account);
+    } catch {
+      // Signed-in JWT but no profile row yet (e.g. mid-registration).
+      setStudent(null);
+    }
+  };
 
-    window.addEventListener("kr8:accounts-updated", handleSync);
-    window.addEventListener("kr8:auth-logout", handleLogout);
-    window.addEventListener("storage", handleSync);
-    return () => {
-      window.removeEventListener("kr8:accounts-updated", handleSync);
-      window.removeEventListener("kr8:auth-logout", handleLogout);
-      window.removeEventListener("storage", handleSync);
-    };
-  }, []);
-
-  // Device activity tracker — sliding 5-day expiration window
   useEffect(() => {
-    const touch = () => {
-      if (!localStorage.getItem("kr8_current")) return;
-      const now = Date.now();
-      localStorage.setItem(SESSION_KEY, String(now));
-      try {
-        const raw = localStorage.getItem(DEVICE_SESSION_DATA);
-        if (raw) {
-          const data = JSON.parse(raw);
-          data.lastActive = now;
-          data.expiresAt = now + INACTIVITY_LIMIT;
-          localStorage.setItem(DEVICE_SESSION_DATA, JSON.stringify(data));
-        }
-      } catch {
-        /* ignore */
-      }
-    };
+    const sb = getSupabase();
+    if (!sb) {
+      setAuthReady(true);
+      return;
+    }
+    let cancelled = false;
 
-    const events = ["click", "keydown", "touchstart", "mousemove", "visibilitychange"];
-    events.forEach((event) => window.addEventListener(event, touch));
+    sb.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      void loadProfile(data.session).finally(() => {
+        if (!cancelled) setAuthReady(true);
+      });
+    });
 
-    // Periodic check for 5-day expiration
-    const timer = window.setInterval(() => {
-      const last = Number(localStorage.getItem(SESSION_KEY) || 0);
-      if (last && Date.now() - last > INACTIVITY_LIMIT) {
+    const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") {
         setStudent(null);
-        localStorage.removeItem("kr8_current");
-        localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(DEVICE_SESSION_DATA);
+        setAccountsCache([]);
+        return;
       }
-    }, 60_000);
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        void loadProfile(session);
+      }
+    });
+
+    const handleLogout = () => setStudent(null);
+    const handleAccounts = () => {
+      // Re-read the in-memory cache after roster updates.
+      setStudent((prev) => {
+        if (!prev) return prev;
+        const key = prev.id.replace(/[\s-]/g, "").toUpperCase();
+        const fresh = accountsCache.find((a) => (a.id || "").replace(/[\s-]/g, "").toUpperCase() === key);
+        return (fresh as unknown as Account) || prev;
+      });
+    };
+    window.addEventListener("kr8:auth-logout", handleLogout);
+    window.addEventListener("kr8:accounts-updated", handleAccounts);
 
     return () => {
-      events.forEach((event) => window.removeEventListener(event, touch));
-      window.clearInterval(timer);
+      cancelled = true;
+      sub.subscription.unsubscribe();
+      window.removeEventListener("kr8:auth-logout", handleLogout);
+      window.removeEventListener("kr8:accounts-updated", handleAccounts);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the bootstrap data in lockstep with the session.
+  useEffect(() => {
+    void bootstrapStore();
+  }, [student?.id]);
 
   const signIn = (s: Account) => {
-    const token = getOrCreateDeviceToken();
-    const now = Date.now();
+    upsertAccountCache(s as unknown as RemoteAccount);
     setStudent(s);
-    setDeviceToken(token);
-    try {
-      localStorage.setItem("kr8_current", JSON.stringify(s));
-      localStorage.setItem(SESSION_KEY, String(now));
-      localStorage.setItem(
-        DEVICE_SESSION_DATA,
-        JSON.stringify({
-          accountId: s.id,
-          deviceToken: token,
-          email: s.email,
-          lastActive: now,
-          expiresAt: now + INACTIVITY_LIMIT,
-        })
-      );
-    } catch {
-      /* ignore */
-    }
+    void bootstrapStore();
   };
 
   const signOut = () => {
     setStudent(null);
-    try {
-      localStorage.removeItem("kr8_current");
-      localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(DEVICE_SESSION_DATA);
-      sessionStorage.removeItem("kr8_current");
-      window.dispatchEvent(new CustomEvent("kr8:auth-logout"));
-    } catch {
-      /* ignore */
-    }
+    setAccountsCache([]);
+    const sb = getSupabase();
+    if (sb) void sb.auth.signOut().catch(() => undefined);
+    window.dispatchEvent(new CustomEvent("kr8:auth-logout"));
+  };
+
+  const refreshProfile = async () => {
+    const sb = getSupabase();
+    const { data } = sb ? await sb.auth.getSession() : { data: { session: null } };
+    await loadProfile(data.session);
   };
 
   const addNotification = (text: string) => {
-    setNotifications((prev) => {
-      const next = [{ id: Math.random().toString(36).slice(2), text, ts: Date.now() }, ...prev].slice(0, 20);
-      try {
-        localStorage.setItem("kr8_notifs", JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    setNotifications((prev) => [{ id: Math.random().toString(36).slice(2), text, ts: Date.now() }, ...prev].slice(0, 20));
   };
 
-  const clearNotifications = () => {
-    setNotifications([]);
-    try {
-      localStorage.removeItem("kr8_notifs");
-    } catch {
-      /* ignore */
-    }
-  };
+  const clearNotifications = () => setNotifications([]);
 
   return (
     <Ctx.Provider
       value={{
         student,
         user: student,
-        deviceSessionToken: deviceToken,
+        deviceSessionToken: null,
+        authReady,
         signIn,
         signOut,
+        refreshProfile,
         notifications,
         addNotification,
         clearNotifications,

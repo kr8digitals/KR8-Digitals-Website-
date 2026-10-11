@@ -35,6 +35,14 @@ export default defineConfig({
     headers: {
       "Access-Control-Allow-Origin": "*",
     },
+    // Route /api/** to the local dev API server (scripts/dev-api.mts) during
+    // `vite dev`. On Vercel the platform serves /api from the functions in /api.
+    proxy: {
+      "/api": {
+        target: process.env.API_PROXY_TARGET || "http://127.0.0.1:8787",
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     host: "0.0.0.0",

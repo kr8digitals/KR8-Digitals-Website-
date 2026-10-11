@@ -71,6 +71,7 @@ export const DEFAULT_SIGNATURES: SignatureRecord[] = [
 ];
 
 const SIGNATURES_STORAGE_KEY = "kr8_signatures_v1";
+import { docGetSync, docSetSync } from "./db";
 
 let memorySignatures: SignatureRecord[] | null = null;
 
@@ -79,7 +80,8 @@ export function getSignatures(): SignatureRecord[] {
   if (typeof window === "undefined") return DEFAULT_SIGNATURES;
 
   try {
-    const raw = localStorage.getItem(SIGNATURES_STORAGE_KEY);
+    const rawRecords = docGetSync<SignatureRecord[]>(SIGNATURES_STORAGE_KEY);
+    const raw = rawRecords ? JSON.stringify(rawRecords) : null;
     if (!raw) {
       memorySignatures = DEFAULT_SIGNATURES;
       return memorySignatures;
@@ -102,7 +104,7 @@ function persistSignatures(records: SignatureRecord[]): void {
   memorySignatures = records;
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(SIGNATURES_STORAGE_KEY, JSON.stringify(records));
+      docSetSync(SIGNATURES_STORAGE_KEY, records);
       window.dispatchEvent(new Event("kr8:signatures-updated"));
     } catch (e) {
       console.warn("Could not save signatures to localStorage:", e);

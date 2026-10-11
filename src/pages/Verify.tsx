@@ -66,8 +66,7 @@ export default function Verify() {
       setId(queryId || queryCert);
       setCertQuery(queryCert);
       setSearched(true);
-      const res = verifyId(queryId, queryCert);
-      setResult(res);
+      void verifyId(queryId, queryCert).then((res) => setResult(res));
     }
   }, [searchParams, rosterSynced]);
 
@@ -112,13 +111,12 @@ export default function Verify() {
     const target = (searchQuery || id).trim();
     if (!target) return;
     setSearched(true);
-    let res = verifyId(target, certQuery);
+    let res = await verifyId(target, certQuery);
     if (!res.ok) {
-      // The student may have registered on another device seconds ago —
-      // pull the latest roster once and retry before declaring a miss.
+      // The student may have registered seconds ago — re-sync once and retry.
       try {
         await hydrateAccountsFromSupabase();
-        res = verifyId(target, certQuery);
+        res = await verifyId(target, certQuery);
       } catch {
         /* keep the local result */
       }

@@ -15,6 +15,7 @@
  * `edition`, not in page code.
  */
 import { normalizeEmail, normalizePhone } from "./store";
+import { apiMindset } from "../lib/api";
 
 /* ------------------------------------------------------------------ */
 /* Event configuration                                                */
@@ -27,6 +28,8 @@ export interface MsTopic {
 }
 
 export interface MsEventConfig {
+  /** Server-side code of this event instance (defaults to "mindset_shift"). */
+  eventCode?: string;
   edition: string; // "7.0"
   programName: string; // "Mindset Shift"
   theme: string; // "BUILDING WEALTH"
@@ -75,7 +78,7 @@ export interface MsEventConfig {
   startDate: string; // ISO 8601 — schema.org Event structured data ("" = omit)
 }
 
-const EVENT_KEY = "kr8_mindset_shift_event_v1";
+export const EVENT_KEY = "kr8_mindset_shift_event_v1";
 
 /* All seeded values come from the official flyer, Sagacious Tehilla's
  * public website, and the verified KR8 founder record. No invented facts. */
@@ -200,12 +203,22 @@ export const DEFAULT_MS_EVENT: MsEventConfig = {
     "You're not bad with money — you were never taught. Mindset Shift 7.0 is the free, online conversation on how to get out of debt and build wealth, with Sagacious Tehilla (author, six books), hosted by Timfire. 4th October 2026, 9PM. Claim your free seat at kr8digitals.com/mindset-shift.",
 };
 
+// In-memory mirror hydrated from the server (`mindset_events`). Nothing is
+// stored in the browser.
+let msEventCache: MsEventConfig | null = null;
+
+export function __setMsEventCache(config: Partial<MsEventConfig> | null): void {
+  if (!config) {
+    msEventCache = null;
+    return;
+  }
+  msEventCache = { ...DEFAULT_MS_EVENT, ...config } as MsEventConfig;
+}
+
 function loadMsEvent(): MsEventConfig {
   try {
-    const raw =
-      typeof localStorage !== "undefined" ? localStorage.getItem(EVENT_KEY) : null;
-    if (!raw) return DEFAULT_MS_EVENT;
-    const stored = JSON.parse(raw) as Partial<MsEventConfig>;
+    const stored = (msEventCache || null) as Partial<MsEventConfig> | null;
+    if (!stored) return DEFAULT_MS_EVENT;
     // Deep-merge over defaults so new fields added in future updates never
     // leave older devices with undefined values.
     return {
@@ -230,11 +243,8 @@ export function getMsEvent(): MsEventConfig {
 
 export function saveMsEvent(patch: Partial<MsEventConfig>): MsEventConfig {
   const next = { ...loadMsEvent(), ...patch };
-  try {
-    localStorage.setItem(EVENT_KEY, JSON.stringify(next));
-  } catch (err) {
-    console.warn("Mindset Shift event save failed:", err);
-  }
+  msEventCache = next;
+  void pushMsEventToServer(next).catch(() => undefined);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:ms-event-updated"));
     window.dispatchEvent(new Event("storage"));
@@ -243,11 +253,8 @@ export function saveMsEvent(patch: Partial<MsEventConfig>): MsEventConfig {
 }
 
 export function resetMsEvent(): MsEventConfig {
-  try {
-    localStorage.removeItem(EVENT_KEY);
-  } catch {
-    /* ignore */
-  }
+  msEventCache = { ...DEFAULT_MS_EVENT };
+  void pushMsEventToServer(DEFAULT_MS_EVENT).catch(() => undefined);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:ms-event-updated"));
     window.dispatchEvent(new Event("storage"));
@@ -314,16 +321,17 @@ export interface MsRegistration {
   deletedAt: number | null; // tombstone — soft-deleted, hidden everywhere
 }
 
-const REGS_KEY = "kr8_mindset_shift_registrations_v1";
+export const REGS_KEY = "kr8_mindset_shift_registrations_v1";
+
+// In-memory mirror hydrated from the server (`mindset_registrations`).
+let msRegsCache: MsRegistration[] = [];
+
+export function __setMsRegsCache(regs: MsRegistration[]): void {
+  msRegsCache = regs;
+}
 
 function loadRegs(): MsRegistration[] {
-  try {
-    const raw =
-      typeof localStorage !== "undefined" ? localStorage.getItem(REGS_KEY) : null;
-    return raw ? (JSON.parse(raw) as MsRegistration[]) : [];
-  } catch {
-    return [];
-  }
+  return msRegsCache;
 }
 
 /** Rows that are not soft-deleted. Every consumer (admin, public page,
@@ -343,14 +351,47 @@ export function getAllMsRegistrations(): MsRegistration[] {
 }
 
 function saveRegs(regs: MsRegistration[]) {
-  try {
-    localStorage.setItem(REGS_KEY, JSON.stringify(regs));
-  } catch (err) {
-    console.warn("Mindset Shift registrations save failed:", err);
-  }
+  msRegsCache = regs;
+  void pushMsRegsToServer(regs).catch(() => undefined);
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("kr8:ms-regs-updated"));
     window.dispatchEvent(new Event("storage"));
+  }
+}
+
+/* ---------------- server synchronization (never localStorage) ---------------- */
+async function pushMsEventToServer(config: MsEventConfig): Promise<void> {
+  try {
+    await apiMindset({ action: "event", eventCode: config.eventCode || "mindset_shift", config });
+  } catch {
+    /* admin-only write */
+  }
+}
+
+async function pushMsRegsToServer(regs: MsRegistration[]): Promise<void> {
+  try {
+    for (const r of regs) {
+      if (r.syncPending) {
+        await apiMindset({
+          action: "register",
+          eventCode: r.edition,
+          fullName: r.fullName,
+          email: r.email,
+          phone: r.phone,
+          whatsapp: r.whatsapp,
+          location: r.location,
+          heardAbout: r.heardAbout,
+          hopingToLearn: r.hopingToLearn,
+          moneyQuestion: r.moneyQuestion,
+          biggestChallenge: r.biggestChallenge,
+          financialSituation: r.financialSituation,
+          areaToImprove: r.areaToImprove,
+        });
+        r.syncPending = false;
+      }
+    }
+  } catch {
+    /* best-effort */
   }
 }
 

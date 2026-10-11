@@ -17,7 +17,7 @@ import {
   getVideoComments, deleteVideoComment,
   getAccounts, getStudents, updateAccount, findStudent,
   adminRegisterStudent, saveVerifyRemark, getBlogPosts, saveBlogPosts,
-  addFeed, MAIN_ADMIN_PASSWORD, buildPhone, COUNTRIES,
+  addFeed, buildPhone, COUNTRIES,
   getStreamReplays, saveStreamReplays,
   canUserHostStream, deleteStreamRecording,
   getGalleryItems, addGalleryItem, approveGalleryItem, rejectGalleryItem,
@@ -50,8 +50,6 @@ import SignatureManager from "../components/admin/SignatureManager";
 import GranularPermissionsManager from "../components/admin/GranularPermissionsManager";
 import AnnouncementManager from "../components/admin/AnnouncementManager";
 import MindsetShiftTab from "../components/admin/MindsetShiftTab";
-
-const ATTENDANCE_PW = "KR8@Atd2026";
 
 const sections = [
   "Overview", "Website Content (CMS)", "Announcements", "Blog", "Gallery Archive", "Links Manager",
@@ -123,14 +121,12 @@ export default function Admin() {
   useSeo({ path: "/admin", noindex: true });
   const { student: currentUser, signOut } = useAuth();
   const navigate = useNavigate();
-  const [pw, setPw] = useState("");
   const [auth, setAuth] = useState(false);
-  const [err, setErr] = useState(false);
   const [tab, setTab] = useState("Overview");
   const [students, setStudents] = useState<Account[]>(() => getAccounts());
 
   const isAuthorized = !!(currentUser?.admin || currentUser?.type === "founder" || currentUser?.type === "co-founder");
-  const isUltimate = currentUser?.admin?.role === "ultimate" || currentUser?.type === "founder" || pw === MAIN_ADMIN_PASSWORD;
+  const isUltimate = currentUser?.admin?.role === "ultimate" || currentUser?.type === "founder" || currentUser?.type === "co-founder";
 
   // Real-time synchronization whenever student data or accounts update
   useEffect(() => {
@@ -168,19 +164,10 @@ export default function Admin() {
   }, [mobileNavOpen]);
 
   const unlock = () => {
-    const isMainAdmin = pw === MAIN_ADMIN_PASSWORD;
-    const isAttendancePw = pw === ATTENDANCE_PW;
-    const isUserAdminPw = pw === currentUser?.admin?.adminPassword;
-
-    if (!isMainAdmin && !isAttendancePw && !isUserAdminPw) {
-      setErr(true);
-      return;
-    }
-
-    setErr(false);
+    // The administrator role is verified server-side (user_roles) at sign-in
+    // and re-checked on every admin API call — no second browser password.
     setAuth(true);
-
-    if (isAttendancePw || currentUser?.admin?.role === "attendance_reviewer") {
+    if (currentUser?.admin?.role === "attendance_reviewer") {
       setIsAttendanceReviewerOnly(true);
       setTab("Attendance Review");
     } else {
@@ -220,19 +207,10 @@ export default function Admin() {
           </div>
           <h1 className="font-display text-2xl text-white">Admin Access</h1>
           <p className="mt-2 text-sm text-[#b8aecf]">
-            Welcome, {currentUser?.name || "Administrator"}. Please enter your administrative or reviewer credentials.
+            Welcome, {currentUser?.name || "Administrator"}. Your administrator role was verified securely when you signed in.
           </p>
-          <input
-            type="password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && unlock()}
-            placeholder="Admin or Reviewer password"
-            className="mt-5 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white focus:border-pink-400/60 focus:outline-none"
-          />
-          {err && <p className="mt-2 text-xs text-red-400">Incorrect password.</p>}
-          <button onClick={unlock} className="mt-4 w-full rounded-full bg-gradient-pink py-3 text-sm font-bold text-white">
-            Unlock Dashboard
+          <button onClick={unlock} className="mt-5 w-full rounded-full bg-gradient-pink py-3 text-sm font-bold text-white">
+            Open Admin Dashboard
           </button>
         </Card>
       </div>
@@ -742,10 +720,10 @@ function StudentManager({
     if (id?.trim()) updateAccount(student.id, { id: id.trim().toUpperCase() });
   };
 
-  const handleConfirmRevoke = () => {
+  const handleConfirmRevoke = async () => {
     if (!revokeConfirmStudent) return;
     const sName = revokeConfirmStudent.name;
-    const ok = revokeStudentRegistration(revokeConfirmStudent.id);
+    const ok = await revokeStudentRegistration(revokeConfirmStudent.id);
     if (ok) {
       addNotification(`Revoked registration for ${sName}. They can register again cleanly from scratch.`);
     }
@@ -1535,13 +1513,13 @@ function SuspendStudentModal({
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
 
-  const handleConfirm = (e: React.FormEvent) => {
+  const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) {
       setError("A stated reason is strictly required to suspend/delete an account.");
       return;
     }
-    const ok = suspendStudentAccount(student.id, reason.trim());
+    const ok = await suspendStudentAccount(student.id, reason.trim());
     if (!ok) {
       setError("Cannot suspend this account (executive accounts cannot be suspended).");
       return;
@@ -1627,7 +1605,7 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
   const months = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, "0"));
 
-  const submit = () => {
+  const submit = async () => {
     setError("");
     if (!name.trim() || !email.trim() || !phone.trim() || !password.trim()) {
       setError("Please complete all required fields.");
@@ -1637,7 +1615,7 @@ function ManualRegisterModal({ onClose, onSuccess }: { onClose: () => void; onSu
     const fullPhone = buildPhone(dial, phone);
     const dob = `${y}-${m}-${d}`;
 
-    const res = adminRegisterStudent({
+    const res = await adminRegisterStudent({
       name: name.trim(),
       email: email.trim(),
       phone: fullPhone,
@@ -1892,7 +1870,7 @@ function GraduationModal({
       };
 
       // 4. Save into Store / Account database
-      const saveRes = issueCertificate(student.id, certRecord);
+      const saveRes = await issueCertificate(student.id, certRecord);
       if (!saveRes.ok || !saveRes.account) {
         throw new Error(saveRes.error || "Failed to issue certificate.");
       }
@@ -1908,14 +1886,14 @@ function GraduationModal({
     }
   };
 
-  const handleConfirmWithdraw = () => {
+  const handleConfirmWithdraw = async () => {
     if (!withdrawReason.trim()) {
       setWithdrawError("Please state the specific reason for certificate withdrawal.");
       return;
     }
     setWithdrawError("");
 
-    const res = withdrawCertificate(student.id, withdrawCertId, withdrawReason.trim(), "KR8 Administrator");
+    const res = await withdrawCertificate(student.id, withdrawCertId, withdrawReason.trim(), "KR8 Administrator");
     if (!res.ok || !res.account) {
       setWithdrawError(res.error || "Could not withdraw certificate.");
       return;
@@ -2845,10 +2823,8 @@ function BlogManager() {
 
 /* ---------------- Attendance Review Panel ---------------- */
 
-function AttendancePanel({ initialUnlocked = false }: { initialUnlocked?: boolean }) {
-  const [pw, setPw] = useState("");
-  const [ok, setOk] = useState(initialUnlocked);
-  const [err, setErr] = useState(false);
+function AttendancePanel({ initialUnlocked = true }: { initialUnlocked?: boolean }) {
+  const [ok] = useState(initialUnlocked);
   const [students, setStudents] = useState<Account[]>(getStudents);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
@@ -2859,33 +2835,7 @@ function AttendancePanel({ initialUnlocked = false }: { initialUnlocked?: boolea
     return () => window.removeEventListener("kr8:accounts-updated", refresh);
   }, []);
 
-  if (!ok) {
-    return (
-      <Card className="max-w-md mx-auto my-8">
-        <h3 className="flex items-center gap-2 font-bold text-white text-base">
-          <Icon name="lock" size={18} /> Attendance Review Access
-        </h3>
-        <p className="mt-1 text-xs text-[#b8aecf]">
-          Quarantined Reviewer access. Enter your attendance review password.
-        </p>
-        <input
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (pw === ATTENDANCE_PW ? setOk(true) : setErr(true))}
-          placeholder="Attendance review password"
-          className="mt-4 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-xs text-white focus:border-pink-400/60 focus:outline-none"
-        />
-        {err && <p className="mt-2 text-xs text-rose-400">Incorrect password.</p>}
-        <button
-          onClick={() => (pw === ATTENDANCE_PW ? setOk(true) : setErr(true))}
-          className="mt-3 w-full rounded-full bg-gradient-pink py-2.5 text-xs font-bold text-white"
-        >
-          Unlock Review Portal
-        </button>
-      </Card>
-    );
-  }
+  if (!ok) return null;
 
   const approve = (student: Account, typeName: string) => {
     const updated = updateAccount(student.id, {

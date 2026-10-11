@@ -4,7 +4,7 @@ import { IMG } from "../data/images";
 import {
   tribeCount,
   registerTribe,
-  registerStudent,
+  transitionToSkill,
   getSkills,
   getSkillName,
   getSkillRegistration,
@@ -90,21 +90,13 @@ export default function Tribe() {
   const [transitionLoading, setTransitionLoading] = useState(false);
   const [transitionErr, setTransitionErr] = useState("");
 
-  const handleTribeTransition = (e: React.FormEvent) => {
+  const handleTribeTransition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || user.type !== "tribe") return;
     setTransitionLoading(true);
     setTransitionErr("");
 
-    const res = registerStudent({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      country: user.country || "NG",
-      skill: targetSkill || "graphic",
-      dob: "",
-      password: user.password || "",
-    });
+    const res = await transitionToSkill(targetSkill || "graphic");
 
     if (!res.ok || !res.student) {
       setTransitionErr(res.error || "Could not complete registration.");
@@ -188,7 +180,7 @@ export default function Tribe() {
     }
   };
 
-  const join = () => {
+  const join = async () => {
     setErr("");
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.password) {
       setErr("Please fill in full name, email, phone number, and a password.");
@@ -196,14 +188,12 @@ export default function Tribe() {
     }
     const dial = countryByCode(form.country)?.dial || "+234";
 
-    const res = registerTribe({
+    const res = await registerTribe({
       name: form.name,
       email: form.email,
       phone: buildPhone(dial, form.phone),
       country: form.country,
       password: form.password,
-      interests: form.interests.length > 0 ? form.interests : ["Creative Tech & Design"],
-      reason: form.reason || "Learning & Growing in Community",
     });
 
     if (!res.ok) {

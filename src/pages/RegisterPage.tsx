@@ -10,8 +10,10 @@ import {
   buildPhone,
   countryByCode,
   getSkillRegistration,
+  getSkillWhatsApp,
+  getSkillName,
 } from "../data/store";
-import { Card, GradientButton, Pill } from "../components/ui";
+import { Card, GradientButton, GhostButton, Pill } from "../components/ui";
 import CountryPhone from "../components/CountryPhone";
 
 export default function RegisterPage() {
@@ -57,6 +59,11 @@ export default function RegisterPage() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Post-registration flow: success (bold KR8 ID) -> WhatsApp group -> done/skip -> profile
+  const [step, setStep] = useState<"form" | "success" | "whatsapp">("form");
+  const [newAccount, setNewAccount] = useState<{ id: string; name: string; skill?: string; type?: string } | null>(null);
 
   useEffect(() => {
     if (initialSkill) {
@@ -73,7 +80,7 @@ export default function RegisterPage() {
   const inputCls =
     "w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white placeholder:text-[#6f6390] focus:border-pink-400/60 focus:outline-none";
 
-  const handleStudentSubmit = (e: React.FormEvent) => {
+  const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -97,7 +104,8 @@ export default function RegisterPage() {
     }
 
     const dial = countryByCode(studentForm.country)?.dial || "+234";
-    const res = registerStudent({
+    setSubmitting(true);
+    const res = await registerStudent({
       name: studentForm.name.trim(),
       email: studentForm.email.trim(),
       phone: buildPhone(dial, studentForm.phone),
@@ -106,6 +114,7 @@ export default function RegisterPage() {
       skill: studentForm.skill,
       dob: `${studentForm.y}-${studentForm.m}-${studentForm.d}`,
     });
+    setSubmitting(false);
 
     if (!res.ok || !res.student) {
       setError(res.error || "Registration could not be completed. Please check your information.");
@@ -113,16 +122,13 @@ export default function RegisterPage() {
     }
 
     signIn(res.student);
-    try {
-      sessionStorage.setItem("kr8_just_registered", res.student.id);
-    } catch {
-      /* ignore */
-    }
     addNotification("Registration successful! Welcome to KR8 Academy.");
-    navigate("/academy?registered=true");
+    setNewAccount({ id: res.student.id, name: res.student.name, skill: res.student.skill, type: res.student.type });
+    setStep("success");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleTribeSubmit = (e: React.FormEvent) => {
+  const handleTribeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -137,13 +143,15 @@ export default function RegisterPage() {
     }
 
     const dial = countryByCode(tribeForm.country)?.dial || "+234";
-    const res = registerTribe({
+    setSubmitting(true);
+    const res = await registerTribe({
       name: tribeForm.name.trim(),
       email: tribeForm.email.trim(),
       phone: buildPhone(dial, tribeForm.phone),
       country: tribeForm.country,
       password: tribeForm.password,
     });
+    setSubmitting(false);
 
     if (!res.ok || !res.member) {
       setError(res.error || "Could not register Tribe member.");
@@ -151,14 +159,89 @@ export default function RegisterPage() {
     }
 
     signIn(res.member);
-    try {
-      sessionStorage.setItem("kr8_just_registered", res.member.id);
-    } catch {
-      /* ignore */
-    }
     addNotification("Welcome to the KR8 Tribe family!");
-    navigate("/tribe?registered=true");
+    setNewAccount({ id: res.member.id, name: res.member.name, type: "tribe" });
+    setStep("success");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // ---------------------------------------------------------------------------
+  // Post-registration flow (required): bold success page -> WhatsApp group page
+  // -> Done / Skip -> profile.
+  // ---------------------------------------------------------------------------
+  if (step === "success" && newAccount) {
+    return (
+      <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">
+        <div className="mx-auto max-w-xl text-center">
+          <Pill>Registration Complete</Pill>
+          <h1 className="font-display mt-5 text-4xl sm:text-6xl font-black text-white">
+            🎉 Welcome to <span className="text-gradient">KR8 Digitals</span>, {newAccount.name.split(" ")[0]}!
+          </h1>
+          <Card className="mt-8 p-8">
+            <p className="text-sm text-[#cabfe0]">
+              {newAccount.type === "tribe" ? "Your KR8 Tribe member ID" : "Your official KR8 ID has been generated"}:
+            </p>
+            <p className="mt-4 break-all font-mono text-2xl sm:text-4xl font-black tracking-wider text-white">
+              {newAccount.id}
+            </p>
+            <p className="mt-4 text-xs text-[#a594c7]">
+              Keep this ID safe — it verifies your KR8 certificates and identifies you across the platform.
+            </p>
+            <div className="mt-6 flex flex-col sm:flex-row justify-center gap-3">
+              <GradientButton onClick={() => setStep("whatsapp")}>
+                {newAccount.type === "tribe" ? "Continue →" : "Join My Class WhatsApp Group →"}
+              </GradientButton>
+              <GhostButton onClick={() => navigate(newAccount.type === "tribe" ? "/tribe" : "/dashboard")}>
+                Skip for now
+              </GhostButton>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "whatsapp" && newAccount) {
+    const whatsappUrl = newAccount.skill ? getSkillWhatsApp(newAccount.skill) : "";
+    return (
+      <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">
+        <div className="mx-auto max-w-xl text-center">
+          <Pill>One Last Step</Pill>
+          <h1 className="font-display mt-5 text-3xl sm:text-5xl font-bold text-white">
+            Join your <span className="text-gradient">{newAccount.skill ? getSkillName(newAccount.skill) : "KR8 Tribe"}</span> group
+          </h1>
+          <Card className="mt-8 p-8">
+            <p className="text-sm leading-relaxed text-[#cabfe0]">
+              Your classmates, coaches and live session links all live in the official WhatsApp group.
+              Join now so you never miss a class.
+            </p>
+            {whatsappUrl ? (
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-6 block w-full rounded-full bg-gradient-pink py-3.5 text-sm font-bold text-white shadow-xl shadow-pink-500/25"
+              >
+                Open WhatsApp Group →
+              </a>
+            ) : (
+              <p className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-xs text-[#a594c7]">
+                Your group link will appear here once your coach publishes it. You can find it any time on your dashboard.
+              </p>
+            )}
+            <div className="mt-5 flex flex-col sm:flex-row justify-center gap-3">
+              <GradientButton onClick={() => navigate(newAccount.type === "tribe" ? "/tribe" : "/dashboard")}>
+                Done →
+              </GradientButton>
+              <GhostButton onClick={() => navigate(newAccount.type === "tribe" ? "/tribe" : "/dashboard")}>
+                Skip
+              </GhostButton>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="section-bg min-h-[85vh] py-12 sm:py-16 px-5">
@@ -373,8 +456,8 @@ export default function RegisterPage() {
               </div>
 
               <div className="pt-3">
-                <GradientButton type="submit" className="w-full py-3.5 shadow-xl shadow-pink-500/25 text-sm font-bold">
-                  Complete Registration & Generate KR8 ID →
+                <GradientButton type="submit" disabled={submitting} className="w-full py-3.5 shadow-xl shadow-pink-500/25 text-sm font-bold">
+                  {submitting ? "Generating your KR8 ID..." : "Generate My ID →"}
                 </GradientButton>
               </div>
             </form>
@@ -436,8 +519,8 @@ export default function RegisterPage() {
               </div>
 
               <div className="pt-3">
-                <GradientButton type="submit" className="w-full py-3.5 shadow-xl shadow-pink-500/25 text-sm font-bold">
-                  Join the Tribe Family (100% Free) →
+                <GradientButton type="submit" disabled={submitting} className="w-full py-3.5 shadow-xl shadow-pink-500/25 text-sm font-bold">
+                  {submitting ? "Creating your account..." : "Join the Tribe Family (100% Free) →"}
                 </GradientButton>
               </div>
             </form>
