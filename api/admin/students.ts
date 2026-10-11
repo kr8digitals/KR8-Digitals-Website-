@@ -17,7 +17,6 @@ import {
   admin,
   ApiError,
   findProfileByIdentifier,
-  getRoles,
   handler,
   logActivity,
   normalizeEmail,
@@ -187,10 +186,13 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       profile.avatar = avatarFor(name, kr8Id);
     }
 
-    await admin()
-      .from("enrollments")
-      .insert({ student_id: created.user.id, kr8_id: kr8Id, skill, status: "active" })
-      .catch(() => undefined);
+    try {
+      await admin()
+        .from("enrollments")
+        .insert({ student_id: created.user.id, kr8_id: kr8Id, skill, status: "active" });
+    } catch {
+      /* best-effort */
+    }
     await logActivity({ kind: "registration", name, skill, customAction: "joined the Academy (admin registration)" });
 
     send(res, 200, { ok: true, kr8Id, temporaryPassword: password });
@@ -258,11 +260,14 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     if (userId === ctx.user.id) throw new ApiError(400, "You cannot revoke your own registration.");
 
     // Revoke = unenrolled + auth user removed. Their KR8 ID is kept on record.
-    await admin()
-      .from("enrollments")
-      .update({ status: "revoked" })
-      .eq("student_id", userId)
-      .catch(() => undefined);
+    try {
+      await admin()
+        .from("enrollments")
+        .update({ status: "revoked" })
+        .eq("student_id", userId);
+    } catch {
+      /* best-effort */
+    }
     await admin().auth.admin.deleteUser(userId).catch(() => undefined);
 
     send(res, 200, { ok: true, message: "Registration revoked." });

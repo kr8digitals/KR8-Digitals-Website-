@@ -26,7 +26,11 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
         send(res, 400, { ok: false, error: "slug is required." });
         return;
       }
-      await admin().rpc("increment_link_click", { p_slug: slug }).catch(() => undefined);
+      try {
+        await admin().rpc("increment_link_click", { p_slug: slug });
+      } catch {
+        /* best-effort */
+      }
       send(res, 200, { ok: true });
       return;
     }

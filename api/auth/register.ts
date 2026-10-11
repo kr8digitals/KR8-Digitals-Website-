@@ -65,10 +65,13 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
           : {}),
       })
       .eq("id", user.id);
-    await admin()
-      .from("enrollments")
-      .upsert({ student_id: user.id, kr8_id: row.kr8_id, skill, status: "active" })
-      .catch(() => undefined);
+    try {
+      await admin()
+        .from("enrollments")
+        .upsert({ student_id: user.id, kr8_id: row.kr8_id, skill, status: "active" });
+    } catch {
+      /* best-effort */
+    }
 
     await logActivity({
       kind: wasTribe ? "registration" : "skill",

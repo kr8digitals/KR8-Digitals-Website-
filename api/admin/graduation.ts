@@ -174,12 +174,15 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
         cert_recognition: String(profile.cert_recognition || cert.additionalNotes || "") || null,
       })
       .eq("id", profile.id);
-    await admin()
-      .from("enrollments")
-      .update({ graduated: true, graduated_at: new Date().toISOString() })
-      .eq("student_id", profile.id)
-      .eq("skill", skillKey)
-      .catch(() => undefined);
+    try {
+      await admin()
+        .from("enrollments")
+        .update({ graduated: true, graduated_at: new Date().toISOString() })
+        .eq("student_id", profile.id)
+        .eq("skill", skillKey);
+    } catch {
+      /* best-effort */
+    }
 
     // 3) notify_certificate trigger creates the in-app notification.
 

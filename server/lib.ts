@@ -209,7 +209,7 @@ export function skillSuffix(skillKey: string, fromSettings?: string | null): str
 }
 
 /** Same format as the legacy client `kr8id()`: KR8<YEAR><INITIALS><SERIAL4><SUFFIX> */
-export function buildKr8Id(name: string, skillKey: string, serial: number, suffix: string): string {
+export function buildKr8Id(name: string, _skillKey: string, serial: number, suffix: string): string {
   return `KR8${COHORT_YEAR}${initials(name)}${String(serial).padStart(4, "0")}${suffix}`;
 }
 
@@ -377,38 +377,30 @@ export async function requireAdmin(req: ApiRequest): Promise<AdminContext> {
 }
 
 /**
- * Points are applied through the database's apply_points(...) function. Its
- * parameter list is project-specific, so the common spellings are tried first
- * and a direct service-role update is used only as a last resort (the
- * prevent_protected_profile_changes trigger blocks students, not the server).
+ * Points are applied through the database function
+ *   apply_points(p_user_id uuid, p_kr8_id text, p_points_change integer,
+ *                p_reason text, p_actor_id uuid)
  */
 export async function applyPoints(opts: {
   userId: string;
   points: number;
   reason?: string;
+  kr8Id?: string | null;
+  actorId?: string | null;
 }): Promise<void> {
-  const candidateArgs: Record<string, unknown>[] = [
-    { p_user_id: opts.userId, p_points: opts.points, p_reason: opts.reason || "" },
-    { p_user_id: opts.userId, p_amount: opts.points, p_reason: opts.reason || "" },
-    { user_id: opts.userId, points: opts.points, reason: opts.reason || "" },
-    { p_student_id: opts.userId, p_points: opts.points },
-    { p_user_id: opts.userId, p_delta: opts.points },
-  ];
-  for (const args of candidateArgs) {
-    try {
-      const { error } = await admin().rpc("apply_points", args);
-      if (!error) return;
-    } catch {
-      /* try next shape */
-    }
+  let kr8Id = String(opts.kr8Id || "");
+  if (!kr8Id) {
+    const { data } = await admin().from("profiles").select("kr8_id").eq("id", opts.userId).maybeSingle();
+    kr8Id = String((data as { kr8_id?: string } | null)?.kr8_id || "");
   }
-  // Fallback: service-role update (blocked for students by the DB trigger).
-  const { data: row } = await admin().from("profiles").select("points").eq("id", opts.userId).maybeSingle();
-  const current = Number(((row as { points?: number } | null)?.points) || 0);
-  await admin()
-    .from("profiles")
-    .update({ points: current + opts.points })
-    .eq("id", opts.userId);
+  const { error } = await admin().rpc("apply_points", {
+    p_user_id: opts.userId,
+    p_kr8_id: kr8Id,
+    p_points_change: opts.points,
+    p_reason: opts.reason || "",
+    p_actor_id: opts.actorId || null,
+  });
+  if (error) throw new Error(`apply_points failed: ${error.message}`);
 }
 
 /* ------------------------------------------------------------------ */

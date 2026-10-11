@@ -114,14 +114,17 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     if (action === "onboarding") {
       // /welcome completion is remembered in the database (never the browser).
       const whatsappDone = !!body.whatsappDone;
-      await admin()
-        .from("onboarding_status")
-        .upsert({
-          user_id: user.id,
-          whatsapp_done: whatsappDone,
-          completed_at: new Date().toISOString(),
-        })
-        .catch(() => undefined);
+      try {
+        await admin()
+          .from("onboarding_status")
+          .upsert({
+            user_id: user.id,
+            whatsapp_done: whatsappDone,
+            completed_at: new Date().toISOString(),
+          });
+      } catch {
+        /* best-effort */
+      }
       send(res, 200, { ok: true });
       return;
     }

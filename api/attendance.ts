@@ -9,8 +9,9 @@
  * server-side `user_roles` check.
  */
 import {
-  ApiError,
   admin,
+  ApiError,
+  applyPoints,
   getSetting,
   getUserFromRequest,
   handler,
@@ -162,7 +163,7 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
         const pts = isAssignment ? 15 : 10;
         const { data: prof } = await admin()
           .from("profiles")
-          .select("id, points, extra")
+          .select("id, kr8_id, points, attendance_accepted, submissions")
           .eq("id", String(row.student_id))
           .maybeSingle();
         if (prof) {
@@ -170,8 +171,10 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
           // counters live in real profile columns.
           await applyPoints({
             userId: String((prof as SubRow).id),
+            kr8Id: String((prof as SubRow).kr8_id || ""),
             points: pts,
             reason: isAssignment ? "assignment_accepted" : "attendance_accepted",
+            actorId: ctx.user.id,
           });
           await admin()
             .from("profiles")
