@@ -36,7 +36,7 @@ import {
   type ApiRequest,
   type ApiResponse,
   type RoleRow,
-} from "../../server/lib";
+} from "../../lib";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 

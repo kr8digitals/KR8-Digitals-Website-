@@ -18,7 +18,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../../server/lib";
+} from "../../lib";
 
 const GENERIC_MESSAGE =
   "If an account exists for that detail, a password reset link has been sent to its email address. Please check your inbox (and spam folder).";

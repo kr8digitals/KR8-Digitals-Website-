@@ -23,7 +23,7 @@ import {
   setSetting,
   type ApiRequest,
   type ApiResponse,
-} from "../server/lib";
+} from "../lib";
 
 type SubRow = Record<string, unknown>;
 

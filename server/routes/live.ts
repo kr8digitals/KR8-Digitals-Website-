@@ -20,7 +20,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../server/lib";
+} from "../lib";
 
 function roomSummary(r: Record<string, unknown>) {
   return {

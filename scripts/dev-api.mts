@@ -5,8 +5,8 @@
  *
  * Mirrors Vercel's Node runtime contract closely enough for local dev and the
  * live preview: each request under /api/ is routed to the matching module in
- * the api directory (api/<path>.ts, or api/<path>/index.ts) and handled by its
- * default export — a (req, res) function produced by `handler()` in
+ * server/routes/ (server/routes/<path>.ts) — the same modules the single Vercel
+ * entry api/[...route].ts dispatches to — and handled by its default export — a (req, res) function produced by `handler()` in
  * server/lib.ts. The only runtime shim Vercel provides that Node does not is
  * `req.query`, which is populated here from the URL search params.
  *
@@ -41,15 +41,15 @@ function loadEnvFile(file: string): void {
 loadEnvFile(".env.local");
 loadEnvFile(".env");
 
-/* ---- handler resolution: /api/auth/login → api/auth/login.ts ---- */
+/* ---- handler resolution: /api/auth/login → server/routes/auth/login.ts ---- */
 function resolveHandlerPath(urlPath: string): string | null {
   const clean = urlPath.replace(/^\/api\/?/, "").replace(/\/+$/, "");
   if (!clean || clean.includes("..")) return null;
   const candidates = [
-    path.join(root, "api", `${clean}.ts`),
-    path.join(root, "api", clean, "index.ts"),
-    path.join(root, "api", `${clean}.js`),
-    path.join(root, "api", clean, "index.js"),
+    path.join(root, "server", "routes", `${clean}.ts`),
+    path.join(root, "server", "routes", clean, "index.ts"),
+    path.join(root, "server", "routes", `${clean}.js`),
+    path.join(root, "server", "routes", clean, "index.js"),
   ];
   for (const c of candidates) {
     if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
@@ -104,7 +104,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[dev-api] listening on http://0.0.0.0:${PORT} (routing /api/ requests to api/ modules)`);
+  console.log(`[dev-api] listening on http://0.0.0.0:${PORT} (routing /api/ requests to server/routes/ modules)`);
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.log(
       "[dev-api] SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — endpoints will return structured errors; the UI falls back to built-in defaults."

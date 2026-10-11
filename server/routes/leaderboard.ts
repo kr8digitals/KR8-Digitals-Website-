@@ -3,7 +3,7 @@
  * database function (ranks profiles by points).
  * Returns ONLY safe fields — never phone / email / DOB / password.
  */
-import { admin, handler, queryStr, send, type ApiRequest, type ApiResponse } from "../server/lib";
+import { admin, handler, queryStr, send, type ApiRequest, type ApiResponse } from "../lib";
 
 export default handler(async (req: ApiRequest, res: ApiResponse) => {
   if (req.method !== "GET") {

@@ -16,7 +16,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../server/lib";
+} from "../lib";
 
 export default handler(async (req: ApiRequest, res: ApiResponse) => {
   if (req.method !== "POST") throw new ApiError(405, "Method not allowed.");

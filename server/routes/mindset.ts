@@ -18,7 +18,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../server/lib";
+} from "../lib";
 
 async function staffOnly(req: ApiRequest) {
   const user = await getUserFromRequest(req);

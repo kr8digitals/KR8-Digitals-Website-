@@ -22,7 +22,7 @@ import {
   type ApiRequest,
   type ApiResponse,
   type RoleRow,
-} from "../server/lib";
+} from "../lib";
 
 async function loadAccount(userId: string) {
   const [{ data: row }, { data: certRows }, { data: notifRows }, { data: roleRows }] = await Promise.all([

@@ -26,7 +26,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../server/lib";
+} from "../lib";
 
 async function staffCheck(userId: string): Promise<boolean> {
   const { data } = await admin().from("user_roles").select("role").eq("user_id", userId);

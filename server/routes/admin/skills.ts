@@ -5,7 +5,7 @@
  *   GET → all rows
  *   POST { skill, name?, regOpen?, whatsapp?, available? } → upsert
  */
-import { ApiError, admin, handler, readBody, requireAdmin, send, type ApiRequest, type ApiResponse } from "../../server/lib";
+import { ApiError, admin, handler, readBody, requireAdmin, send, type ApiRequest, type ApiResponse } from "../../lib";
 
 export default handler(async (req: ApiRequest, res: ApiResponse) => {
   await requireAdmin(req);
