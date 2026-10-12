@@ -723,19 +723,43 @@ export const ADMIN_DOC_KEYS = new Set([
   "client_requests_archive",
 ]);
 
+/**
+ * site_content stores docs as `value` (text or jsonb). The API keeps the
+ * legacy { key, data } shape: objects are JSON-encoded on write and parsed
+ * back on read, so both column types work.
+ */
+export function parseDocValue(v: unknown): unknown {
+  if (typeof v !== "string") return v ?? null;
+  try {
+    return JSON.parse(v);
+  } catch {
+    return v;
+  }
+}
+
+export function serializeDocValue(v: unknown): string {
+  return typeof v === "string" ? v : JSON.stringify(v ?? null);
+}
+
 export async function getDoc(key: string): Promise<Record<string, unknown> | null> {
   const { data } = await admin()
     .from("site_content")
-    .select("data")
+    .select("value")
     .eq("key", key)
     .maybeSingle();
-  return (data?.data as Record<string, unknown>) || null;
+  const parsed = parseDocValue((data as { value?: unknown } | null)?.value);
+  return (parsed as Record<string, unknown>) || null;
 }
 
 export async function setDoc(key: string, data: unknown, updatedBy?: string): Promise<void> {
   await admin()
     .from("site_content")
-    .upsert({ key, data, updated_at: new Date().toISOString(), updated_by: updatedBy || null });
+    .upsert({
+      key,
+      value: serializeDocValue(data),
+      updated_at: new Date().toISOString(),
+      updated_by: updatedBy || null,
+    });
 }
 
 export async function getSetting(key: string): Promise<unknown> {

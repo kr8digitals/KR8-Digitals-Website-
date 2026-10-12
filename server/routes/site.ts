@@ -9,6 +9,7 @@
 import {
   admin,
   handler,
+  parseDocValue,
   readBody,
   send,
   type ApiRequest,
@@ -74,16 +75,16 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     sb.from("skill_settings").select("*"),
     sb.from("announcements").select("*").order("created_at", { ascending: false }),
     sb.from("testimonials").select("*").order("created_at", { ascending: false }),
-    sb.from("team_members").select("*").order("sort_order", { ascending: true }),
-    sb.from("site_content").select("key, data"),
+    sb.from("team_members").select("*").order("sort", { ascending: true }),
+    sb.from("site_content").select("key, value"),
     sb.from("site_settings").select("key, value"),
     sb.rpc("public_counts"),
     sb.rpc("get_recent_activity", { limit_n: 40 }),
   ]);
 
   const docs: Record<string, unknown> = {};
-  for (const row of (contentRes.data || []) as { key: string; data: unknown }[]) {
-    docs[row.key] = row.data;
+  for (const row of (contentRes.data || []) as { key: string; value: unknown }[]) {
+    docs[row.key] = parseDocValue(row.value);
   }
   const settings: Record<string, unknown> = {};
   for (const row of (settingsRes.data || []) as { key: string; value: unknown }[]) {
@@ -134,7 +135,7 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     name: r.name,
     role: r.role || "",
     bio: r.bio || "",
-    photo: r.photo || "",
+    photo: r.photo || r.photo_url || "",
     founder: !!r.founder,
   }));
 

@@ -13,13 +13,15 @@
  */
 import {
   ADMIN_DOC_KEYS,
-  ApiError,
   admin,
+  ApiError,
   handler,
+  parseDocValue,
   queryStr,
   readBody,
   requireAdmin,
   send,
+  serializeDocValue,
   type ApiRequest,
   type ApiResponse,
 } from "../../lib.js";
@@ -36,8 +38,12 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     const kind = queryStr(req, "kind") || "docs";
     const sb = admin();
     if (kind === "docs") {
-      const { data } = await sb.from("site_content").select("key, data");
-      send(res, 200, { ok: true, docs: data || [] });
+      const { data } = await sb.from("site_content").select("key, value");
+      const docs = ((data || []) as { key: string; value: unknown }[]).map((r) => ({
+        key: r.key,
+        data: parseDocValue(r.value),
+      }));
+      send(res, 200, { ok: true, docs });
       return;
     }
     if (kind === "settings") {
@@ -56,8 +62,13 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       return;
     }
     if (kind === "team") {
-      const { data } = await sb.from("team_members").select("*").order("sort_order", { ascending: true });
-      send(res, 200, { ok: true, items: data || [] });
+      const { data } = await sb.from("team_members").select("*").order("sort", { ascending: true });
+      const items = ((data || []) as Record<string, unknown>[]).map((r) => ({
+        ...r,
+        key: r.id,
+        photo: r.photo || r.photo_url || "",
+      }));
+      send(res, 200, { ok: true, items });
       return;
     }
     if (kind === "video-comments") {
@@ -82,7 +93,7 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       }
       await sb
         .from("site_content")
-        .upsert({ key, data: body.data ?? {}, updated_at: new Date().toISOString(), updated_by: ctx.user.id });
+        .upsert({ key, value: serializeDocValue(body.data ?? {}), updated_at: new Date().toISOString(), updated_by: ctx.user.id });
       send(res, 200, { ok: true });
       return;
     }
@@ -154,13 +165,13 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
       if (items.length > 0) {
         await sb.from("team_members").insert(
           items.map((t, i) => ({
-            slug: String(t.key || `member-${i}`),
             name: String(t.name || ""),
-            role: t.role || "",
-            bio: t.bio || "",
-            photo: t.photo || "",
-            founder: !!t.founder,
-            sort_order: i,
+            role: String(t.role || ""),
+            bio: String(t.bio || ""),
+            photo: String(t.photo || ""),
+            photo_url: String(t.photo || ""),
+            sort: i,
+            visible: true,
           }))
         );
       }
