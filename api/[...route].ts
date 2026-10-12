@@ -11,26 +11,26 @@
  *   /api/leaderboard · /api/verify · /api/site · /api/activity
  *   /api/live · /api/livekit · /api/mindset · /api/social
  */
-import { handler, send, type ApiRequest, type ApiResponse } from "../server/lib";
+import { handler, send, type ApiRequest, type ApiResponse } from "../server/lib.js";
 
-import activity from "../server/routes/activity";
-import adminContent from "../server/routes/admin/content";
-import adminGraduation from "../server/routes/admin/graduation";
-import adminRoles from "../server/routes/admin/roles";
-import adminSkills from "../server/routes/admin/skills";
-import adminStudents from "../server/routes/admin/students";
-import attendance from "../server/routes/attendance";
-import authLogin from "../server/routes/auth/login";
-import authRegister from "../server/routes/auth/register";
-import authReset from "../server/routes/auth/reset";
-import leaderboard from "../server/routes/leaderboard";
-import live from "../server/routes/live";
-import livekit from "../server/routes/livekit";
-import me from "../server/routes/me";
-import mindset from "../server/routes/mindset";
-import site from "../server/routes/site";
-import social from "../server/routes/social";
-import verify from "../server/routes/verify";
+import activity from "../server/routes/activity.js";
+import adminContent from "../server/routes/admin/content.js";
+import adminGraduation from "../server/routes/admin/graduation.js";
+import adminRoles from "../server/routes/admin/roles.js";
+import adminSkills from "../server/routes/admin/skills.js";
+import adminStudents from "../server/routes/admin/students.js";
+import attendance from "../server/routes/attendance.js";
+import authLogin from "../server/routes/auth/login.js";
+import authRegister from "../server/routes/auth/register.js";
+import authReset from "../server/routes/auth/reset.js";
+import leaderboard from "../server/routes/leaderboard.js";
+import live from "../server/routes/live.js";
+import livekit from "../server/routes/livekit.js";
+import me from "../server/routes/me.js";
+import mindset from "../server/routes/mindset.js";
+import site from "../server/routes/site.js";
+import social from "../server/routes/social.js";
+import verify from "../server/routes/verify.js";
 
 type RouteHandler = (req: ApiRequest, res: ApiResponse) => Promise<void>;
 

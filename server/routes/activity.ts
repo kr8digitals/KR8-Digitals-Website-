@@ -13,7 +13,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../lib";
+} from "../lib.js";
 
 const ALLOWED_KINDS = new Set([
   "submission",

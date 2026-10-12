@@ -17,7 +17,7 @@ import {
   toLegacyCertificate,
   type ApiRequest,
   type ApiResponse,
-} from "../lib";
+} from "../lib.js";
 
 type Row = Record<string, unknown>;
 

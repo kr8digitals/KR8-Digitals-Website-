@@ -6,7 +6,7 @@
  *
  * Only full admins (user_roles: admin / founder / co-founder) may change roles.
  */
-import { ApiError, admin, handler, readBody, requireAdmin, send, type ApiRequest, type ApiResponse } from "../../lib";
+import { ApiError, admin, handler, readBody, requireAdmin, send, type ApiRequest, type ApiResponse } from "../../lib.js";
 
 const GRANTABLE = new Set(["admin", "coach", "assistant", "attendance_reviewer", "moderator"]);
 

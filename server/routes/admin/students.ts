@@ -29,7 +29,7 @@ import {
   type ApiRequest,
   type ApiResponse,
   type RoleRow,
-} from "../../lib";
+} from "../../lib.js";
 
 function avatarFor(name: string, id: string): string {
   const parts = (name || "Creator").trim().split(/\s+/).filter(Boolean);

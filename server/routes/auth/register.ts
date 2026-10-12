@@ -23,7 +23,7 @@ import {
   send,
   type ApiRequest,
   type ApiResponse,
-} from "../../lib";
+} from "../../lib.js";
 
 export default handler(async (req: ApiRequest, res: ApiResponse) => {
   if (req.method !== "POST") throw new ApiError(405, "Method not allowed.");
