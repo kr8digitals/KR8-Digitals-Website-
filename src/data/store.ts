@@ -1343,7 +1343,25 @@ export async function issueCertificate(
   cert: CertificateRecord
 ): Promise<{ ok: boolean; account?: Account; certificate?: CertificateRecord; error?: string }> {
   try {
-    const res = await apiGraduation({ action: "issue", studentId, certificate: cert });
+    // Send only ids and small fields — NEVER the generated artwork (a PNG
+    // dataURL of 1–4 MB that caused 413s). The server issues the official
+    // code and ignores any image data entirely.
+    const smallCert = {
+      id: cert.id,
+      studentId: cert.studentId,
+      studentName: cert.studentName,
+      formattedName: cert.formattedName,
+      skill: cert.skill,
+      skillName: cert.skillName,
+      tier: cert.tier,
+      templateUrl: cert.templateUrl,
+      achievementText: cert.achievementText,
+      additionalNotes: cert.additionalNotes,
+      issuedAt: cert.issuedAt,
+      issuedBy: cert.issuedBy,
+      status: cert.status,
+    };
+    const res = await apiGraduation({ action: "issue", studentId, certificate: smallCert });
     if (res.account) {
       upsertAccountCache(res.account as RemoteAccount);
       notifyAccountsUpdated([studentId]);

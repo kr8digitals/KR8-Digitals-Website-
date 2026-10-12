@@ -183,7 +183,14 @@ export default handler(async (req: ApiRequest, res: ApiResponse) => {
     if (action === "upsert-room") {
       const roomId = String(body.roomId || body.id || `room_${Date.now().toString(36)}`);
       const { data: existing } = await sb.from("live_rooms").select("*").eq("id", roomId).maybeSingle();
-      if (existing && !(await isRoomHost(user.id, (existing as Record<string, unknown>).host_id))) {
+      if (!existing) {
+        // Starting a live room is staff-only (founder/co-founder/admin/
+        // moderator/coach/attendance_reviewer) — students get 403.
+        const { data: roleRows } = await admin().from("user_roles").select("role").eq("user_id", user.id);
+        if (!isStaffRole((roleRows || []) as { role: string }[])) {
+          throw new ApiError(403, "Only staff can start a live room.");
+        }
+      } else if (!(await isRoomHost(user.id, (existing as Record<string, unknown>).host_id))) {
         throw new ApiError(403, "Only the host can update this room.");
       }
       const row = {

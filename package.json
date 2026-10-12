@@ -10,7 +10,8 @@
     "prebuild": "test -d node_modules || npm install",
     "build": "tsc -b && vite build",
     "prepreview": "test -d node_modules || npm install",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:authz": "tsx scripts/authz-test.mts"
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.24",

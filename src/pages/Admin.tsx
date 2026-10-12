@@ -1,6 +1,6 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { useSeo } from "../lib/useSeo";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import { useLiveStream } from "../context/LiveStreamContext";
@@ -27,7 +27,7 @@ import {
   saveDynamicCurriculum, type Week,
   type Account, type Testimonial, type VideoComment, type BlogPost, type StreamReplay, type GalleryItem, type DoubtToBeliefStep, type SuspendedAccount, type ClientRequest,
 } from "../data/store";
-import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
+import { Card, GradientButton } from "../components/ui";
 import Icon from "../components/Icon";
 import {
   generateAutomaticCertificate,
@@ -122,7 +122,6 @@ export default function Admin() {
   useSeo({ path: "/admin", noindex: true });
   const { student: currentUser, signOut } = useAuth();
   const navigate = useNavigate();
-  const [auth, setAuth] = useState(false);
   const [tab, setTab] = useState("Overview");
   const [students, setStudents] = useState<Account[]>(() => getAccounts());
 
@@ -149,7 +148,8 @@ export default function Admin() {
     }
   }, [currentUser, isUltimate, tab]);
 
-  const [isAttendanceReviewerOnly, setIsAttendanceReviewerOnly] = useState(false);
+  // Server-verified from /api/me (user_roles) — never browser storage.
+  const isAttendanceReviewerOnly = currentUser?.admin?.role === "attendance_reviewer";
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [navSearch, setNavSearch] = useState("");
 
@@ -164,62 +164,15 @@ export default function Admin() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mobileNavOpen]);
 
-  const unlock = () => {
-    // The administrator role is verified server-side (user_roles) at sign-in
-    // and re-checked on every admin API call — no second browser password.
-    setAuth(true);
-    if (currentUser?.admin?.role === "attendance_reviewer") {
-      setIsAttendanceReviewerOnly(true);
-      setTab("Attendance Review");
-    } else {
-      setIsAttendanceReviewerOnly(false);
-    }
-  };
-
-  // If user is not logged in or not authorized, block public view completely
-  if (!currentUser || !isAuthorized) {
-    return (
-      <div className="section-bg flex min-h-screen items-center justify-center px-5">
-        <Card className="w-full max-w-md text-center py-10">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-            <Icon name="lock" size={28} />
-          </div>
-          <Pill>Authorized Personnel Only</Pill>
-          <h1 className="font-display mt-4 text-2xl text-white sm:text-3xl">Restricted Access</h1>
-          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
-            The Admin Portal is strictly reserved for verified KR8 Digitals faculty and executive leadership.
-            Access is managed directly through authorized member profiles.
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            <GradientButton to="/academy">Go to Member Portal</GradientButton>
-            <GhostButton to="/">Return to Homepage</GhostButton>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  if (!auth) {
-    return (
-      <div className="section-bg flex min-h-screen items-center justify-center px-5">
-        <Card className="w-full max-w-sm text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-pink text-white">
-            <Icon name="lock" size={23} />
-          </div>
-          <h1 className="font-display text-2xl text-white">Admin Access</h1>
-          <p className="mt-2 text-sm text-[#b8aecf]">
-            Welcome, {currentUser?.name || "Administrator"}. Your administrator role was verified securely when you signed in.
-          </p>
-          <button onClick={unlock} className="mt-5 w-full rounded-full bg-gradient-pink py-3 text-sm font-bold text-white">
-            Open Admin Dashboard
-          </button>
-        </Card>
-      </div>
-    );
-  }
+  // Non-staff must never see the admin UI: the role is verified by the
+  // SERVER (/api/me → user_roles → is_staff/is_admin) and non-staff visitors
+  // are redirected to the student dashboard. No browser-storage or
+  // client-side password gate exists.
+  if (!currentUser) return <Navigate to="/signin" replace />;
+  if (!isAuthorized) return <Navigate to="/dashboard" replace />;
 
   // ATTENDANCE REVIEWER QUARANTINE: Strict separation of powers
-  if (isAttendanceReviewerOnly || currentUser?.admin?.role === "attendance_reviewer") {
+  if (isAttendanceReviewerOnly) {
     return (
       <div className="section-bg min-h-screen">
         <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
@@ -247,17 +200,6 @@ export default function Admin() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  setAuth(false);
-                  setIsAttendanceReviewerOnly(false);
-                }}
-                className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#b8aecf] hover:text-white shrink-0"
-              >
-                Lock Reviewer
-              </button>
-              <button
-                onClick={() => {
-                  setAuth(false);
-                  setIsAttendanceReviewerOnly(false);
                   signOut();
                   navigate("/");
                 }}
@@ -349,14 +291,7 @@ export default function Admin() {
               <span className="text-[10px]">↗</span>
             </a>
             <button
-              onClick={() => setAuth(false)}
-              className="rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-[#b8aecf] hover:text-white hover:border-white/30 transition-colors"
-            >
-              Lock Dashboard
-            </button>
-            <button
               onClick={() => {
-                setAuth(false);
                 signOut();
                 navigate("/");
               }}
@@ -544,7 +479,6 @@ export default function Admin() {
                   </a>
                   <button
                     onClick={() => {
-                      setAuth(false);
                       setMobileNavOpen(false);
                       signOut();
                       navigate("/");

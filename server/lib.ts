@@ -117,10 +117,29 @@ export function send(res: ApiResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/** Bodies above this are rejected with a clear JSON 413 (Vercel's own edge
+ *  limit is ~4.5 MB and returns an opaque platform error). */
+export const MAX_BODY_BYTES = 4 * 1024 * 1024;
+
+function tooLarge(actual: number): ApiError {
+  return new ApiError(
+    413,
+    `Request body too large (${actual} bytes; max ${MAX_BODY_BYTES}). Do not send embedded images, PDFs or base64 data — send only ids and small fields.`
+  );
+}
+
 export async function readBody(req: ApiRequest): Promise<Record<string, unknown>> {
+  const declared = Number(req.headers?.["content-length"] || 0);
+  if (declared > MAX_BODY_BYTES) throw tooLarge(declared);
   if (req.body && typeof req.body === "object") return req.body as Record<string, unknown>;
   const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buf.length;
+    if (size > MAX_BODY_BYTES) throw tooLarge(size);
+    chunks.push(buf);
+  }
   const raw = Buffer.concat(chunks).toString("utf8");
   if (!raw) return {};
   try {
@@ -269,7 +288,7 @@ export async function getRoles(userId: string): Promise<RoleRow[]> {
 }
 
 export const ADMIN_ROLES = new Set(["admin", "founder", "co-founder"]);
-export const STAFF_ROLES = new Set(["admin", "founder", "co-founder", "coach", "assistant", "attendance_reviewer"]);
+export const STAFF_ROLES = new Set(["founder", "co-founder", "admin", "moderator", "coach", "attendance_reviewer"]);
 
 export function isAdminRole(roles: RoleRow[]): boolean {
   return roles.some((r) => ADMIN_ROLES.has((r.role || "").toLowerCase()));
@@ -461,7 +480,11 @@ export function toLegacyNotification(row: Row): Record<string, unknown> {
 }
 
 export function adminFromRoles(roles: RoleRow[]): Record<string, unknown> | undefined {
-  const primary = roles.find((r) => ADMIN_ROLES.has((r.role || "").toLowerCase())) || roles[0];
+  // ONLY a staff role (user_roles) ever surfaces admin identity. A plain
+  // "student" row must NEVER produce admin info — that is what feeds the
+  // dashboard admin card and the client-side admin gate.
+  const staffRoles = roles.filter((r) => STAFF_ROLES.has((r.role || "").toLowerCase()));
+  const primary = staffRoles.find((r) => ADMIN_ROLES.has((r.role || "").toLowerCase())) || staffRoles[0];
   if (!primary) return undefined;
   const role = (primary.role || "").toLowerCase();
   return {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSeo } from "../lib/useSeo";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   ATTENDANCE_TYPES,
@@ -10,7 +10,7 @@ import {
   toggleAttendanceTypeOpen,
   type AttendanceSubmission,
 } from "../data/store";
-import { Card, Pill, GradientButton, GhostButton } from "../components/ui";
+import { Pill } from "../components/ui";
 import Icon from "../components/Icon";
 
 
@@ -29,36 +29,16 @@ export default function AttendanceReview() {
   const [rejectError, setRejectError] = useState("");
 
   // Screenshot viewer modal
-  const [unlocked, setUnlocked] = useState(true);
   const [viewScreenshotUrl, setViewScreenshotUrl] = useState<string | null>(null);
   const [viewScreenshotTitle, setViewScreenshotTitle] = useState("");
 
+  // Server-verified staff gate (/api/me → user_roles). Non-staff are
+  // redirected to the student dashboard — no client-side lock/unlock.
   const isAuthorized = !!(
     currentUser?.admin ||
     currentUser?.type === "founder" ||
     currentUser?.type === "co-founder"
   );
-
-  if (!unlocked) {
-    return (
-      <div className="section-bg flex min-h-screen items-center justify-center px-5">
-        <Card className="w-full max-w-md text-center py-10">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gradient-pink text-white">
-            <Icon name="lock" size={28} />
-          </div>
-          <Pill>Faculty & Coach Review</Pill>
-          <h1 className="font-display mt-4 text-2xl text-white sm:text-3xl">Review Queue Locked</h1>
-          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
-            This review session is locked. Your staff role is verified securely — unlock to continue.
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            <GradientButton onClick={() => setUnlocked(true)} className="w-full">Unlock Review Queue</GradientButton>
-            <GhostButton to="/academy">Back to Portal</GhostButton>
-          </div>
-        </Card>
-      </div>
-    );
-  }
 
   const syncData = () => {
     setSubmissions(getAttendanceSubmissions());
@@ -76,27 +56,9 @@ export default function AttendanceReview() {
     };
   }, []);
 
-  // Block unauthorized public visitors
-  if (!currentUser || !isAuthorized) {
-    return (
-      <div className="section-bg flex min-h-screen items-center justify-center px-5">
-        <Card className="w-full max-w-md text-center py-10">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
-            <Icon name="lock" size={28} />
-          </div>
-          <Pill>Staff & Faculty Area</Pill>
-          <h1 className="font-display mt-4 text-2xl text-white sm:text-3xl">Restricted Access</h1>
-          <p className="mt-3 text-sm leading-relaxed text-[#b8aecf]">
-            The Attendance Review system is strictly reserved for authorized KR8 coaches and administration.
-          </p>
-          <div className="mt-6 flex flex-col gap-3">
-            <GradientButton to="/academy">Go to Member Portal</GradientButton>
-            <GhostButton to="/">Return to Homepage</GhostButton>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  // Block unauthorized public visitors — redirect, never render the UI.
+  if (!currentUser) return <Navigate to="/signin" replace />;
+  if (!isAuthorized) return <Navigate to="/dashboard" replace />;
 
 
   // Handle Approve
@@ -151,12 +113,6 @@ export default function AttendanceReview() {
             >
               Admin Dashboard →
             </Link>
-            <button
-              onClick={() => setUnlocked(false)}
-              className="rounded-full border border-white/15 px-4 py-2 text-xs text-[#b8aecf] hover:text-white"
-            >
-              Lock Review
-            </button>
           </div>
         </div>
 

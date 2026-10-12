@@ -226,7 +226,7 @@ export default function Dashboard() {
             </div>
           ) : student.admin ? (
             <Link to="/admin" className="mt-4 block max-w-xl rounded-2xl border border-pink-400/30 bg-pink-500/5 px-4 py-3 text-sm leading-relaxed text-pink-100 hover:border-pink-300">
-              Congratulations — you are recognized as a {student.admin.title ?? student.admin.role}. Click here to open your password-protected admin access. Your assigned rights are managed from the Admin Permissions system.
+              Congratulations — you are recognized as a {student.admin.title ?? student.admin.role}. Open the KR8 Admin Control Center. Your assigned rights are managed from the Admin Permissions system.
             </Link>
           ) : null}
         </div>
